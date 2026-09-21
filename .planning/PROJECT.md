@@ -216,6 +216,7 @@ nhưng tự thiết kế lại phần nhìn. Không sao chép bảng màu, icon 
 | Không cam kết tổng thời gian, đánh giá lại sau mỗi phase | Ước lượng ban đầu mười một đến mười bốn tuần đã thiếu ngân sách cho staging theo hunk, chưa tính các mục bổ sung. Roadmap theo phase có điểm kiểm soát thay cho một mốc thời gian dễ sai. | — Pending |
 | AI trừu tượng hoá theo nhà cung cấp ngay từ đầu | Thêm khoảng ba ngày công nhưng tránh khoá cứng vào một nhà cung cấp, và cho phép người dùng chạy model local khi codebase nhạy cảm. | — Pending |
 | Học khái niệm từ GitKraken nhưng tự thiết kế phần nhìn | Tránh vấn đề bản quyền thiết kế, đồng thời tạo bản sắc riêng. | — Pending |
+| Windows trước, macOS và Linux sau | Máy phát triển là Windows, và chưa tạo remote nên không chạy được CI để kiểm hai nền tảng kia. Mã vẫn viết theo lối đa nền tảng (dùng `PathBuf`, phần riêng của Windows nằm trong `#[cfg(windows)]`), chỉ là chưa kiểm chứng. Đổi lại, lỗi riêng của Linux và macOS sẽ lộ ra muộn — chấp nhận rủi ro này. | — Pending |
 
 ## Evolution
 
