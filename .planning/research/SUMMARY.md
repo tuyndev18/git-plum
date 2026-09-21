@@ -26,7 +26,18 @@
 
 ## 2. Challenges to PROJECT.md
 
-**This is the section that most needs a decision before the roadmap is written.** Each item below is a place where research contradicts a decision already recorded in PROJECT.md. They are presented as challenges, not as resolved edits.
+> **STATUS UPDATE (commit `94e274c`, "docs: revise scope per research findings"):** the user
+> reviewed every challenge below and **approved them all**. PROJECT.md has since been revised
+> accordingly — the conflict resolver moved into v1, the eight oversights were added to Active,
+> the keychain/shell/TypeScript stack corrections were recorded, and the 11–14 week estimate was
+> dropped in favour of phase checkpoints.
+>
+> **This section is therefore no longer a decision request — it is the evidence trail.** The
+> roadmapper should not re-litigate these; it should use the issue numbers, quotes and cost
+> reasoning here to justify phase content and sequencing. §2.6 (inter-document conflicts) and the
+> residual risks noted per item remain live.
+
+Each item below is a place where research contradicted a decision recorded in PROJECT.md at initialization.
 
 ### 2.1 Merge conflict resolver: currently Out of Scope, should be in v1
 
@@ -455,4 +466,4 @@ Genuinely unresolved. Each should become phase-specific research or early-user v
 
 ---
 *Research completed: 2026-09-21*
-*Ready for roadmap: yes — but §2 requires a scope decision before phases are fixed*
+*Ready for roadmap: yes. The §2 challenges were reviewed and approved by the user; PROJECT.md was revised in commit `94e274c`. §2 now serves as the evidence trail behind that revised scope.*
