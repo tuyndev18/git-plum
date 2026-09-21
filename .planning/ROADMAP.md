@@ -90,7 +90,17 @@ Plans:
   - #2 Cách vẽ đồ thị — canvas hay lớp phủ SVG ở mức 100k dòng. Dựng bản canvas trước, nhưng **giữ bộ vẽ sau một interface** để đổi là sửa một tệp. Xử lý device pixel ratio nếu không sẽ mờ trên màn HiDPI. Canvas thuần trình bày — bắt sự kiện bấm dùng div của dòng, không dùng toạ độ canvas.
   - #4 IPC JSON hay nhị phân cho dữ liệu lane. Ship JSON trước rồi đo. Gộp lô lớn — 1000 commit một thông điệp, không phải 1. Nếu JSON chiếm phần lớn profile: dùng `tauri::ipc::Response` trả byte thô, hợp với GraphRow vì đó là dữ liệu số cố định chiều rộng.
 **Ràng buộc**: Một scroll container, một virtualizer — cột đồ thị và cột văn bản vẽ từ **cùng một mảng virtualItems**, không phải hai vùng cuộn đồng bộ. Rust phải trả **đầy đủ hình học từng dòng** (lane, màu, cạnh đi xuyên, cạnh đi ra) để frontend không bao giờ tự tính liên thông. Bước ba của thuật toán lane phải là **vòng lặp qua mọi cha sau cha đầu**, không phải trường hợp đặc biệt hai cha; cha thiếu do bản sao nông phải kết thúc lane chứ không làm sập. Đặt và ghi lại một cách vẽ suy giảm có chủ ý cho ca bệnh lý (giới hạn số lane hiện, hiện chỉ báo "+N cha nữa").
-**Plans**: TBD
+**Plans**: 7 plans (7 wave, tuần tự — mỗi plan tiêu thụ kiểu hoặc tệp của plan trước, không có hai plan nào chạy song song được)
+
+Plans:
+- [ ] 02-01-PLAN.md — Bộ repo mẫu (9 hình dạng) + script sinh repo 100k commit + dev-dependency (insta, criterion, lru)
+- [ ] 02-02-PLAN.md — Hợp đồng dữ liệu (Commit, Ref, GraphRow, Edge) + bộ phân tích `git log` theo byte
+- [ ] 02-03-PLAN.md — Thuật toán gán lane (TDD) + snapshot insta trên 8 repo mẫu + benchmark criterion vào CI
+- [ ] 02-04-PLAN.md — Bộ phân tích `for-each-ref` + cache theo RepoId + 4 Tauri command + kiểu TypeScript
+- [ ] 02-05-PLAN.md — Cột đồ thị canvas sau interface + danh sách ảo hoá một scroll container (checkpoint #2)
+- [ ] 02-06-PLAN.md — Chi tiết commit, cây/phẳng, nhãn ref, thanh bên, tìm kiếm (tiêu chí 3, 4, 5, 6)
+- [ ] 02-07-PLAN.md — Đo thật checkpoint #1 và #4 + VERIFICATION.md
+
 **UI hint**: yes
 
 ### Phase 3: Xem khác biệt
@@ -228,7 +238,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Nền tảng và lớp bọc git | 3/4 | In Progress|  |
-| 2. Lịch sử và đồ thị nhánh | 0/? | Not started | - |
+| 2. Lịch sử và đồ thị nhánh | 0/7 | Planned | - |
 | 3. Xem khác biệt | 0/? | Not started | - |
 | 4. Vòng lặp commit theo tệp | 0/? | Not started | - |
 | 5. Staging theo khối và an toàn khi huỷ | 0/? | Not started | - |
