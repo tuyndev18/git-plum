@@ -41,6 +41,10 @@ pub fn run() {
             commands::clear_command_log,
             commands::git_version,
             commands::current_branch,
+            commands::get_commit_page,
+            commands::list_refs,
+            commands::get_commit_detail,
+            commands::search_commits,
         ])
         .run(tauri::generate_context!())
         .expect("không khởi động được ứng dụng Tauri");
