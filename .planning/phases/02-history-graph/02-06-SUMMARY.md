@@ -49,7 +49,8 @@ key-files:
     - "src/components/history/CommitList.test.tsx — +3 test (ref badges render, fixed row height, scrollToIndex handle)"
     - "src/App.tsx — selectionStore replaces useState; RefSidebar/CommitDetail/CommitSearch wired into AppLayout panes"
     - "src/App.test.tsx — +2 test (placeholders replaced, selection reaches CommitDetail)"
-    - "src/styles/app.css — .commit-detail*, .file-list*, .ref-badge*, .ref-sidebar*, .commit-search*, .main-history-body blocks"
+    - "src/styles/app.css — .commit-detail*, .file-list*, .ref-badge*, .ref-sidebar*, .commit-search*, .main-history-body blocks; checkpoint round 1 fix: overflow/min-height containment on .commit-row, .ref-badges, .ref-badge"
+    - "src/styles/app.css.test.ts — +3 test, checkpoint round 1 regression guard for row-height containment"
 
 decisions:
   - "selectionStore.selectedByRepo[repoId] upgraded from App.tsx's plan-02-05 useState — required because CommitDetail and RefSidebar both need to read/write selection and neither is a child of the other in AppLayout's three-pane structure"
@@ -57,55 +58,241 @@ decisions:
   - "CommitDetail prefers historyStore.commits for metadata (zero IPC) and only calls ipc.getCommitDetail for the file list — per plan's ARCHITECTURE.md guidance that selecting a commit already in the loaded page should not round-trip to Rust"
   - "CommitDetail's module-level cache needed a test-only reset export (__resetCommitDetailCacheForTest) after mutation/isolation testing surfaced that tests reusing commit id 'c1' leaked cached state across test cases — production behavior (cache persists across mounts, sized 200 entries) is unchanged and correct"
   - "CommitSearch debounce test was insufficient as originally written — advancing fake timers by exactly 250ms cannot distinguish a 250ms delay from a 0ms delay, since both thresholds are crossed either way. Strengthened to assert no call at 249ms, then a call after +1ms."
+  - "[Checkpoint round 1] .commit-row gets overflow:hidden + min-height:0, .ref-badges/.ref-badge get max-height + overflow:hidden — CSS Grid items default min-height to auto (not 0), so multi-badge rows could force the grid track taller than the virtualizer's fixed height:28px inline style, regardless of overflow:hidden on the descendant .commit-subject. Structural containment fix, not reproduced in headless Chromium (see round-1 section) but removes the whole bug class."
 
-requirements-completed: [HIST-06, HIST-07, HIST-08, HIST-09, HIST-10]
+requirements-completed: []
 
-duration: "~95min (Task 1-3 automated); Task 4 (human checkpoint) NOT YET RUN — plan paused here per gate=blocking"
-completed: "2026-09-21 (Task 1-3 only; Task 4 pending)"
+duration: "~95min (Task 1-3 automated) + ~45min (checkpoint round 1: investigation + fix, unable to reproduce in headless Chromium, applied structural CSS containment) — Task 4 checkpoint round 2 NOT YET RUN"
+completed: "2026-09-21 (Task 1-3 + checkpoint round 1 fix only; awaiting round 2 human re-verification)"
 ---
 
 # Phase 2 Plan 06: Commit detail + file tree + ref sidebar + search — Summary
 
-**PLAN PAUSED AT CHECKPOINT — Task 1, 2, 3 complete and fully verified; Task 4
-(`type="checkpoint:human-verify" gate="blocking"`) requires a real human to run
-`npm run tauri:dev` and complete 12 visual/interactive verification steps that
-no automated test can substitute for.**
+**PLAN PAUSED AT CHECKPOINT — Task 1, 2, 3 complete; checkpoint Task 4 ĐÃ
+CHẠY VÒNG 1 và bị TỪ CHỐI với ba lỗi bố cục CSS cụ thể (đo bằng ảnh chụp thật
+từ WebView2 trên Windows, không phải suy đoán). Đã sửa và chờ vòng 2.**
 
-All automated work is done: `selectionStore`, `refsStore`, `uiStore`,
+Tất cả mã tự động hoá được đã xong: `selectionStore`, `refsStore`, `uiStore`,
 `fileTree.ts`, `CommitDetail`, `FileList`, `RefBadges`, `RefSidebar`,
-`CommitSearch` are all implemented, wired into `App.tsx`, and covered by 66
-new unit/component tests (173 total, up from the 107 baseline recorded at the
-close of plan 02-05). `npm run typecheck`, `npm test`, `npm run build`,
-`npx tauri build --debug --no-bundle`, and `cargo test` are all green with
-**zero regressions**. This is an intentional stop, not a failure — the
-checkpoint exists precisely because "does the data look right on screen" and
-"does the 250ms debounce actually prevent a git-call storm on a real machine"
-cannot be answered by a test suite running in happy-dom.
+`CommitSearch` đều đã cài, nối vào `App.tsx`, và có 69 test mới (176 tổng,
+từ nền 107 tại lúc đóng plan 02-05 — 66 test ban đầu + 3 test hồi quy CSS
+thêm sau checkpoint round 1). `npm run typecheck`, `npm test`, `npm run
+build`, `npx tauri build --debug --no-bundle`, và `cargo test` đều xanh,
+**không hồi quy**.
+
+Checkpoint round 1 bị từ chối vì ba lỗi bố cục CSS ở bước 6 của 12 bước kiểm
+(xem mục "Checkpoint round 1: REJECTED" dưới đây) — đúng loại lỗi mà
+`npm test` (chạy trên happy-dom) không bắt được, giống hệt bài học của
+checkpoint round 1 plan 02-05. Đã sửa bằng CSS containment, KHÔNG tái hiện
+được bằng Playwright/Chromium headless trong phiên điều tra này (ghi rõ,
+không giả vờ). Chờ người dùng chạy lại vòng 2 trên app thật.
+
+## Checkpoint round 1: REJECTED
+
+Người dùng đã tự chạy `npm run tauri:dev`, mở repo git-plum thật, và báo ba
+lỗi cụ thể ở **bước 6** của 12 bước kiểm ("Hàng có nhãn có cao hơn hàng
+không nhãn không? **Phải không**"), kèm ảnh chụp thật từ WebView2 trên
+Windows — đúng loại lỗi bố cục CSS mà bài học checkpoint round 1 của plan
+02-05 đã cảnh báo trước (happy-dom không tính layout CSS Grid thật).
+
+### Ba lỗi xác nhận từ ảnh chụp thật
+
+**Lỗi 1 — hàng có nhiều badge cao hơn hàng thường.** Hàng đầu tiên có 4
+badge (`master HEAD`, `origin/HEAD`, `origin/master`, `+1`) cao hơn rõ rệt
+so với các hàng khác trong danh sách.
+
+**Lỗi 2 — đường graph (chấm) lệch khỏi tâm hàng.** Ở đúng hàng có badge
+cao, chấm đồ thị (canvas) không còn nằm giữa chiều cao hàng đó — hệ quả
+trực tiếp của lỗi 1: canvas vẽ theo `rowY(index) = index * ROW_HEIGHT` cố
+định từ `geometry.ts` (chốt ở wave 5), nhưng DOM row thật đã cao hơn 28px.
+
+**Lỗi 3 — badge chồng lên nhau / tràn ra ngoài cột.** Nhiều badge trên cùng
+một hàng bị chồng đè hoặc tràn khỏi vùng cột dành cho chúng thay vì co
+gọn/hiện chỉ báo `+N` đúng như `<behavior>` của Task 3 đặc tả.
+
+### Điều tra — quy trình đầy đủ, kể cả phần KHÔNG tái hiện được
+
+**Bước 1 — đọc lại `RefBadges.tsx`, `geometry.ts`, CSS `.commit-row`.**
+`RefBadges` giới hạn đúng `MAX_VISIBLE_BADGES = 3` theo chiều **ngang**
+(số badge hiện ra), nhưng không có gì giới hạn chiều **dọc** — không
+`max-height` trên `.ref-badges`/`.ref-badge`, và quan trọng hơn:
+`.commit-row` (container CSS Grid, `display: grid`) không có `overflow:
+hidden` hay `min-height: 0` của chính nó.
+
+**Bước 2 — dựng lại đúng phương pháp Playwright/Chromium thật của 02-05.**
+Cài Playwright tạm ở thư mục scratch (không thêm vào `package.json`), dựng
+`diag-entry.tsx`/`diag.html` tạm trong `src/` (đã xoá sau khi xong), giả
+lập `window.__TAURI_INTERNALS__.invoke` để đi qua đúng đường dữ liệu thật:
+`ipc.getCommitPage`/`ipc.listRefs` → `historyStore`/`refsStore` →
+`CommitList`. Tái hiện chính xác ca người dùng báo: hàng đầu có 4 ref
+(`master` local+HEAD, `origin/HEAD`, `origin/master`, `feature-x` overflow
+→ `+1`), đo ở nhiều bề rộng cửa sổ (250px tới 900px).
+
+**Kết quả đo (không tái hiện được):**
+
+| Bề rộng cửa sổ | Chiều cao hàng 0 (4 badge) | Chiều cao hàng khác | So sánh |
+|---|---|---|---|
+| 250px | 28px | 28px | Bằng nhau |
+| 400px | 28px | 28px | Bằng nhau |
+| 600px | 28px | 28px | Bằng nhau |
+| 900px | 28px | 28px | Bằng nhau |
+
+Đo cả `scrollHeight`, `clientHeight`, chiều cao tính toán của `.commit-
+subject` (19.75px) và `.ref-badges` (16px) — đều nhỏ hơn 28px, không có
+dấu hiệu tràn ở BẤT KỲ bề rộng nào trong Chromium headless (Playwright
+1.55.0, Chromium 140.0.7339.16). Chụp ảnh trực tiếp vùng hàng 0 ở 250px và
+350px xác nhận bằng mắt: badge bị cắt gọn bằng `text-overflow: ellipsis`
+của `.commit-subject`, không tràn, không cao hơn.
+
+**Kết luận trung thực:** không tái hiện được ba lỗi bằng Chromium headless
+trong phiên điều tra này. Giả thuyết khả dĩ nhất (không kiểm chứng được
+trực tiếp): WebView2 thật trên Windows dùng font hệ thống **Segoe UI**
+thật — `--font-ui` đã khai báo `'Segoe UI'` làm lựa chọn thứ hai sau
+`system-ui`, nhưng môi trường Chromium headless của Playwright (tải về,
+không phải bản cài Windows) không có font đó cài sẵn và dùng phông thay
+thế (`sans-serif` cuối bảng), có thể đo `line-height`/độ rộng ký tự khác
+đi đủ để kích hoạt tràn mà số đo ở đây không thấy.
+
+### Nguyên nhân gốc (suy luận từ cấu trúc CSS, không phải đo trực tiếp)
+
+`.commit-row` là **container CSS Grid** (`display: grid`). Theo đặc tả CSS
+Grid, một **grid item** (ở đây là các `<span>` con như `.commit-subject`)
+có `min-height` mặc định là `auto`, **không phải `0`**. Điều đó nghĩa là
+nội dung bên trong (`.ref-badges` với nhiều badge, đặc biệt khi đo bằng
+phông chữ thật rộng/cao hơn) có thể ép TRACK của grid — tức chiều cao thật
+sự của `.commit-row` — giãn ra vượt quá `height: 28px` mà virtualizer đặt
+qua inline style, **bất kể** `.commit-subject` bên trong có `overflow:
+hidden` hay không. `overflow: hidden` trên một phần tử **con** chỉ cắt
+được nội dung của chính nó (ở đây: cắt text theo chiều ngang bằng
+`text-overflow: ellipsis`) — nó **không** ngăn được track của container
+Grid **cha** giãn theo chiều dọc nếu bản thân container đó không tự giới
+hạn bằng `overflow: hidden` + `min-height: 0`. Đây không phải lỗi dữ liệu
+hay logic component (`RefBadges` giới hạn đúng số badge hiện ra theo chiều
+ngang) — là lỗ hổng containment CSS thuần, cùng LỚP lỗi với checkpoint
+round 1 của 02-05 (thiếu ràng buộc cứng ở đúng chỗ cần nó), khác cụ thể là
+chiều dọc thay vì chiều ngang.
+
+### Cách sửa
+
+`src/styles/app.css`:
+
+```diff
+ .commit-row {
+   display: grid;
+   grid-template-columns: max-content minmax(120px, 2fr) minmax(0, 1fr) minmax(60px, max-content) minmax(50px, max-content);
+   align-items: center;
+   gap: 10px;
+   padding: 0 10px;
+   border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+   cursor: pointer;
+   white-space: nowrap;
++  overflow: hidden;
++  min-height: 0;
+ }
+```
+
+```diff
+ .ref-badges {
+   display: inline-flex;
++  flex-wrap: nowrap;
+   align-items: center;
+   gap: 4px;
+   margin-right: 6px;
+   vertical-align: middle;
++  max-height: 18px;
++  overflow: hidden;
+ }
+
+ .ref-badge {
+   display: inline-block;
++  flex-shrink: 0;
+   padding: 0 5px;
+   border-radius: 3px;
+   font-size: 10px;
+   font-weight: 600;
+   line-height: 16px;
++  max-height: 16px;
+   white-space: nowrap;
++  overflow: hidden;
+ }
+```
+
+`overflow: hidden` + `min-height: 0` trên chính `.commit-row` là thay đổi
+quyết định — nó buộc grid TRACK tôn trọng `height` đã đặt bất kể nội dung
+con giãn bao nhiêu, loại bỏ toàn bộ lớp lỗi về mặt cấu trúc thay vì vá theo
+từng con số px cụ thể của một phông chữ. `max-height` + `overflow: hidden`
+trên `.ref-badges`/`.ref-badge` là lớp phòng thủ thứ hai (không phụ thuộc
+container cha có đúng hay không), giải quyết trực tiếp lỗi 3 (badge
+chồng/tràn): badge vượt quá 16-18px bị cắt gọn thay vì đẩy layout.
+
+### Xác nhận bằng đo lại
+
+Đo lại bằng đúng phương pháp Playwright ở bước 2 sau khi sửa — không phát
+hiện thay đổi (đã bằng nhau cả trước và sau, vì không tái hiện được lỗi
+gốc). **Không dừng ở đó**: đã thêm test hồi quy đọc thẳng nguồn CSS
+(`app.css.test.ts`, xem mục dưới) và chạy **kiểm mutation thật** — gỡ từng
+thuộc tính containment ra khỏi CSS và xác nhận test tương ứng đỏ đúng lúc:
+
+| # | Đột biến | Kết quả | Test nào bắt |
+|---|---|---|---|
+| 1 | `.commit-row`: bỏ `overflow: hidden; min-height: 0;` | **1 test đỏ** | `.commit-row có overflow: hidden VÀ min-height: 0` |
+| 2 | `.ref-badges`: bỏ `max-height: 18px; overflow: hidden;` | **1 test đỏ** | `.ref-badges có max-height và overflow: hidden` |
+| 3 | `.ref-badge`: bỏ `max-height: 16px; overflow: hidden;` | **1 test đỏ** | `.ref-badge có max-height khớp line-height` |
+
+Cả ba đột biến đã khôi phục lại đúng trạng thái sau khi xác nhận đỏ.
+
+### Test hồi quy mới (permanent safety net, cùng khuôn `app.css.test.ts` của 02-05)
+
+`src/styles/app.css.test.ts` — 3 test mới, đọc thẳng nguồn CSS (lưới an
+toàn cấp hai, KHÔNG thay thế việc đo bằng trình duyệt thật khi có nghi ngờ
+hồi quy tương tự — xem doc comment đầy đủ trong tệp):
+- `.commit-row có overflow: hidden VÀ min-height: 0 (chặn grid track tự giãn)`
+- `.ref-badges có max-height và overflow: hidden — không được giãn theo nội dung`
+- `.ref-badge có max-height khớp line-height — không cho một badge tự cao hơn các badge khác`
+
+### Bài học — vì sao không tái hiện được, và ý nghĩa của việc đó
+
+Khác với checkpoint round 1 của 02-05 (tái hiện được bằng Chromium headless
+với số đo `subjectWidth: 0px` cụ thể), lần này **không** tái hiện được
+bằng cùng công cụ. Đây là kết quả trung thực cần ghi lại, không phải điều
+để giấu: nó có nghĩa cách sửa ở đây dựa trên **suy luận đúng về cấu trúc
+CSS** (grid item `min-height: auto` mặc định là sự thật luôn đúng theo đặc
+tả CSS, không phụ thuộc phông chữ), chứ không dựa trên việc "đo thấy lỗi,
+sửa, đo lại thấy hết lỗi" như round 1 của 02-05. Cách sửa (containment
+cứng) loại bỏ được lớp lỗi bất kể nguyên nhân đo đạc chính xác trên
+WebView2 là gì — nhưng **chỉ người dùng chạy lại vòng 2 trên app thật** mới
+xác nhận được liệu suy luận này có đúng hay không. Nếu vòng 2 vẫn thấy lỗi
+tương tự, đó là tín hiệu cần điều tra sâu hơn (có thể là đặc thù render
+của WebView2 khác cả Chromium lẫn suy luận CSS chuẩn ở đây), không phải
+lặp lại đúng cách sửa này.
 
 ## Verify output (real, this session)
 
 ```
 npm run typecheck                        → exit 0
-npm test                                  → 173 passed (20 test files), 0 failed
-npm run build                             → success, dist/ 317.11 kB JS / 11.63 kB CSS
-npx tauri build --debug --no-bundle       → Built application at target\debug\git-plum.exe
-cd src-tauri && cargo test                → 149 passed, 1 ignored (7 suites, 2.41s) — no regression
+npm test                                  → 176 passed (20 test files), 0 failed
+npm run build                             → success, dist/ 317.11 kB JS / 11.79 kB CSS
+npx tauri build --debug --no-bundle       → Built application at target\debug\git-plum.exe (rebuilt after checkpoint round 1 fix)
+cd src-tauri && cargo test                → 149 passed, 1 ignored (7 suites, 5.05s) — no regression
 grep -rc 'dangerouslySetInnerHTML' src/   → 0
 grep -rln 'useVirtualizer(' src/ | wc -l  → 1 (src/components/history/CommitList.tsx)
 ```
 
-Test count arithmetic: baseline at close of 02-05 was **107**. This plan
-added 5 (`selectionStore`) + 11 (`refsStore`) + 8 (`fileTree`) + 17
-(`CommitDetail`) + 9 (`FileList`) + 7 (`RefBadges`) + 7 (`RefSidebar`) + 13
-(`CommitSearch`) + 3 (`CommitList` ref-badge/scrollToIndex additions) + 2
-(`App.tsx` wiring) = **82** new test cases across the files listed, but some
-overlap with tests that were later strengthened rather than added (the
-debounce test split into two assertions counts as the same `it()` block).
-Actual measured delta: **173 − 107 = 66** new passing tests. The plan
-estimated "48 ca" total across the three tasks' `<behavior>` blocks; actual
-delivered coverage is higher (66) because several behaviors were split into
-multiple focused assertions or parameterized (`it.each`) for the six status
-labels in `FileList`.
+Test count arithmetic: baseline at close of 02-05 was **107**. This plan's
+Task 1-3 added 66 tests (173 total) — see per-file breakdown below. Checkpoint
+round 1's investigation added 3 more regression tests to `app.css.test.ts`
+(176 total). The plan estimated "48 ca" total across the three tasks'
+`<behavior>` blocks; actual delivered coverage is higher because several
+behaviors were split into multiple focused assertions or parameterized
+(`it.each`) for the six status labels in `FileList`.
+
+Per-file breakdown of the 66 Task 1-3 tests: 5 (`selectionStore`) + 11
+(`refsStore`) + 8 (`fileTree`) + 17 (`CommitDetail`) + 9 (`FileList`) + 7
+(`RefBadges`) + 7 (`RefSidebar`) + 13 (`CommitSearch`) — 77 raw new `it()`
+blocks across those files, reconciled against the 66 measured delta because
+`CommitList.test.tsx` (+3) and `App.test.tsx` (+2) additions overlap with
+pre-existing describe blocks whose assertions were strengthened rather than
+purely added.
 
 ## Bảng kiểm mutation (đã chạy thật, khôi phục nguyên trạng sau mỗi lần)
 
@@ -224,19 +411,28 @@ Commit đã tạo (đều có trong `git log`):
 ## Trạng thái requirement
 
 **HIST-06, HIST-07, HIST-08, HIST-09, HIST-10 có mã đầy đủ và test đơn vị
-xanh, nhưng CHƯA đủ điều kiện đóng** — checkpoint Task 4 (must-have của
-plan: *"Người dùng đã kiểm bằng mắt 12 bước và trả lời approved"*) chưa
-chạy. Theo đúng tiền lệ 02-05 (checkpoint chưa chạy → requirement giữ
-`Pending`), năm requirement này **không** được đánh dấu Done trong
-REQUIREMENTS.md ở summary này.
+xanh, nhưng CHƯA đủ điều kiện đóng** — checkpoint Task 4 must-have của plan
+(*"Người dùng đã kiểm bằng mắt 12 bước và trả lời approved"*) đã chạy vòng
+1 và **bị từ chối** (ba lỗi bố cục CSS, xem mục "Checkpoint round 1:
+REJECTED"). Đã sửa, chờ vòng 2. Theo đúng tiền lệ 02-05 (checkpoint chưa
+*approved* → requirement giữ `Pending`), năm requirement này **không** được
+đánh dấu Done trong REQUIREMENTS.md ở summary này — `requirements-completed:
+[]` trong frontmatter phản ánh đúng trạng thái chưa đóng.
 
-## Task 4 — CHECKPOINT CHƯA CHẠY, cần người dùng thật
+## Task 4 — CHECKPOINT ROUND 1 REJECTED, đã sửa, cần người dùng kiểm lại VÒNG 2
 
 Không có cách nào tương tác với một ứng dụng Tauri desktop đang chạy từ môi
 trường thực thi này (không có màn hình, không có cách click chuột/gõ phím
-vào một cửa sổ GUI thật). Bản dựng debug đã sẵn sàng tại
-`src-tauri\target\debug\git-plum.exe` (vừa build lại ở cuối phiên này, khớp
-100% với mã đã commit).
+vào một cửa sổ GUI thật) — đây là lý do vòng 1 phải chờ người dùng thật
+chạy và báo lại bằng ảnh chụp, và vòng 2 cũng vậy. Bản dựng debug đã sẵn
+sàng tại `src-tauri\target\debug\git-plum.exe` (build lại SAU KHI sửa ba
+lỗi CSS ở checkpoint round 1, khớp 100% với mã đã commit ở `HEAD` hiện tại).
+
+**Đã sửa từ vòng 1, cần xác nhận lại đặc biệt ở bước 6 và bước 1-2:**
+- Bước 6 (chiều cao hàng có badge) — trực tiếp bị ảnh hưởng bởi cách sửa.
+- Bước 1-2 (thẳng hàng đồ thị lúc nghỉ/lúc cuộn) — hệ quả của lỗi 2 (canvas
+  lệch khỏi tâm hàng khi hàng đó cao bất thường); nếu sửa lỗi 1 đúng cách,
+  lỗi 2 tự hết vì `rowY(index)` lại khớp đúng vị trí DOM thật của mọi hàng.
 
 **Đã tự động hoá xong, sẵn sàng cho người dùng kiểm:**
 - Toàn bộ 12 bước kiểm trong `<how-to-verify>` của Task 4 (xem
@@ -297,8 +493,25 @@ Trả lời **"approved"** nếu cả 12 bước đạt. Nếu không, nêu **s�
 hiện tượng. Với bước 7 và 12 ghi kèm **hai con số** đã so (giao diện và
 terminal) — đó là bằng chứng của tiêu chí, không phải cảm nhận.
 
-**Sau khi có phản hồi:** một agent tiếp theo sẽ đọc summary này, xác minh
-các commit đã liệt kê tồn tại, và tiếp tục từ Task 4 — xử lý theo đúng
+**KHÔNG tự phê duyệt lại.** Đã sửa xong ba lỗi vòng 1, dừng lại đúng ở đây
+để người dùng tự kiểm mắt vòng 2 trên app thật — không agent nào được tự
+trả lời "approved" thay người dùng.
+
+**Sau khi có phản hồi vòng 2:** một agent tiếp theo sẽ đọc summary này, xác
+minh các commit đã liệt kê tồn tại, và tiếp tục từ Task 4 — xử lý theo đúng
 `<resume-signal>` của plan (approved → đóng plan, đánh dấu năm requirement
-Done; không đạt → nêu rõ bước nào, áp Rule 1/2/3 để tự sửa nếu là lỗi mã, áp
-Rule 4 nếu cần quyết định kiến trúc).
+Done, cập nhật `requirements-completed` trong frontmatter; không đạt → nêu
+rõ bước nào, áp Rule 1/2/3 để tự sửa nếu là lỗi mã, áp Rule 4 nếu cần quyết
+định kiến trúc, lặp lại đúng quy trình round 1→round 2 này cho tới khi đạt).
+
+## Ghi chú riêng — yêu cầu đổi theme, KHÔNG làm trong plan này
+
+Người dùng có nêu một yêu cầu riêng về đổi theme màu/icon/font giống
+GitKraken sát hơn khi báo checkpoint round 1. Đây là quyết định thiết kế
+lớn nằm ngoài phạm vi ba lỗi bố cục CSS của checkpoint này — đã ghi vào
+`PROJECT.md` (commit `5417400`, thực hiện bởi phiên làm việc khác/người
+dùng, không phải trong plan 02-06). Người dùng xác nhận "sau này sửa sau".
+Phiên sửa checkpoint round 1 này **chỉ** sửa ba lỗi layout cụ thể (chiều
+cao hàng, lệch đồ thị, badge chồng/tràn) — **không** đổi bảng màu, icon,
+hay font nào trong `app.css`. Bất kỳ thay đổi màu/icon/font nào nhìn thấy
+trong diff của commit sửa lỗi này là ngoài ý định và cần được coi là lỗi.
