@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-09-21T18:10:00.000Z"
+last_updated: "2026-09-21T18:45:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
@@ -33,9 +33,9 @@ progress:
 | | |
 |---|---|
 | **Phase** | 2 — Lịch sử và đồ thị nhánh |
-| **Plan** | 5 / 7 xong (02-05 — canvas graph + virtualizer + CommitList, checkpoint #2 ĐẠT ở vòng 2) |
-| **Status** | Plan 02-05 đóng. Checkpoint #2 (canvas hay SVG) chốt **canvas** — người dùng chấp thuận qua app thật sau khi vòng 1 bị từ chối và đã sửa (xem `02-05-SUMMARY.md` mục "Checkpoint round 1: REJECTED" / "Checkpoint round 2: APPROVED"). Tiếp theo: 02-06 (chi tiết commit, cây/phẳng, nhãn ref, thanh bên, tìm kiếm). |
-| **Progress** | Phase 1/8 · Phase 2 plan 5/7 |
+| **Plan** | 5 / 7 xong, **02-06 Task 1-3 xong (tự động hoá), DỪNG ở Task 4 checkpoint người dùng — chưa đóng** |
+| **Status** | Plan 02-06 (chi tiết commit, cây/phẳng, nhãn ref, thanh bên, tìm kiếm): `selectionStore`, `refsStore`, `uiStore`, `fileTree.ts`, `CommitDetail`, `FileList`, `RefBadges`, `RefSidebar`, `CommitSearch` đã cài đủ, nối vào `App.tsx`, 66 test mới xanh (173 tổng, từ nền 107). `npm run typecheck`/`npm test`/`npm run build`/`tauri build --debug`/`cargo test` đều xanh, không hồi quy. **Task 4 là checkpoint `human-verify` bắt buộc (gate=blocking)** — cần người dùng tự chạy `npm run tauri:dev`, làm 12 bước kiểm bằng mắt trên repo thật, trả lời "approved" hoặc nêu bước nào sai. Xem `02-06-SUMMARY.md` mục "Task 4 — CHECKPOINT CHƯA CHẠY" để lấy nguyên văn 12 bước. |
+| **Progress** | Phase 1/8 · Phase 2 plan 5/7 (02-06 đang dở, dừng ở checkpoint) |
 
 ```
 [#.......] 1/8 phases
@@ -75,6 +75,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 2 P03 | 65min | 3 tasks | 14 files |
 | Phase 2 P04 | 85min | 3 tasks | 14 files |
 | Phase 2 P05 | ~110min (Task 1-3) + ~90min (checkpoint round 1: điều tra + sửa) | 4/4 tasks | 16 files |
+| Phase 2 P06 | ~95min (Task 1-3, tự động hoá) — Task 4 checkpoint CHƯA chạy | 3/4 tasks | 17 files |
 
 ---
 
@@ -128,6 +129,11 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 - **`ROW_HEIGHT=28, LANE_WIDTH=14, GRAPH_PADDING_LEFT=8, MAX_VISIBLE_LANES=20` chốt ở plan 02-05, khớp phép tính hiển thị của `docs/04-phase2-degraded-graph.md`**: đồ thị và cột văn bản trong `CommitList.tsx` dựng từ CÙNG một mảng `virtualItems` của `@tanstack/react-virtual@3.14.13` (ghim chính xác) — đây là điều khiến lệch hàng bất khả thi về mặt cấu trúc, không phải "được sửa cho thẳng". `historyStore.ts` giữ mảng sparse cấp trước tới `total`; ô chưa nạp là `undefined`.
 - **🔴 Hai cổng grep của plan 02-05 sai về cấu trúc, đã sửa** (xem `02-05-SUMMARY.md` mục "Plan sai ở đâu"): `grep -rc 'useVirtualizer' src/components/history/` không thể bằng 1 vì bất kỳ cài đặt đúng nào cũng khớp ít nhất 2 dòng (import + lời gọi) — sửa thành đếm điểm gọi `useVirtualizer(`. `grep -c 'devicePixelRatio' canvasRenderer.ts` trỏ sai tệp: theo đúng chỉ dẫn testability của chính plan, tham số đó phải tên `dpr` trong tệp này, còn `window.devicePixelRatio` chỉ đọc ở `GraphCanvas.tsx`.
 - **`selectedCommitId` dùng `useState` trong `App.tsx` ở plan 02-05, chưa nâng lên `selectionStore`**: ARCHITECTURE.md Pattern 3 khuyên store riêng khi vùng chi tiết (02-06) không phải con của `App`. Cần quyết định lúc lập plan 02-06.
+- **`selectionStore` nâng cấp thật ở plan 02-06** (đóng câu hỏi dòng trên): `selectedByRepo[repoId]`, chỉ giữ id, không giữ `Commit`/`files`. `CommitDetail` và `RefSidebar` đều đọc/ghi độc lập, không component nào là con của component kia trong `AppLayout` — đúng như Pattern 3 mô tả. Test khẳng định bằng cách soát khoá của `getState()` (chặn được đột biến thêm trường dữ liệu, đã kiểm mutation thật).
+- **Nhãn ref (`RefBadges`, HIST-06) đặt INLINE trong `.commit-subject` hiện có, KHÔNG phải cột CSS Grid mới** (plan 02-06, học trực tiếp từ bài học checkpoint round 1 của 02-05): thêm một cột `max-content`/`minmax` mới sẽ lặp lại đúng phép tính co cột đã gây lỗi trước đó (nhiều cột không co cạnh tranh không gian ở cửa sổ hẹp + nhiều lane). Đặt nhãn làm nội dung inline trước subject nghĩa là chúng dùng chung ngân sách bề rộng với subject và bị cắt cùng nhau bằng `text-overflow: ellipsis` sẵn có — không có cột nào mới để co về 0px. `white-space: nowrap` giữ chiều cao hàng cố định bất kể số nhãn (HIST-04).
+- **`CommitList.tsx` là `forwardRef<CommitListHandle>` từ plan 02-06**: `scrollToIndex` lộ ra qua `useImperativeHandle`, dùng bởi `CommitSearch` (HIST-10) — tránh tạo `useVirtualizer` thứ hai. Vẫn đúng MỘT tệp gọi `useVirtualizer(` trong toàn `src/`, đã kiểm bằng `grep -rln 'useVirtualizer(' src/`.
+- **`CommitDetail` cache `CommitDetail` payload theo `commitId` trong `Map` cấp module, chặn 200 mục** (plan 02-06): diff/danh sách tệp của commit lịch sử bất biến nên cache không bao giờ cần vô hiệu hoá. Có `__resetCommitDetailCacheForTest()` chỉ dùng trong test — cache cấp module sống qua mount/unmount làm rò rỉ trạng thái giữa các test dùng chung `commitId`.
+- **🔴 Đột biến kiểm ra assertion debounce ban đầu của `CommitSearch` không phân biệt được 250ms với 0ms** (plan 02-06): `advanceTimersByTimeAsync(250)` đi qua cả hai mốc. Sửa test thành kiểm chưa gọi ở 249ms rồi mới advance nốt 1ms — cùng lớp bài học với đột biến 6 của 02-05 (test "xanh" không chứng minh được hành vi nếu assertion không đủ chặt).
 - **🔴 Checkpoint round 1 của plan 02-05 bị từ chối vì `.commit-row` co cột subject về 0px** (đo thật bằng Chromium/Playwright, không phải happy-dom): `minmax(0, 2fr)` không có sàn, và cột gutter đồ thị (tới 288px theo lane) cộng hai cột ngày/mã commit `max-content` (không co) ăn hết chỗ ở cửa sổ hẹp (900px, mức tối thiểu) kèm lane cao. **Không phải lỗi dữ liệu** — parser Rust, historyStore, CommitList, canvasRenderer đều đã kiểm chứng đúng riêng biệt trước khi tìm ra nguyên nhân CSS. Sửa: `minmax(120px, 2fr)` cho subject, `minmax(<n>px, max-content)` cho time/sha để chúng nhường chỗ được. Bài học lớn hơn: **happy-dom không tính layout CSS thật** (grid track sizing), nên lớp bug này chỉ lộ ra khi đo bằng trình duyệt thật — 103 test cũ đều xanh trong khi lỗi hiện rõ trên màn hình người dùng thật. Xem `02-05-SUMMARY.md` mục "Checkpoint round 1: REJECTED" cho quy trình điều tra đầy đủ (kể cả cách dùng Playwright cài tạm ở thư mục scratch để đo layout thật mà không thêm dependency vào dự án).
 - Chi tiết đầy đủ các quyết định kỹ thuật: xem `.planning/PROJECT.md` mục Key Decisions và `.planning/research/SUMMARY.md` mục 3.
 
@@ -149,7 +155,14 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 
 ### Vướng mắc
 
-Không có vướng mắc nào đang chặn. Checkpoint #2 (canvas hay SVG, plan 02-05) đã **đóng**:
+**Đang chờ: checkpoint Task 4 của plan 02-06 (`gate=blocking`, chưa chạy).** Không phải lỗi
+hay blocker kỹ thuật — mọi mã tự động hoá được đã hoàn thành và kiểm chứng (66 test mới, 173
+tổng, `typecheck`/`build`/`cargo test` xanh, không hồi quy). Đây là bước bắt buộc phải có người
+dùng thật chạy `npm run tauri:dev`, làm 12 bước kiểm bằng mắt trên repo thật, và trả lời
+"approved" hoặc nêu bước nào sai — không agent nào tự động hoá được việc "nhìn màn hình có đúng
+không". Xem `02-06-SUMMARY.md` mục "Task 4 — CHECKPOINT CHƯA CHẠY" để lấy nguyên văn 12 bước.
+
+Checkpoint #2 (canvas hay SVG, plan 02-05) đã **đóng**:
 vòng 1 người dùng từ chối vì cột thông điệp commit co về gần như trống ở cửa sổ hẹp + nhiều
 lane (đo thật bằng Chromium/Playwright: `subjectWidth === 0px` tại 900px/maxLane~19 — lỗi CSS
 grid, không phải lỗi parser/store/canvas), đã sửa (`c2f6714` test, `cc270e4` fix) và xác nhận
@@ -226,18 +239,31 @@ có catalog dịch. Đáng làm trước khi phát hành công khai (Phase 8), k
 
 ## Session Continuity
 
-**Việc tiếp theo:** `02-06-PLAN.md` — chi tiết commit, cây/phẳng, nhãn ref, thanh bên, tìm
-kiếm (tiêu chí thành công 3, 4, 5, 6). Plan 02-05 đã đóng, checkpoint #2 chốt canvas.
+**Việc tiếp theo:** Resume `02-06-PLAN.md` Task 4 — checkpoint người dùng thật (gate=blocking).
+Task 1-3 đã xong và commit đủ (9 commit, xem `02-06-SUMMARY.md`). KHÔNG cần agent viết thêm mã
+trừ khi checkpoint trả về "không đạt" cho một bước cụ thể.
 
-**Ghi chú cho 02-06, đọc trước khi lập/thực thi plan:**
-- `selectedCommitId` hiện là `useState` trong `App.tsx` (plan 02-05) — ARCHITECTURE.md
-  Pattern 3 khuyên `selectionStore` riêng ("giữ CHỈ id, không giữ dữ liệu commit") khi vùng
-  chi tiết không phải con của `App`. Quyết định nâng cấp hay giữ nguyên thuộc về plan này.
-- `.commit-row` là CSS Grid độc lập mỗi hàng, cột subject có sàn cứng `minmax(120px, 2fr)`
-  (checkpoint round 1 — đừng đổi lại `minmax(0, ...)`, có test `app.css.test.ts` chặn). Nếu
-  02-06 thêm cột mới vào `.commit-row` (ví dụ nhãn ref), cân nhắc lại bài toán co cột — đo
-  bằng trình duyệt thật (Playwright, xem quy trình ở `02-05-SUMMARY.md`), đừng chỉ tin
-  `npm test` vì happy-dom không tính layout CSS thật.
+**Để resume:** đọc `02-06-SUMMARY.md` mục "Task 4 — CHECKPOINT CHƯA CHẠY" để lấy nguyên văn 12
+bước kiểm, chuyển cho người dùng thật chạy `npm run tauri:dev` (hoặc `dev.cmd`), nhận lại
+"approved" hoặc số bước cụ thể bị sai. Nếu "approved": đóng plan 02-06 (đánh dấu HIST-06 tới
+HIST-10 Done trong REQUIREMENTS.md, cập nhật `state advance-plan`), rồi sang 02-07 (checkpoint
+#1 hiệu năng 100k commit — mốc còn lại duy nhất của validation checkpoint Phase 2). Nếu không
+đạt: agent kế tiếp áp Rule 1/2/3 để tự sửa nếu là lỗi mã hiển thị/logic, Rule 4 nếu cần quyết
+định kiến trúc, rồi build lại `tauri build --debug --no-bundle` và yêu cầu kiểm lại đúng bước đã
+nêu (không phải lại từ đầu 12 bước, theo đúng tiền lệ 02-05 checkpoint round 1→2).
+
+**Ghi chú kỹ thuật đã chốt ở 02-06 (Task 1-3), đọc trước khi tiếp tục:**
+- `selectedCommitId` đã nâng từ `useState` (plan 02-05) lên `selectionStore.selectedByRepo`
+  — Pattern 3 áp dụng: store chỉ giữ id, `CommitDetail`/`RefSidebar` tự lấy dữ liệu.
+- Nhãn ref (`RefBadges`) nằm INLINE trong `.commit-subject` hiện có, KHÔNG phải cột grid mới —
+  quyết định có chủ ý để tránh lặp lại lỗi checkpoint round 1 của 02-05 (cột `max-content`/
+  `minmax` mới cạnh tranh không gian ở cửa sổ hẹp). Nếu sửa CSS `.commit-row` sau này, đọc kỹ
+  comment trong `app.css` trước khi thêm cột.
+- `CommitList.tsx` giờ là `forwardRef<CommitListHandle>` — `scrollToIndex` lộ ra qua
+  `useImperativeHandle`, `CommitSearch` dùng handle này thay vì tạo `useVirtualizer` thứ hai.
+  Vẫn đúng MỘT tệp gọi `useVirtualizer(` trong toàn `src/` (đã kiểm bằng grep).
+- `CommitDetail` cache theo `commitId` trong `Map` cấp module (200 mục, không bao giờ tự vô
+  hiệu hoá — diff lịch sử bất biến). Có `__resetCommitDetailCacheForTest()` chỉ dùng trong test.
 - `historyStore.ts` là nguồn `commits`/`graphRows`; `GitRef.target` đã giải tham chiếu, neo
   nhãn vào `GraphRow.commitId` bằng so bằng thẳng (ghi chú từ 02-04-SUMMARY.md, vẫn đúng).
 
