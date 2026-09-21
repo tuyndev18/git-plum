@@ -248,4 +248,68 @@ mod tests {
             .await;
         assert!(matches!(res, Err(GitError::Timeout { .. })));
     }
+
+    /// Đọc ngược một khoá cấu hình từ chính tiến trình git con.
+    ///
+    /// Đây là điểm mấu chốt của nhóm test bên dưới: sai cú pháp nháy đơn thì git bỏ
+    /// qua toàn bộ `GIT_CONFIG_PARAMETERS` trong im lặng, và một test chỉ đọc mã bằng
+    /// mắt sẽ không thấy gì. `git config --get` chạy được cả ngoài repository khi giá
+    /// trị đến từ `GIT_CONFIG_PARAMETERS`, nên không cần `git init`.
+    async fn read_back(key: &str) -> (String, i32) {
+        let dir = tempfile::tempdir().unwrap();
+        let out = GitCommand::new(dir.path())
+            .args(["config", "--get", key])
+            .run()
+            .await
+            .unwrap();
+        // So sánh sau khi `trim`: git kết thúc dòng bằng `\n`, trên Windows có thể `\r\n`.
+        (
+            String::from_utf8_lossy(&out.stdout).trim().to_string(),
+            out.status,
+        )
+    }
+
+    /// `diff.noprefix=true` của người dùng làm mọi đầu ra diff mất tiền tố `a/` `b/`.
+    #[tokio::test]
+    async fn pins_diff_noprefix() {
+        let (value, status) = read_back("diff.noprefix").await;
+        assert_eq!(status, 0, "git không thấy khoá diff.noprefix");
+        assert_eq!(value, "false");
+    }
+
+    /// `format.coverLetter` bật sẽ khiến `format-patch` sinh thêm tệp ngoài dự kiến.
+    #[tokio::test]
+    async fn pins_format_cover_letter() {
+        let (value, status) = read_back("format.coverLetter").await;
+        assert_eq!(status, 0, "git không thấy khoá format.coverLetter");
+        assert_eq!(value, "false");
+    }
+
+    /// Mục đã ghim từ trước — test chống hồi quy.
+    #[tokio::test]
+    async fn pins_log_show_signature() {
+        let (value, status) = read_back("log.showSignature").await;
+        assert_eq!(status, 0, "git không thấy khoá log.showSignature");
+        assert_eq!(value, "false");
+    }
+
+    /// Chứng minh git phân tích được toàn bộ chuỗi `GIT_CONFIG_PARAMETERS` chứ không
+    /// bỏ qua vì sai cú pháp: cả ba khoá phải cùng xuất hiện trong một lần liệt kê.
+    ///
+    /// Lưu ý: `--get-regexp` in tên khoá đã hạ chữ thường (`log.showsignature`,
+    /// `format.coverletter`) vì git chuẩn hoá phần tên khoá; so khớp phải theo dạng đó.
+    #[tokio::test]
+    async fn all_pinned_keys_reach_the_child_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = GitCommand::new(dir.path())
+            .args(["config", "--get-regexp", r"^(diff|format|log)\."])
+            .run()
+            .await
+            .unwrap();
+        assert!(out.is_success(), "git config --get-regexp thất bại");
+        let listing = String::from_utf8_lossy(&out.stdout).to_lowercase();
+        for key in ["log.showsignature", "diff.noprefix", "format.coverletter"] {
+            assert!(listing.contains(key), "thiếu {key} trong đầu ra:\n{listing}");
+        }
+    }
 }
