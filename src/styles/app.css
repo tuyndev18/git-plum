@@ -440,3 +440,73 @@ button:disabled {
 .pane-group {
   height: 100%;
 }
+
+/* --- Danh sách commit + đồ thị (Phase 2) -------------------------------- */
+
+.commit-scroll {
+  height: 100%;
+  overflow-y: auto;
+  position: relative;
+}
+
+/* Canvas thuần trình bày (ràng buộc số 5) — không bao giờ bắt sự kiện bấm.
+   Chọn hàng đi qua .commit-row bên dưới, không qua toạ độ canvas. */
+.graph-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+.commit-row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 2fr) minmax(0, 1fr) max-content max-content;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.commit-row:hover {
+  background: var(--bg-inset);
+}
+
+.commit-row.selected {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg));
+}
+
+.commit-graph-gutter {
+  flex-shrink: 0;
+}
+
+.commit-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commit-encoding-flag {
+  color: var(--danger);
+}
+
+.commit-author,
+.commit-time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.commit-sha {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.commit-row-loading {
+  grid-column: 1 / -1;
+  height: 1em;
+}
