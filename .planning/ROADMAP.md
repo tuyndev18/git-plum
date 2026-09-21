@@ -96,8 +96,8 @@ Plans:
 - [x] 02-01-PLAN.md — Bộ repo mẫu (9 hình dạng) + script sinh repo 100k commit + dev-dependency (insta, criterion, lru)
 - [x] 02-02-PLAN.md — Hợp đồng dữ liệu (Commit, Ref, GraphRow, Edge) + bộ phân tích `git log` theo byte
 - [x] 02-03-PLAN.md — Thuật toán gán lane (TDD) + snapshot insta trên 8 repo mẫu + benchmark criterion vào CI
-- [ ] 02-04-PLAN.md — Bộ phân tích `for-each-ref` + cache theo RepoId + 4 Tauri command + kiểu TypeScript
-- [ ] 02-05-PLAN.md — Cột đồ thị canvas sau interface + danh sách ảo hoá một scroll container (checkpoint #2)
+- [x] 02-04-PLAN.md — Bộ phân tích `for-each-ref` + cache theo RepoId + 4 Tauri command + kiểu TypeScript
+- [~] 02-05-PLAN.md — Cột đồ thị canvas sau interface + danh sách ảo hoá một scroll container (checkpoint #2) — **Task 1-3/4 xong, DỪNG ở Task 4 (checkpoint người dùng)**
 - [ ] 02-06-PLAN.md — Chi tiết commit, cây/phẳng, nhãn ref, thanh bên, tìm kiếm (tiêu chí 3, 4, 5, 6)
 - [ ] 02-07-PLAN.md — Đo thật checkpoint #1 và #4 + VERIFICATION.md
 

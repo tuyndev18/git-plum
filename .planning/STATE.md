@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-09-21T09:55:00.000Z"
+status: blocked_on_checkpoint
+last_updated: "2026-09-21T10:23:33.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
@@ -33,9 +33,9 @@ progress:
 | | |
 |---|---|
 | **Phase** | 2 — Lịch sử và đồ thị nhánh |
-| **Plan** | 4 / 7 xong (02-04 — parser ref, cache theo RepoId, bốn command lịch sử) |
-| **Status** | Wave 4 của Phase 2 xong; bề mặt backend đủ. Đường nóng **793,9ms / 1000ms** ở release trên 100k commit; phần cache + IPC của 02-04 chỉ thêm **0,9ms** trong ngân sách ~168ms |
-| **Progress** | Phase 1/8 · Phase 2 plan 4/7 |
+| **Plan** | 02-05 — Task 1-3/4 xong (hình học + canvas + CommitList + App.tsx nối thật); **DỪNG ở Task 4** |
+| **Status** | **Chờ checkpoint người dùng** — Task 4 của 02-05 là `checkpoint:human-verify gate="blocking"`, đòi sáu bước kiểm bằng mắt (thẳng hàng lúc cuộn nhanh, độ nét HiDPI, bấm chọn qua đồ thị) mà agent không tự trả lời được. Xem `.planning/phases/02-history-graph/02-05-SUMMARY.md` mục "Sáu bước cần làm". |
+| **Progress** | Phase 1/8 · Phase 2 plan 4/7 hoàn tất + 02-05 dở (3/4 task) |
 
 ```
 [#.......] 1/8 phases
@@ -74,6 +74,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 2 P02 | 35min | 2 tasks | 8 files |
 | Phase 2 P03 | 65min | 3 tasks | 14 files |
 | Phase 2 P04 | 85min | 3 tasks | 14 files |
+| Phase 2 P05 (Task 1-3, dở) | ~110min | 3/4 tasks | 12 files |
 
 ---
 
@@ -124,6 +125,9 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 - **🔴 Đo hiệu năng PHẢI ở profile `--release`** (plan 02-04): cùng test, cùng repo 100 007 commit — debug cho `parse_log` **455ms** / `assign` **220ms** / đường nóng **1366ms** (tức *vượt* mốc một giây); release cho **67ms** / **59ms** / **793,9ms**. Chậm gần **7 lần** ở `parse_log`. Bảng benchmark của wave 3 đo bằng `criterion` vốn luôn dựng release, nên chỉ số release là chỉ số so sánh được. Đọc số debug rồi kết luận "trượt Core Value" hay "cache quá đắt" đều sai.
 - **Không dùng `perl -0p` hay `head -N` để sửa tệp có tiếng Việt** (plan 02-04): một lần chèn test bằng `perl -0pe` biến toàn bộ tệp thành mojibake (`MÃ£ cÃ¢y rá»ng`) **và vẫn thoát 0**; `head -N` cũng làm hỏng một tệp khác. Dùng công cụ Edit hoặc heredoc `cat >>`.
 - **Hai thao tác có tham số đi ngoài sổ đăng ký PLAT-04** (`onOpen`/`onForget` truyền bằng prop): `Command.run` có chữ ký `() => void | Promise<void>`, không nhận tham số. Mở rộng sổ đăng ký cho lệnh có tham số để dành cho v2 lúc làm bảng lệnh gõ nhanh. `repo.open` và `repo.close` vẫn đi qua sổ đăng ký như cũ.
+- **`ROW_HEIGHT=28, LANE_WIDTH=14, GRAPH_PADDING_LEFT=8, MAX_VISIBLE_LANES=20` chốt ở plan 02-05, khớp phép tính hiển thị của `docs/04-phase2-degraded-graph.md`**: đồ thị và cột văn bản trong `CommitList.tsx` dựng từ CÙNG một mảng `virtualItems` của `@tanstack/react-virtual@3.14.13` (ghim chính xác) — đây là điều khiến lệch hàng bất khả thi về mặt cấu trúc, không phải "được sửa cho thẳng". `historyStore.ts` giữ mảng sparse cấp trước tới `total`; ô chưa nạp là `undefined`.
+- **🔴 Hai cổng grep của plan 02-05 sai về cấu trúc, đã sửa** (xem `02-05-SUMMARY.md` mục "Plan sai ở đâu"): `grep -rc 'useVirtualizer' src/components/history/` không thể bằng 1 vì bất kỳ cài đặt đúng nào cũng khớp ít nhất 2 dòng (import + lời gọi) — sửa thành đếm điểm gọi `useVirtualizer(`. `grep -c 'devicePixelRatio' canvasRenderer.ts` trỏ sai tệp: theo đúng chỉ dẫn testability của chính plan, tham số đó phải tên `dpr` trong tệp này, còn `window.devicePixelRatio` chỉ đọc ở `GraphCanvas.tsx`.
+- **`selectedCommitId` dùng `useState` trong `App.tsx` ở plan 02-05, chưa nâng lên `selectionStore`**: ARCHITECTURE.md Pattern 3 khuyên store riêng khi vùng chi tiết (02-06) không phải con của `App`. Cần quyết định lúc lập plan 02-06.
 - Chi tiết đầy đủ các quyết định kỹ thuật: xem `.planning/PROJECT.md` mục Key Decisions và `.planning/research/SUMMARY.md` mục 3.
 
 ### Việc cần làm
@@ -144,7 +148,14 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 
 ### Vướng mắc
 
-Không có vướng mắc nào đang chặn. Toolchain đã đủ:
+**Đang chặn: checkpoint Task 4 của plan 02-05 (canvas hay SVG, checkpoint #2 của ROADMAP).**
+Task 1-3 đã tự động hoá và commit xong (`53c7b9c`, `951c809`, `64b4161`, `71d98c4`,
+`079962a`). Cần người dùng chạy `npm run tauri:dev` (hoặc `dev.cmd`), mở repo
+`git-plum`, làm sáu bước kiểm bằng mắt liệt kê ở `02-05-SUMMARY.md`, rồi trả lời
+"approved" hoặc nêu bước nào trượt. Không phải lỗi kỹ thuật — là quyết định thiết kế
+mà chỉ người dùng quan sát ứng dụng đang chạy mới trả lời được.
+
+Ngoài checkpoint trên, không có vướng mắc nào khác đang chặn. Toolchain đã đủ:
 
 - ✅ rustc 1.98.1, cargo 1.98.1, toolchain `stable-x86_64-pc-windows-msvc`
 - ✅ Visual Studio Community 2022 **kèm workload "Desktop development with C++"** — đã thêm,
@@ -213,7 +224,9 @@ có catalog dịch. Đáng làm trước khi phát hành công khai (Phase 8), k
 
 ## Session Continuity
 
-**Việc tiếp theo:** `/gsd-plan-phase 2` — lịch sử và đồ thị nhánh.
+**Việc tiếp theo:** hoàn thành checkpoint Task 4 của `02-05-PLAN.md` — chạy sáu bước
+kiểm bằng mắt (xem `02-05-SUMMARY.md`), trả lời "approved" hoặc nêu bước trượt. Sau đó
+tiếp tục `/gsd-plan-phase 2` cho các plan còn lại (02-06, 02-07).
 
 Phase 1 đã đóng, 4/4 plan: 01-01 (PLAT-02 ghim cấu hình git), 01-02 (hạ tầng test giao diện),
 01-03 (PLAT-07 danh sách repository gần đây), 01-04 (kịch bản QA + checkpoint locale).
