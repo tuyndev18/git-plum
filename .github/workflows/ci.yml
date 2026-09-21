@@ -81,6 +81,43 @@ jobs:
         run: cargo test --all-features
         working-directory: src-tauri
 
+  # Checkpoint #1 của Phase 2 đòi benchmark gán lane và phân tích `git log` nằm trong
+  # CI **ngay trong phase**, không để sau.
+  #
+  # Vì sao là một job RIÊNG chứ không phải một bước trong job `rust`: job đó chạy ma
+  # trận ba nền tảng, nên một bước trơn thêm vào sẽ chạy benchmark ba lần mỗi lần push
+  # để lấy ba con số không so sánh được với nhau. Một job không ma trận trên
+  # windows-latest (nền tảng ưu tiên, quyết định 2026-09-21) cho đúng một con số.
+  bench:
+    name: Benchmark — gán lane và phân tích log
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # KHÔNG đặt ngưỡng thất bại tự động ở phase này. Runner của GitHub dùng chung tài
+      # nguyên và nhiễu tới hàng chục phần trăm giữa các lần chạy, nên một ngưỡng cứng
+      # chỉ sinh báo động giả rồi bị bỏ qua — tệ hơn là không có cổng nào. Mục đích của
+      # job là **số được in ra và lưu lại** để checkpoint #1 ở plan 02-07 so sánh.
+      #
+      # CI runner không có repo 100k commit, nên benchmark chạy trên dữ liệu tổng hợp
+      # tất định. Số đó bắt hồi quy qua thời gian nhưng KHÔNG phải số báo cáo cho
+      # checkpoint #1 — số đó đo trên repo thật, xem doc comment của benches/graph.rs.
+      - name: Chạy benchmark
+        run: cargo bench --bench graph -- --warm-up-time 1 --measurement-time 3
+        working-directory: src-tauri
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-criterion
+          path: src-tauri/target/criterion/
+          retention-days: 30
+
   bundle:
     name: Đóng gói — ${{ matrix.os }}
     # Chỉ chạy trên main, vì đóng gói chậm hơn nhiều so với kiểm thử.

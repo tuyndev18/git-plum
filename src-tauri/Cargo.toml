@@ -60,6 +60,13 @@ criterion = "0.8.2"
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 
+# Benchmark gán lane + phân tích log. `harness = false` là BẮT BUỘC với criterion:
+# thiếu nó thì `cargo bench` chạy harness mặc định của Rust và benchmark không bao
+# giờ chạy — thất bại im lặng, CI vẫn xanh.
+[[bench]]
+name = "graph"
+harness = false
+
 [profile.release]
 codegen-units = 1
 lto = true
