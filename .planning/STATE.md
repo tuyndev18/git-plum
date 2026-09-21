@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-09-21T18:45:00.000Z"
+last_updated: "2026-09-21T19:35:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
@@ -33,9 +33,9 @@ progress:
 | | |
 |---|---|
 | **Phase** | 2 — Lịch sử và đồ thị nhánh |
-| **Plan** | 5 / 7 xong, **02-06 Task 1-3 xong (tự động hoá), DỪNG ở Task 4 checkpoint người dùng — chưa đóng** |
-| **Status** | Plan 02-06 (chi tiết commit, cây/phẳng, nhãn ref, thanh bên, tìm kiếm): `selectionStore`, `refsStore`, `uiStore`, `fileTree.ts`, `CommitDetail`, `FileList`, `RefBadges`, `RefSidebar`, `CommitSearch` đã cài đủ, nối vào `App.tsx`, 66 test mới xanh (173 tổng, từ nền 107). `npm run typecheck`/`npm test`/`npm run build`/`tauri build --debug`/`cargo test` đều xanh, không hồi quy. **Task 4 là checkpoint `human-verify` bắt buộc (gate=blocking)** — cần người dùng tự chạy `npm run tauri:dev`, làm 12 bước kiểm bằng mắt trên repo thật, trả lời "approved" hoặc nêu bước nào sai. Xem `02-06-SUMMARY.md` mục "Task 4 — CHECKPOINT CHƯA CHẠY" để lấy nguyên văn 12 bước. |
-| **Progress** | Phase 1/8 · Phase 2 plan 5/7 (02-06 đang dở, dừng ở checkpoint) |
+| **Plan** | 5 / 7 xong, **02-06 Task 1-3 xong, checkpoint Task 4 VÒNG 1 bị từ chối + đã sửa, chờ VÒNG 2** |
+| **Status** | Plan 02-06: `selectionStore`, `refsStore`, `uiStore`, `fileTree.ts`, `CommitDetail`, `FileList`, `RefBadges`, `RefSidebar`, `CommitSearch` đã cài đủ, nối vào `App.tsx`, 176 test xanh (176 tổng, từ nền 107: 66 test Task 1-3 + 3 test hồi quy CSS checkpoint round 1). `npm run typecheck`/`npm test`/`npm run build`/`tauri build --debug`/`cargo test` đều xanh, không hồi quy. **Checkpoint round 1 bị từ chối**: ba lỗi bố cục CSS (hàng có badge cao hơn hàng thường, đồ thị lệch tâm hàng, badge chồng/tràn) — đã sửa bằng CSS containment (`7596e63`), không tái hiện được bằng Chromium headless (ghi trung thực). **Chờ người dùng chạy lại VÒNG 2**, đặc biệt bước 6 và 1-2. Xem `02-06-SUMMARY.md` mục "Checkpoint round 1: REJECTED". |
+| **Progress** | Phase 1/8 · Phase 2 plan 5/7 (02-06 đang dở, checkpoint vòng 1 rejected + đã sửa, chờ vòng 2) |
 
 ```
 [#.......] 1/8 phases
@@ -75,7 +75,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 2 P03 | 65min | 3 tasks | 14 files |
 | Phase 2 P04 | 85min | 3 tasks | 14 files |
 | Phase 2 P05 | ~110min (Task 1-3) + ~90min (checkpoint round 1: điều tra + sửa) | 4/4 tasks | 16 files |
-| Phase 2 P06 | ~95min (Task 1-3, tự động hoá) — Task 4 checkpoint CHƯA chạy | 3/4 tasks | 17 files |
+| Phase 2 P06 | ~95min (Task 1-3) + ~45min (checkpoint round 1: điều tra + sửa) — chờ vòng 2 | 3/4 tasks | 18 files |
 
 ---
 
@@ -155,12 +155,26 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 
 ### Vướng mắc
 
-**Đang chờ: checkpoint Task 4 của plan 02-06 (`gate=blocking`, chưa chạy).** Không phải lỗi
-hay blocker kỹ thuật — mọi mã tự động hoá được đã hoàn thành và kiểm chứng (66 test mới, 173
-tổng, `typecheck`/`build`/`cargo test` xanh, không hồi quy). Đây là bước bắt buộc phải có người
-dùng thật chạy `npm run tauri:dev`, làm 12 bước kiểm bằng mắt trên repo thật, và trả lời
-"approved" hoặc nêu bước nào sai — không agent nào tự động hoá được việc "nhìn màn hình có đúng
-không". Xem `02-06-SUMMARY.md` mục "Task 4 — CHECKPOINT CHƯA CHẠY" để lấy nguyên văn 12 bước.
+**Đang chờ: checkpoint Task 4 của plan 02-06 (`gate=blocking`) — VÒNG 1 BỊ TỪ CHỐI, đã sửa,
+chờ vòng 2.** Người dùng tự chạy app thật (WebView2/Windows), báo ba lỗi cụ thể ở bước 6 kèm
+ảnh chụp thật: (1) hàng có nhiều badge ref cao hơn hàng thường, (2) chấm đồ thị lệch khỏi tâm
+hàng đó (hệ quả trực tiếp của lỗi 1 — canvas vẽ theo `ROW_HEIGHT` cố định trong khi DOM row
+thật đã cao hơn), (3) badge chồng/tràn khỏi cột thay vì co gọn hiện `+N`. Nguyên nhân gốc suy
+luận từ cấu trúc CSS: `.commit-row` là container Grid, grid item mặc định `min-height: auto`
+(không phải `0`), nên nội dung `.ref-badges` có thể ép track Grid cao lên vượt `height: 28px`
+dù `.commit-subject` bên trong có `overflow: hidden`. **Không tái hiện được bằng
+Playwright/Chromium headless** (ghi trung thực, không giả vờ — có thể do phông Segoe UI thật
+trên Windows đo khác phông thay thế trong Chromium tải rời). Đã sửa bằng containment cứng:
+`overflow: hidden; min-height: 0;` trên `.commit-row`, `max-height` + `overflow: hidden` trên
+`.ref-badges`/`.ref-badge` (`7596e63`), có test hồi quy mới trong `app.css.test.ts` (3 test,
+kiểm mutation thật cả ba). Xây lại `tauri build --debug --no-bundle` xong. **KHÔNG tự phê
+duyệt lại** — chờ người dùng chạy lại đúng 12 bước, đặc biệt bước 6 và 1-2. Xem
+`02-06-SUMMARY.md` mục "Checkpoint round 1: REJECTED" cho điều tra đầy đủ.
+
+**Yêu cầu riêng của người dùng về đổi theme/icon/font giống GitKraken hơn** đã ghi vào
+`PROJECT.md` (`5417400`) nhưng người dùng nói "sau này sửa sau" — KHÔNG làm trong lần sửa
+checkpoint round 1 này, chỉ sửa đúng ba lỗi layout CSS nêu trên. Xác nhận qua `git show
+7596e63` không có dòng nào đổi màu/font/icon.
 
 Checkpoint #2 (canvas hay SVG, plan 02-05) đã **đóng**:
 vòng 1 người dùng từ chối vì cột thông điệp commit co về gần như trống ở cửa sổ hẹp + nhiều
@@ -239,18 +253,25 @@ có catalog dịch. Đáng làm trước khi phát hành công khai (Phase 8), k
 
 ## Session Continuity
 
-**Việc tiếp theo:** Resume `02-06-PLAN.md` Task 4 — checkpoint người dùng thật (gate=blocking).
-Task 1-3 đã xong và commit đủ (9 commit, xem `02-06-SUMMARY.md`). KHÔNG cần agent viết thêm mã
-trừ khi checkpoint trả về "không đạt" cho một bước cụ thể.
+**Việc tiếp theo:** Resume `02-06-PLAN.md` Task 4 — checkpoint người dùng thật VÒNG 2
+(gate=blocking). Vòng 1 đã chạy và bị từ chối (ba lỗi bố cục CSS), đã sửa (`7596e63`), commit
+đủ (11 commit, xem `02-06-SUMMARY.md`). KHÔNG cần agent viết thêm mã trừ khi vòng 2 trả về
+"không đạt" cho một bước cụ thể.
 
-**Để resume:** đọc `02-06-SUMMARY.md` mục "Task 4 — CHECKPOINT CHƯA CHẠY" để lấy nguyên văn 12
-bước kiểm, chuyển cho người dùng thật chạy `npm run tauri:dev` (hoặc `dev.cmd`), nhận lại
-"approved" hoặc số bước cụ thể bị sai. Nếu "approved": đóng plan 02-06 (đánh dấu HIST-06 tới
-HIST-10 Done trong REQUIREMENTS.md, cập nhật `state advance-plan`), rồi sang 02-07 (checkpoint
-#1 hiệu năng 100k commit — mốc còn lại duy nhất của validation checkpoint Phase 2). Nếu không
-đạt: agent kế tiếp áp Rule 1/2/3 để tự sửa nếu là lỗi mã hiển thị/logic, Rule 4 nếu cần quyết
-định kiến trúc, rồi build lại `tauri build --debug --no-bundle` và yêu cầu kiểm lại đúng bước đã
-nêu (không phải lại từ đầu 12 bước, theo đúng tiền lệ 02-05 checkpoint round 1→2).
+**Để resume:** đọc `02-06-SUMMARY.md` mục "Task 4 — CHECKPOINT ROUND 1 REJECTED, đã sửa, cần
+người dùng kiểm lại VÒNG 2" để lấy nguyên văn 12 bước kiểm, chuyển cho người dùng thật chạy
+`npm run tauri:dev` (hoặc `dev.cmd`) — đặc biệt chú ý bước 6 (chiều cao hàng có badge) và bước
+1-2 (thẳng hàng đồ thị). Nhận lại "approved" hoặc số bước cụ thể bị sai. Nếu "approved": đóng
+plan 02-06 (đánh dấu HIST-06 tới HIST-10 Done trong REQUIREMENTS.md, cập nhật
+`requirements-completed` trong frontmatter `02-06-SUMMARY.md`, chạy `state advance-plan`), rồi
+sang 02-07 (checkpoint #1 hiệu năng 100k commit — mốc còn lại duy nhất của validation checkpoint
+Phase 2). Nếu không đạt: agent kế tiếp áp Rule 1/2/3 để tự sửa nếu là lỗi mã hiển thị/logic,
+Rule 4 nếu cần quyết định kiến trúc, rồi build lại `tauri build --debug --no-bundle` và yêu cầu
+kiểm lại đúng bước đã nêu (không phải lại từ đầu 12 bước, theo đúng tiền lệ 02-05 checkpoint
+round 1→2, giờ là round 2→round 3 nếu cần).
+
+**Không đụng tới theme/màu/icon/font** trừ khi có yêu cầu rõ ràng riêng — người dùng đã nói yêu
+cầu đổi theme giống GitKraken hơn "sau này sửa sau" (`PROJECT.md` commit `5417400`).
 
 **Ghi chú kỹ thuật đã chốt ở 02-06 (Task 1-3), đọc trước khi tiếp tục:**
 - `selectedCommitId` đã nâng từ `useState` (plan 02-05) lên `selectionStore.selectedByRepo`
@@ -266,6 +287,12 @@ nêu (không phải lại từ đầu 12 bước, theo đúng tiền lệ 02-05 
   hiệu hoá — diff lịch sử bất biến). Có `__resetCommitDetailCacheForTest()` chỉ dùng trong test.
 - `historyStore.ts` là nguồn `commits`/`graphRows`; `GitRef.target` đã giải tham chiếu, neo
   nhãn vào `GraphRow.commitId` bằng so bằng thẳng (ghi chú từ 02-04-SUMMARY.md, vẫn đúng).
+- **🔴 `.commit-row` (container CSS Grid) cần `overflow: hidden` + `min-height: 0` của CHÍNH nó**
+  — grid item mặc định `min-height: auto`, không phải `0`, nên nội dung con (`.ref-badges`) có
+  thể ép track Grid cao hơn `height` inline mà virtualizer đặt, bất kể phần tử con có
+  `overflow: hidden` hay không (`overflow: hidden` trên con chỉ cắt nội dung của chính nó).
+  Đã sửa ở checkpoint round 1 của 02-06 (`7596e63`), không tái hiện được bằng Chromium headless.
+  Nếu sau này thêm nội dung mới vào `.commit-row` (không chỉ badge), áp dụng lại nguyên tắc này.
 
 Phase 1 đã đóng, 4/4 plan: 01-01 (PLAT-02 ghim cấu hình git), 01-02 (hạ tầng test giao diện),
 01-03 (PLAT-07 danh sách repository gần đây), 01-04 (kịch bản QA + checkpoint locale).
