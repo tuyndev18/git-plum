@@ -135,7 +135,23 @@ Người lập kế hoạch **không** đưa việc kiểm chứng đa nền t�
 ### G6. Validation checkpoint #7 — locale không phải tiếng Anh
 
 ROADMAP ghi rõ: phải chạy kiểm thử và QA thủ công với locale hệ thống không phải tiếng Anh.
-Máy phát triển là Windows tiếng Việt, nên kiểm được ngay. Chưa làm.
+
+> **Đính chính (2026-09-21):** bản đầu của mục này viết "máy phát triển là Windows tiếng Việt,
+> nên kiểm được ngay". **Sai, và đây là giả định của tôi chứ không phải dữ liệu.** Khi plan
+> 01-04 đo thật, sáu nguồn độc lập đều cho `en-US`: `Get-Culture`, `CurrentUICulture`,
+> `Get-WinUserLanguageList`, `Get-WinSystemLocale`, registry
+> `HKCU\Control Panel\International`, và `systeminfo`. Không có gói ngôn ngữ hiển thị tiếng
+> Việt nào được cài.
+>
+> Nặng hơn: bản Git for Windows trên máy này **không có catalog dịch nào** (0 tệp `.mo`).
+> Kiểm bằng hành vi: `git rev-parse --show-toplevel` ngoài repo với `LC_ALL=vi_VN.UTF-8` vẫn
+> trả `fatal: not a git repository` y nguyên tiếng Anh.
+>
+> Nghĩa là **checkpoint #7 không thể kiểm trọn trên máy này**, dù ghim môi trường có đúng hay
+> sai. Kết luận đã chốt: **đạt một phần** — phần lớp ghim `LC_ALL=C` có bằng chứng thật (ép
+> `vi_VN.UTF-8` ở tiến trình cha, `cargo test` vẫn 23 đỗ y nguyên); phần "hệ điều hành thật sự
+> nói ngôn ngữ khác" cần một máy hoặc máy ảo khác, làm trước khi phát hành công khai ở Phase 8.
+> Chi tiết đầy đủ ở `.planning/STATE.md` và `docs/03-phase1-qa-windows.md` Phụ lục A.
 
 ### G8. PLAT-09 chưa trọn — trạng thái bật tắt bảng nhật ký không sống sót qua lần khởi động
 

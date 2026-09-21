@@ -114,13 +114,38 @@ progress:
 
 | # | Phase | Câu hỏi |
 |---|---|---|
-| 7 | 1 | Parser có sống sót với locale hệ thống không phải tiếng Anh không? |
+| ~~7~~ | 1 | **ĐẠT MỘT PHẦN** — quyết định của chủ dự án 2026-09-21. Chi tiết bên dưới. |
 | 1 | 2 | Đồ thị có mở dưới 1s và cuộn 60fps trên repo 50k–100k commit thật không? |
 | 2 | 2 | Vẽ đồ thị bằng canvas hay lớp phủ SVG ở mức 100k dòng? (giữ sau interface) |
 | 4 | 2 | JSON có chiếm phần lớn profile IPC cho dữ liệu lane không? (ship JSON trước rồi đo) |
 | 3 | 3 | `@codemirror/merge` tự tính diff từ hai tài liệu đầy đủ — có đủ nhanh với tệp lớn không? |
 | 5 | 6 | Công sức làm trình giải quyết xung đột trên stack CodeMirror 6 — con số 4 giờ của SourceGit không chuyển giao được |
 | 6 | 7 | Đường dẫn import của `keyring` v4 (API đã tái cấu trúc mạnh so với v3) |
+
+**Checkpoint #7 — đạt một phần.** Quyết định của chủ dự án ngày 2026-09-21, sau khi đo thật.
+
+*Đã chứng minh:* lớp ghim môi trường hoạt động. Ép `LC_ALL`/`LANG`/`LC_MESSAGES` =
+`vi_VN.UTF-8` ở tiến trình cha rồi chạy `cargo test` cho **23 test đỗ** — giống hệt lần chạy
+bình thường. Số giống nhau chính là bằng chứng `apply_env_hardening` ghi đè được biến thừa
+hưởng, chứ không phải máy tình cờ hợp.
+
+*Chưa chứng minh được, và vì sao:* một giả định trong `CONTEXT.md` (G6) hoá ra **sai** — máy
+phát triển **không** phải Windows tiếng Việt. Sáu nguồn độc lập đồng thuận `en-US`:
+`Get-Culture`, `CurrentUICulture`, `Get-WinUserLanguageList`, `Get-WinSystemLocale`, registry
+`HKCU\Control Panel\International`, và `systeminfo`. Thêm nữa, bản Git for Windows trên máy
+này **không có tệp `.mo` nào** — kiểm bằng hành vi chứ không chỉ đếm tệp: chạy
+`git rev-parse --show-toplevel` ngoài repo với `LC_ALL=vi_VN.UTF-8` vẫn ra
+`fatal: not a git repository` **y nguyên tiếng Anh**. Trên máy này git không thể nói ngôn ngữ
+khác dù có muốn, nên không phép kiểm nào ở đây chứng minh được bộ phân tích sống sót khi git
+thật sự dịch đầu ra.
+
+*Rủi ro còn lại:* thấp, nhưng có thật. Nếu người dùng chạy Git for Windows có gói ngôn ngữ,
+và một chỗ nào đó trong mã quên đi qua lớp bọc, bộ phân tích sẽ vỡ trên máy họ mà không vỡ
+trên máy phát triển. Cách giảm thiểu đã có sẵn: mọi tiến trình git **phải** đi qua
+`GitCommand` trong `src-tauri/src/git/exec.rs` — đó là lý do PLAT-02 nói "nơi duy nhất".
+
+*Khi nào đóng hẳn:* cần một máy hoặc máy ảo có ngôn ngữ hiển thị khác tiếng Anh **và** git
+có catalog dịch. Đáng làm trước khi phát hành công khai (Phase 8), không chặn Phase 2.
 
 ---
 
