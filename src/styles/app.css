@@ -509,6 +509,63 @@ button:disabled {
   color: var(--danger);
 }
 
+/*
+ * Nhãn ref (HIST-06) nằm TRONG `.commit-subject` (`overflow: hidden;
+ * white-space: nowrap` đã có sẵn) — không phải cột riêng, không phải hàng
+ * riêng. Đây là quyết định có chủ ý sau bài học checkpoint round 1 của
+ * 02-05: thêm MỘT cột grid mới cho nhãn sẽ lặp lại đúng bài toán co cột đã
+ * gây lỗi (nhiều cột max-content/minmax cạnh tranh không gian ở cửa sổ hẹp).
+ * Đặt nhãn inline trước subject nghĩa là chúng dùng chung ngân sách bề rộng
+ * với chính subject và bị cắt cùng nhau bằng `text-overflow: ellipsis` của
+ * phần tử cha — không có cột nào mới để co về 0px.
+ *
+ * `white-space: nowrap` trên `.commit-row` (đã có) + `display: inline-flex`
+ * ở đây (không phải `inline-block` xuống dòng) giữ chiều cao hàng CỐ ĐỊNH
+ * bất kể số nhãn — ràng buộc HIST-04 (đồ thị không được lệch hàng).
+ */
+.ref-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.ref-badge {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.ref-badge--local {
+  background: color-mix(in srgb, var(--success) 22%, var(--bg-inset));
+  color: var(--success);
+}
+
+.ref-badge--remote {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-inset));
+  color: var(--accent);
+}
+
+.ref-badge--tag {
+  background: color-mix(in srgb, #d9a441 25%, var(--bg-inset));
+  color: #d9a441;
+}
+
+.ref-badge--other,
+.ref-badge--overflow {
+  background: var(--bg-inset);
+  color: var(--text-faint);
+}
+
+.ref-badge-head {
+  font-weight: 700;
+}
+
 .commit-author,
 .commit-time {
   overflow: hidden;
@@ -707,4 +764,148 @@ button:disabled {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-dim);
+}
+
+/* --- Thanh bên nhánh/tag (Phase 2, plan 02-06) — HIST-07 ----------------- */
+
+.ref-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ref-sidebar-detached {
+  margin: 0;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg-raised));
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+.ref-sidebar-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.ref-sidebar-group h3 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.ref-sidebar-group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ref-sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 6px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ref-sidebar-link:hover {
+  background: var(--bg-raised);
+  color: var(--accent);
+}
+
+.ref-sidebar-item--head .ref-sidebar-name {
+  font-weight: 600;
+}
+
+.ref-sidebar-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.ref-sidebar-head-flag {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.ref-sidebar-tracking {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-faint);
+}
+
+.ref-ahead {
+  color: var(--success);
+}
+
+.ref-behind {
+  color: var(--danger);
+}
+
+/* --- Hộp tìm kiếm commit (Phase 2, plan 02-06) — HIST-10 ----------------- */
+
+.commit-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.commit-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.commit-search-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+.commit-search-empty {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.commit-search-skipped {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.commit-search-error {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--danger);
 }

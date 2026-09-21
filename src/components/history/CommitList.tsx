@@ -8,18 +8,30 @@
  * lệch hàng bất khả thi về mặt cấu trúc, không phải "được sửa cho thẳng".
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 import { ROW_HEIGHT, graphWidth } from '@/lib/graph-render/geometry'
 import type { GraphRenderRow } from '@/lib/graph-render/types'
 import { useHistoryStore } from '@/stores/historyStore'
+import { useRefsStore } from '@/stores/refsStore'
 import { GraphCanvas } from './GraphCanvas'
+import { RefBadges } from './RefBadges'
 
 interface Props {
   repoId: string
   selectedCommitId: string | null
   onSelect: (commitId: string) => void
+}
+
+/**
+ * API lộ ra ngoài qua `ref` — HIST-10 cần `scrollToIndex` cho `CommitSearch`
+ * mà KHÔNG tạo virtualizer thứ hai. Đây là điểm nối duy nhất: mọi component
+ * khác muốn cuộn tới một hàng đi qua handle này, không tự gọi
+ * `useVirtualizer` ở nơi khác.
+ */
+export interface CommitListHandle {
+  scrollToIndex: (index: number) => void
 }
 
 const OVERSCAN = 10
@@ -31,10 +43,14 @@ function formatTime(unixSeconds: number): string {
   }).format(new Date(unixSeconds * 1000))
 }
 
-export function CommitList({ repoId, selectedCommitId, onSelect }: Props) {
+export const CommitList = forwardRef<CommitListHandle, Props>(function CommitList(
+  { repoId, selectedCommitId, onSelect },
+  ref,
+) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const slice = useHistoryStore((s) => s.byRepo[repoId])
   const ensureRange = useHistoryStore((s) => s.ensureRange)
+  const refsByCommit = useRefsStore((s) => s.byRepo[repoId]?.byCommit)
 
   const commits = slice?.commits ?? []
   const graphRows = slice?.graphRows ?? []
@@ -53,6 +69,16 @@ export function CommitList({ repoId, selectedCommitId, onSelect }: Props) {
   })
 
   const virtualItems = virtualizer.getVirtualItems()
+
+  // Điểm nối duy nhất cho HIST-10: `CommitSearch` gọi `ref.current.scrollToIndex`
+  // thay vì tự tạo một virtualizer thứ hai chỉ để cuộn.
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollToIndex: (index: number) => virtualizer.scrollToIndex(index),
+    }),
+    [virtualizer],
+  )
 
   useEffect(() => {
     const first = virtualItems[0]
@@ -136,6 +162,7 @@ export function CommitList({ repoId, selectedCommitId, onSelect }: Props) {
                 <>
                   <span className="commit-graph-gutter" style={{ width: graphWidth(maxLane) }} />
                   <span className="commit-subject" title={commit.subject}>
+                    <RefBadges refs={refsByCommit?.get(commit.id) ?? []} />
                     {commit.subject}
                     {commit.hasInvalidUtf8 && (
                       <span className="commit-encoding-flag" title="Chứa byte không phải UTF-8">
@@ -157,4 +184,4 @@ export function CommitList({ repoId, selectedCommitId, onSelect }: Props) {
       </div>
     </div>
   )
-}
+})

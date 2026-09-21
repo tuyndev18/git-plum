@@ -7,12 +7,14 @@
  * trừ khi được vá cục bộ ở đây — vá đúng trong tệp test này, không toàn cục.
  */
 
+import { createRef } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
-import { CommitList } from '@/components/history/CommitList'
+import { CommitList, type CommitListHandle } from '@/components/history/CommitList'
 import { useHistoryStore } from '@/stores/historyStore'
-import type { Commit, GraphRow } from '@/lib/ipc'
+import { useRefsStore } from '@/stores/refsStore'
+import type { Commit, GitRef, GraphRow } from '@/lib/ipc'
 
 vi.mock('@/lib/ipc', () => ({
   ipc: {
@@ -111,6 +113,7 @@ function stubViewportSize() {
 beforeEach(() => {
   vi.clearAllMocks()
   useHistoryStore.setState({ byRepo: {} })
+  useRefsStore.setState({ byRepo: {} })
   stubCanvasContext()
   stubViewportSize()
 })
@@ -274,5 +277,85 @@ describe('CommitList', () => {
     // một giá trị duy nhất xuất hiện trong lịch sử fillStyle thay vì ba.
     const distinctColorsUsed = new Set(fakeCtx.fillStyleHistory)
     expect(distinctColorsUsed.size).toBeGreaterThanOrEqual(3)
+  })
+})
+
+function gitRef(overrides: Partial<GitRef> & { fullName: string; target: string }): GitRef {
+  return {
+    shortName: overrides.fullName.split('/').pop() ?? overrides.fullName,
+    kind: 'localBranch',
+    upstream: null,
+    ahead: 0,
+    behind: 0,
+    isHead: false,
+    ...overrides,
+  }
+}
+
+describe('nhãn ref trên hàng (plan 02-06, HIST-06)', () => {
+  it('hàng có ref hiện RefBadges, hàng không ref không hiện gì thêm', () => {
+    seedRepo('repo-1', [commit('a', 'co nhan'), commit('b', 'khong nhan')], [
+      graphRow('a'),
+      graphRow('b'),
+    ])
+    useRefsStore.setState({
+      byRepo: {
+        'repo-1': {
+          refs: [gitRef({ fullName: 'refs/heads/main', target: 'a', kind: 'localBranch' })],
+          byCommit: new Map([
+            ['a', [gitRef({ fullName: 'refs/heads/main', target: 'a', kind: 'localBranch' })]],
+          ]),
+          isLoading: false,
+          error: null,
+        },
+      },
+    })
+
+    const { container } = render(
+      <CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />,
+    )
+
+    expect(container.querySelector('.ref-badge--local')).not.toBeNull()
+  })
+
+  it('chiều cao hàng KHÔNG đổi theo số nhãn (HIST-04) — mọi hàng vẫn ROW_HEIGHT cố định', () => {
+    const refs = Array.from({ length: 8 }, (_, i) =>
+      gitRef({ fullName: `refs/heads/b${i}`, target: 'a', shortName: `b${i}`, kind: 'localBranch' }),
+    )
+    seedRepo('repo-1', [commit('a', 'nhieu nhan'), commit('b', 'khong nhan')], [
+      graphRow('a'),
+      graphRow('b'),
+    ])
+    useRefsStore.setState({
+      byRepo: {
+        'repo-1': {
+          refs,
+          byCommit: new Map([['a', refs]]),
+          isLoading: false,
+          error: null,
+        },
+      },
+    })
+
+    const { container } = render(
+      <CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />,
+    )
+
+    const rows = container.querySelectorAll('.commit-row')
+    const heights = Array.from(rows).map((r) => (r as HTMLElement).style.height)
+    // Mọi hàng cùng chiều cao dù số nhãn khác nhau (0 vs 8) — không có hàng
+    // nào giãn ra theo nội dung nhãn.
+    expect(new Set(heights).size).toBe(1)
+  })
+})
+
+describe('scrollToIndex lộ ra qua ref (HIST-10, không tạo virtualizer thứ hai)', () => {
+  it('gọi ref.current.scrollToIndex(n) không ném lỗi', () => {
+    seedRepo('repo-1', [commit('a', 'x'), commit('b', 'y')], [graphRow('a'), graphRow('b')])
+    const ref = createRef<CommitListHandle>()
+
+    render(<CommitList ref={ref} repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    expect(() => ref.current?.scrollToIndex(1)).not.toThrow()
   })
 })
