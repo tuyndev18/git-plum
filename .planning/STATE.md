@@ -75,6 +75,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 2 P03 | 65min | 3 tasks | 14 files |
 | Phase 2 P04 | 85min | 3 tasks | 14 files |
 | Phase 2 P05 (Task 1-3, dở) | ~110min | 3/4 tasks | 12 files |
+| Phase 2 P05 checkpoint round 1 (điều tra + sửa) | ~90min | 0 task mới | 4 files |
 
 ---
 
@@ -128,6 +129,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 - **`ROW_HEIGHT=28, LANE_WIDTH=14, GRAPH_PADDING_LEFT=8, MAX_VISIBLE_LANES=20` chốt ở plan 02-05, khớp phép tính hiển thị của `docs/04-phase2-degraded-graph.md`**: đồ thị và cột văn bản trong `CommitList.tsx` dựng từ CÙNG một mảng `virtualItems` của `@tanstack/react-virtual@3.14.13` (ghim chính xác) — đây là điều khiến lệch hàng bất khả thi về mặt cấu trúc, không phải "được sửa cho thẳng". `historyStore.ts` giữ mảng sparse cấp trước tới `total`; ô chưa nạp là `undefined`.
 - **🔴 Hai cổng grep của plan 02-05 sai về cấu trúc, đã sửa** (xem `02-05-SUMMARY.md` mục "Plan sai ở đâu"): `grep -rc 'useVirtualizer' src/components/history/` không thể bằng 1 vì bất kỳ cài đặt đúng nào cũng khớp ít nhất 2 dòng (import + lời gọi) — sửa thành đếm điểm gọi `useVirtualizer(`. `grep -c 'devicePixelRatio' canvasRenderer.ts` trỏ sai tệp: theo đúng chỉ dẫn testability của chính plan, tham số đó phải tên `dpr` trong tệp này, còn `window.devicePixelRatio` chỉ đọc ở `GraphCanvas.tsx`.
 - **`selectedCommitId` dùng `useState` trong `App.tsx` ở plan 02-05, chưa nâng lên `selectionStore`**: ARCHITECTURE.md Pattern 3 khuyên store riêng khi vùng chi tiết (02-06) không phải con của `App`. Cần quyết định lúc lập plan 02-06.
+- **🔴 Checkpoint round 1 của plan 02-05 bị từ chối vì `.commit-row` co cột subject về 0px** (đo thật bằng Chromium/Playwright, không phải happy-dom): `minmax(0, 2fr)` không có sàn, và cột gutter đồ thị (tới 288px theo lane) cộng hai cột ngày/mã commit `max-content` (không co) ăn hết chỗ ở cửa sổ hẹp (900px, mức tối thiểu) kèm lane cao. **Không phải lỗi dữ liệu** — parser Rust, historyStore, CommitList, canvasRenderer đều đã kiểm chứng đúng riêng biệt trước khi tìm ra nguyên nhân CSS. Sửa: `minmax(120px, 2fr)` cho subject, `minmax(<n>px, max-content)` cho time/sha để chúng nhường chỗ được. Bài học lớn hơn: **happy-dom không tính layout CSS thật** (grid track sizing), nên lớp bug này chỉ lộ ra khi đo bằng trình duyệt thật — 103 test cũ đều xanh trong khi lỗi hiện rõ trên màn hình người dùng thật. Xem `02-05-SUMMARY.md` mục "Checkpoint round 1: REJECTED" cho quy trình điều tra đầy đủ (kể cả cách dùng Playwright cài tạm ở thư mục scratch để đo layout thật mà không thêm dependency vào dự án).
 - Chi tiết đầy đủ các quyết định kỹ thuật: xem `.planning/PROJECT.md` mục Key Decisions và `.planning/research/SUMMARY.md` mục 3.
 
 ### Việc cần làm
@@ -148,12 +150,18 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 
 ### Vướng mắc
 
-**Đang chặn: checkpoint Task 4 của plan 02-05 (canvas hay SVG, checkpoint #2 của ROADMAP).**
-Task 1-3 đã tự động hoá và commit xong (`53c7b9c`, `951c809`, `64b4161`, `71d98c4`,
-`079962a`). Cần người dùng chạy `npm run tauri:dev` (hoặc `dev.cmd`), mở repo
-`git-plum`, làm sáu bước kiểm bằng mắt liệt kê ở `02-05-SUMMARY.md`, rồi trả lời
-"approved" hoặc nêu bước nào trượt. Không phải lỗi kỹ thuật — là quyết định thiết kế
-mà chỉ người dùng quan sát ứng dụng đang chạy mới trả lời được.
+**Đang chặn: checkpoint Task 4 của plan 02-05, VÒNG 2 (canvas hay SVG, checkpoint #2 của
+ROADMAP).** Vòng 1 người dùng đã tự chạy app thật và **từ chối**: cột thông điệp commit co
+về gần như trống ở cửa sổ hẹp + nhiều lane (đo thật bằng Chromium/Playwright:
+`subjectWidth === 0px` tại 900px/maxLane~19 — lỗi CSS grid, KHÔNG phải lỗi parser/store/canvas,
+cả ba đã kiểm chứng đúng riêng biệt), và đồ thị ít màu (bản chất dữ liệu, không phải lỗi —
+xem `02-05-SUMMARY.md` mục "Checkpoint round 1: REJECTED" để đọc đầy đủ quy trình điều tra).
+Đã sửa (`c2f6714` test, `cc270e4` fix: `.commit-subject` có sàn 120px, `CommitList` dùng
+`ResizeObserver` thay vì đọc `clientHeight` trực tiếp trong thân render) và xác nhận lại bằng
+đo Chromium thật — **chưa tự phê duyệt lại**. Cần người dùng chạy `npm run tauri:dev` (hoặc
+`dev.cmd`), mở repo `git-plum`, làm lại sáu bước kiểm bằng mắt ở `02-05-SUMMARY.md` (chú ý
+thêm: kéo panel giữa hẹp lại để xác nhận cột thông điệp không còn biến mất), rồi trả lời
+"approved" hoặc nêu bước nào còn trượt.
 
 Ngoài checkpoint trên, không có vướng mắc nào khác đang chặn. Toolchain đã đủ:
 
@@ -224,9 +232,11 @@ có catalog dịch. Đáng làm trước khi phát hành công khai (Phase 8), k
 
 ## Session Continuity
 
-**Việc tiếp theo:** hoàn thành checkpoint Task 4 của `02-05-PLAN.md` — chạy sáu bước
-kiểm bằng mắt (xem `02-05-SUMMARY.md`), trả lời "approved" hoặc nêu bước trượt. Sau đó
-tiếp tục `/gsd-plan-phase 2` cho các plan còn lại (02-06, 02-07).
+**Việc tiếp theo:** hoàn thành checkpoint Task 4 của `02-05-PLAN.md`, **VÒNG 2** — vòng 1 đã
+bị từ chối (cột subject co về 0px ở cửa sổ hẹp + nhiều lane), đã sửa và xác nhận lại bằng
+Chromium/Playwright thật, xem `02-05-SUMMARY.md` mục "Checkpoint round 1: REJECTED". Chạy lại
+sáu bước kiểm bằng mắt trên app thật, trả lời "approved" hoặc nêu bước trượt. Sau đó tiếp tục
+`/gsd-plan-phase 2` cho các plan còn lại (02-06, 02-07).
 
 Phase 1 đã đóng, 4/4 plan: 01-01 (PLAT-02 ghim cấu hình git), 01-02 (hạ tầng test giao diện),
 01-03 (PLAT-07 danh sách repository gần đây), 01-04 (kịch bản QA + checkpoint locale).

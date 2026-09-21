@@ -33,12 +33,14 @@ key-files:
     - "src/lib/graph-render/canvasRenderer.ts — createCanvasRenderer, chỉ vẽ, không bắt sự kiện"
     - "src/lib/graph-render/geometry.test.ts (11 test), canvasRenderer.test.ts (8 test)"
     - "src/stores/historyStore.ts + historyStore.test.ts (8 test)"
-    - "src/components/history/CommitList.tsx + CommitList.test.tsx (5 test)"
+    - "src/components/history/CommitList.tsx + CommitList.test.tsx (5 test + 2 test round 1)"
     - "src/components/history/GraphCanvas.tsx"
     - "src/App.test.tsx (3 test, tệp mới — chưa từng có trước plan này)"
+    - "src/styles/app.css.test.ts (2 test, thêm ở checkpoint round 1 — lưới an toàn cho .commit-row grid)"
   modified:
     - "src/App.tsx — vùng main render CommitList khi có repo mở; hai lệnh history.refresh/history.scrollToTop; historyStore.reset khi đóng repo"
-    - "src/styles/app.css — .commit-scroll, .graph-canvas (pointer-events: none), .commit-row grid, .main-history"
+    - "src/styles/app.css — .commit-scroll, .graph-canvas (pointer-events: none), .commit-row grid, .main-history; sửa lại ở checkpoint round 1 (xem mục riêng)"
+    - "src/components/history/CommitList.tsx — sửa ở checkpoint round 1: scrollHeight qua ResizeObserver thay vì đọc trực tiếp trong thân render"
     - "package.json/package-lock.json — @tanstack/react-virtual 3.14.13"
 
 decisions:
@@ -47,10 +49,12 @@ decisions:
   - "canvasRenderer.resize nhận tham số dpr (không tự đọc window.devicePixelRatio) — theo đúng chỉ dẫn của plan để test được mà không vá window; window.devicePixelRatio chỉ đọc trong GraphCanvas.tsx"
   - "historyStore.mergePage cấp trước mảng commits/graphRows tới total (không chỉ tới số đã nạp) — để CommitList đọc commits[v.index] theo chỉ số tuyệt đối đúng như plan chỉ định, ô chưa nạp là undefined"
   - "GraphRenderRow lọc bỏ hàng chưa có graphRows[v.index] (dùng .filter loại null) trước khi truyền cho GraphCanvas — canvas không vẽ gì cho hàng đang tải, div commit-row vẫn giữ chỗ trống đúng ROW_HEIGHT"
+  - "[Checkpoint round 1] .commit-subject đổi minmax(0, 2fr) -> minmax(120px, 2fr): cột subject không bao giờ được co về 0px, đo thật bằng Chromium/Playwright — xem mục riêng"
+  - "[Checkpoint round 1] CommitList.scrollHeight chuyển từ đọc trực tiếp scrollRef.current?.clientHeight trong thân render sang ResizeObserver — tránh canvas kẹt ở height=0 nếu không có re-render nào khác xảy ra sau khi container có kích thước thật"
 
 requirements-completed: []
 
-duration: "~110 phút (Task 1-3; Task 4 dừng ở checkpoint người dùng)"
+duration: "~110 phút (Task 1-3; Task 4 dừng ở checkpoint người dùng) + ~90 phút điều tra và sửa checkpoint round 1"
 completed: "2026-09-21"
 ---
 
@@ -75,6 +79,153 @@ khi Windows đặt tỉ lệ 125%" — đó chính xác là lý do checkpoint t�
 **Quyết định canvas-hay-SVG của checkpoint #2 vẫn để ngỏ.** `interface GraphRenderer` đã
 dựng sẵn đường lùi (xem `src/lib/graph-render/types.ts`), nhưng việc chốt "canvas đạt" hay
 "cần viết `svgRenderer.ts`" là của người dùng sau khi làm sáu bước.
+
+## Checkpoint round 1: REJECTED
+
+Người dùng đã tự chạy `npm run tauri:dev`, mở repo git-plum thật (xác nhận qua title bar và
+các nút "Mở repository"/"Đóng"/"Nhật ký lệnh" trong ảnh chụp), và báo hai lỗi quan sát được
+bằng mắt mà 103 test frontend cũ **đều xanh** trong khi lỗi hiện rõ trên màn hình:
+
+1. **Tuyệt đại đa số dòng trong CommitList chỉ hiện dấu "."** ở cột thông điệp, thay vì
+   subject thật (một số dòng như "feat(clb): kết bạn theo friendRelation" hiện đúng).
+2. **Đồ thị chỉ có một màu** (hồng/đỏ), không thấy nhiều lane có màu khác nhau dù lịch sử có
+   merge.
+
+### Điều tra — quy trình đầy đủ, không đoán
+
+**Bước 1 — loại trừ bộ phân tích Rust.** Dựng một repo thử thật bằng `git init` +
+`git commit -m "."` (đúng chuỗi người dùng mô tả), chạy `LOG_FORMAT` thật qua `GitCommand`,
+in byte thô và kết quả `parse_log` (test tạm `chan_doan_repro_repo_that`, `#[ignore]`, đã xoá
+sau khi xong). Kết quả: `subject="."` là **đúng dữ liệu git thật** — commit đó thật sự có
+message chỉ gồm một dấu chấm. `parse_log` trích xuất chính xác byte-for-byte. **Bộ phân tích
+không có lỗi.**
+
+**Bước 2 — loại trừ CommitList/canvasRenderer bằng test thêm.** Viết hai test mới trong
+`CommitList.test.tsx`: (a) 30 hàng với subject tiếng Việt dài khác nhau, gồm cả một hàng có
+subject thật là `"."`, khẳng định mỗi subject xuất hiện đúng một lần; (b) ba hàng với
+`GraphRow.color` khác nhau (0/1/2), khẳng định canvas gọi `fillStyle` với ba màu phân biệt.
+**Cả hai xanh trên mã hiện tại** — logic React/canvas không tự sinh lỗi với dữ liệu đúng.
+
+**Bước 3 — happy-dom không đủ để kiểm layout CSS thật.** `@testing-library/react` +
+happy-dom không tính `grid-template-columns`/`max-content`/`minmax` như một trình duyệt thật
+— nên test ở bước 2, dù đúng, **không có khả năng bắt được lỗi CSS**. Cần đo bằng trình duyệt
+thật.
+
+**Bước 4 — đo bằng Chromium thật qua Playwright** (cài tạm ở thư mục scratch, không thêm vào
+`package.json` của dự án). Dựng một `diag-entry.tsx`/`diag.html` tạm trong `src/` (đã xoá sau
+khi xong), phục vụ qua `vite` dev server thật, giả lập `window.__TAURI_INTERNALS__.invoke`
+để đi qua **đúng đường dữ liệu thật**: `ipc.getCommitPage` → `historyStore.loadFirstPage` →
+`CommitList`. Đo tại nhiều tổ hợp bề rộng cửa sổ × `maxLane`:
+
+| Bề rộng cửa sổ | maxLane | subjectWidth đo được | Ghi chú |
+|---|---|---|---|
+| 1440px (mặc định) | ~3 | 302.9px | Bình thường |
+| 1440px (mặc định) | ~19 | 153.5px | Bình thường, co lại nhưng vẫn đọc được |
+| 1024px | ~19 | **0px** (trước sửa) | **Tái hiện được lỗi** |
+| 900px (tối thiểu theo docs/04) | ~19 | **0px** (trước sửa) | **Tái hiện được lỗi, rõ nhất** |
+
+Ảnh chụp thật (Chromium, 900px, maxLane~19, **trước khi sửa**): cột subject **biến mất hoàn
+toàn** — không phải hiện dấu "." mà hiện **trống rỗng**, `getBoundingClientRect().width === 0`
+đo được trực tiếp. `textContent` trong DOM vẫn đúng 100% (không mất, không lẫn dữ liệu) — chỉ
+là hộp chứa nó rộng 0px nên không ký tự nào vẽ ra được. Nhìn từ xa/qua ảnh chụp nén, một cột
+gần như trống cạnh các cột ngày/mã commit có thể dễ bị đọc nhầm thành "chỉ còn dấu chấm",
+đặc biệt nếu subject thật của một số dòng lân cận tình cờ ngắn.
+
+### Nguyên nhân gốc
+
+`.commit-row` là **một lưới CSS Grid độc lập cho mỗi hàng** (không phải hàng trong một lưới
+chia sẻ), với:
+
+```css
+grid-template-columns: max-content minmax(0, 2fr) minmax(0, 1fr) max-content max-content;
+/*                     gutter đồ thị  subject         author        time        sha        */
+```
+
+Cột gutter (`max-content`, giá trị là `graphWidth(maxLane)` — tăng theo lane, tới 288px ở
+`MAX_VISIBLE_LANES=20`) và hai cột cuối (`max-content`, theo độ dài chuỗi ngày/mã commit,
+**không bao giờ co**) cạnh tranh trực tiếp với cột subject (`minmax(0, 2fr)`). Khi tổng ba cột
+`max-content` đủ lớn so với bề rộng cửa sổ — chính là ca "cửa sổ hẹp + nhiều nhánh sống đồng
+thời", có thật trên repo lớn nhiều người làm — `minmax(0, ...)` đúng theo đặc tả co về **đúng
+0px**, không âm, không có sàn.
+
+**Đây không phải lỗi dữ liệu ở bất kỳ tầng nào** (parser Rust, IPC, historyStore, CommitList,
+canvasRenderer đều đã kiểm chứng đúng ở các bước 1-2). Đây là lỗi bố cục CSS thuần: thiếu sàn
+tối thiểu cho cột quan trọng nhất (subject) khi các cột lân cận không nhường chỗ.
+
+### Cách sửa
+
+`src/styles/app.css`, khối `.commit-row`:
+
+```diff
+- grid-template-columns: max-content minmax(0, 2fr) minmax(0, 1fr) max-content max-content;
++ grid-template-columns: max-content minmax(120px, 2fr) minmax(0, 1fr) minmax(60px, max-content) minmax(50px, max-content);
+```
+
+- Cột subject: `minmax(0, 2fr)` → `minmax(120px, 2fr)` — sàn cứng 120px, luôn hiện được vài
+  chục ký tự trước dấu `…` dù mọi cột khác co tối đa.
+- Cột `time`/`sha`: `max-content` → `minmax(60px, max-content)`/`minmax(50px, max-content)` —
+  giờ **nhường được chỗ** dưới áp lực thay vì luôn giữ nguyên độ dài chuỗi ngày đầy đủ. Thêm
+  `overflow: hidden; text-overflow: ellipsis; white-space: nowrap` cho `.commit-sha` (trước đó
+  thiếu, không nguy hiểm khi cột luôn đủ rộng nhưng nguy hiểm khi cột co).
+
+Kèm một lỗi độc lập phát hiện được trong lúc điều tra (không phải nguyên nhân của hai lỗi
+người dùng báo, nhưng là lỗi thật, sửa luôn vì cùng phạm vi tệp): `CommitList.tsx` đọc
+`scrollRef.current?.clientHeight` **trực tiếp trong thân render** để tính `height` truyền cho
+`GraphCanvas`. Lần render đầu `scrollRef.current` còn `null` (ref chưa gắn) nên `scrollHeight`
+khởi đầu bằng 0, và không có gì đảm bảo một render sau đó sẽ chạy **sau khi** container đã có
+kích thước thật — `GraphCanvas` có thể nhận `height=0` vĩnh viễn nếu không có state khác vô
+tình kích hoạt render lại đúng lúc. Đổi sang `ResizeObserver` (state `scrollHeight`, effect
+theo dõi kích thước thật của `scrollRef.current`) để đảm bảo canvas luôn nhận chiều cao đúng.
+
+### Xác nhận bằng đo lại, không chỉ tin test
+
+**Không dừng ở "test tự động giờ xanh".** Đo lại bằng đúng phương pháp đã tái hiện được lỗi —
+Chromium thật qua Playwright, đúng đường dữ liệu `ipc.getCommitPage` → `loadFirstPage` →
+`CommitList`:
+
+| Bề rộng cửa sổ | maxLane | subjectWidth (sau sửa) | dotCount |
+|---|---|---|---|
+| 1440px | ~19 | 153.5px | 1 (đúng — chỉ hàng có subject thật là ".") |
+| 1440px | ~3 | 302.9px | 1 |
+| 1024px | ~19 | **120px** (đúng sàn) | 1 |
+| 900px | ~3 | **120px** (đúng sàn) | 1 |
+
+Ảnh chụp thật (900px, maxLane~19, **sau khi sửa**): cột subject hiện được đoạn đầu của thông
+điệp kèm dấu `…`, không còn trống. Cột author bị nhường hết chỗ ở ca cực đoan này (chấp nhận
+được — subject là nội dung chính theo bố cục tham chiếu GitKraken, không phải mất dữ liệu, chỉ
+là không đủ chỗ hiển thị đồng thời mọi cột).
+
+### Test mới thêm
+
+- `CommitList.test.tsx` — 2 test (30 hàng subject thật/dài, 3 màu lane khác nhau). **Không bắt
+  được lỗi CSS** (đã giải thích ở bước 3) nhưng là lưới an toàn hợp lệ cho lỗi *dữ liệu* nếu
+  ai đó phá `renderRows`/`mergePage` sau này — giữ lại có chủ đích.
+- `app.css.test.ts` — 2 test **mới, đọc thẳng nguồn CSS**: khẳng định cột subject trong
+  `.commit-row` có sàn px ≥ 80 (không phải `minmax(0, ...)`), và khẳng định chuỗi chính xác
+  `minmax(0, 2fr)` (nguyên nhân lỗi) không còn xuất hiện. Đây là lưới an toàn cấp hai — không
+  thay thế việc đo bằng trình duyệt thật khi đổi bố cục, chỉ chặn đúng kiểu hồi quy "ai đó đổi
+  lại sàn px về 0 mà không để ý".
+
+### Kiểm chứng đột biến — checkpoint round 1
+
+| # | Đột biến | Kết quả | Test nào bắt |
+|---|---|---|---|
+| 1 | `.commit-row` grid: `minmax(120px, 2fr)` → `minmax(0, 2fr)` (hoàn tác sửa) | **2 test đỏ** trong `app.css.test.ts` | Cả hai assertion (sàn ≥ 80px, và không còn chuỗi `minmax(0, 2fr)`) |
+| 2 | Đo lại bằng Chromium/Playwright ở đúng đột biến 1 | `subjectWidth` trở về **0px** tại 900px/maxLane~19 — xác nhận đột biến tái tạo đúng lỗi gốc | Đo trực tiếp, không qua test tự động (happy-dom không bắt được) |
+
+### Bài học — vì sao 103 test cũ không bắt được, và giới hạn thật của việc "viết thêm test"
+
+Mọi test `CommitList` trước đó dựng **1-3 commit, subject ngắn** (`'sua loi A'`,
+`'them tinh nang B'`), và `happy-dom` **không tính layout CSS thật** (grid track sizing,
+`max-content`, `minmax` đều bị bỏ qua — phần tử luôn có `getBoundingClientRect()` trả về
+0 hoặc giá trị đã vá thủ công). Test viết thêm ở bước 2 (30 hàng, subject dài, nhiều màu)
+đúng nhưng **về cấu trúc không thể bắt được lỗi này** trong happy-dom — phải đo bằng trình
+duyệt thật mới thấy. `app.css.test.ts` là lưới an toàn duy nhất có thể chạy trong `npm test`
+mà thực sự gắn với nguyên nhân gốc, nhưng nó kiểm **nguồn CSS**, không kiểm **layout đã tính
+ra**. Nếu sau này ai thêm một cột mới hay đổi `gap`/`padding` theo cách khác làm bài toán co
+column tái diễn dưới hình thức khác, `app.css.test.ts` sẽ không bắt được — chỉ đo Playwright
+thật (như quy trình bước 4 ở trên) mới bắt được các biến thể mới của cùng lớp lỗi. Ghi lại
+quy trình Playwright này để tái sử dụng nếu checkpoint sau còn phát hiện lỗi bố cục tương tự.
 
 ## Đã tự động hoá xong (Task 1-3)
 
@@ -205,7 +356,13 @@ test thứ ba dùng `vi.waitFor` khẳng định `ipc.getCommitPage` được g�
 đổi — đúng loại lỗi mà cổng grep hay test render-thuần không bắt được, chỉ test hành vi thật
 mới bắt.
 
-## Sáu bước cần làm — chuyển cho người dùng thật
+## Sáu bước cần làm — chuyển cho người dùng thật (VÒNG 2, sau khi sửa checkpoint round 1)
+
+**Đã sửa hai lỗi của vòng 1** (xem mục "Checkpoint round 1: REJECTED" phía trên): cột subject
+không còn co về 0px, và canvas không còn kẹt ở height=0. **Chưa tự phê duyệt lại** — cần người
+dùng chạy lại đúng sáu bước dưới đây trên app thật, đặc biệt chú ý bước 1 (thẳng hàng) và nhìn
+kỹ cột thông điệp ở nhiều độ rộng cửa sổ khác nhau (kéo panel giữa hẹp lại rồi rộng ra) để xác
+nhận subject luôn đọc được, không còn dòng nào trống hay chỉ hiện một ký tự.
 
 Chạy `npm run tauri:dev` (hoặc `dev.cmd`), mở repository của chính dự án này
 (`C:\Users\tuyen\OneDrive\Desktop\git-plum`), rồi:
@@ -276,6 +433,11 @@ Tệp đã tạo (đều tồn tại — kiểm bằng `Read`/`ls` trong lúc th
 - `src/components/history/CommitList.test.tsx`
 - `src/components/history/GraphCanvas.tsx`
 - `src/App.test.tsx`
+- `src/styles/app.css.test.ts` (thêm ở checkpoint round 1)
+
+Tệp chẩn đoán tạm thời đã xoá sạch, không còn trong git status (kiểm bằng `git status --short`
+sau khi hoàn thành): `src/diag-entry.tsx`, `diag.html`, test Rust tạm `chan_doan_repro_repo_that`
+trong `src-tauri/src/git/parsers/log.rs`.
 
 Commit đã tạo (đều có trong `git log`):
 - `53c7b9c` test(02-05): pin geometry invariants and canvas draw calls before implementing
@@ -283,9 +445,15 @@ Commit đã tạo (đều có trong `git log`):
 - `64b4161` test(02-05): pin historyStore and CommitList behavior before implementing
 - `71d98c4` feat(02-05): add historyStore, CommitList, GraphCanvas — one scroll container
 - `079962a` feat(02-05): wire CommitList into App.tsx — history is real end to end
+- `c2f6714` test(02-05): add tests that reproduce checkpoint round 1 findings
+- `cc270e4` fix(02-05): stop subject column collapsing to 0px at narrow width + high lane count
 
 ## Trạng thái requirement
 
 **HIST-01, HIST-02, HIST-04, HIST-11 giữ `Pending`** cho tới khi checkpoint Task 4 được
-người dùng chấp thuận — must-have của plan (*"Người dùng đã kiểm bằng mắt sáu bước và chấp
-thuận"*) chưa thoả. Đừng đánh dấu complete trước khi có "approved" thật.
+người dùng chấp thuận (vòng 2, sau khi sửa checkpoint round 1) — must-have của plan (*"Người
+dùng đã kiểm bằng mắt sáu bước và chấp thuận"*) chưa thoả. Đừng đánh dấu complete trước khi
+có "approved" thật, và đừng tự cho rằng hai lỗi vòng 1 đã hết chỉ vì test tự động xanh — bản
+chất của lỗi vòng 1 là **test tự động không đủ khả năng bắt được nó** (xem mục "Bài học" phía
+trên). Việc "sửa xong" ở đây được xác nhận bằng đo lại thật với Chromium/Playwright, không chỉ
+bằng npm test xanh.
