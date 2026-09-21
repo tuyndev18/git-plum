@@ -14,6 +14,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 
 import { ROW_HEIGHT, graphWidth } from '@/lib/graph-render/geometry'
 import type { GraphRenderRow } from '@/lib/graph-render/types'
+import { isPerfEnabled, measureFirstPaint, measureScrollFps } from '@/lib/perf'
 import { useHistoryStore } from '@/stores/historyStore'
 import { useRefsStore } from '@/stores/refsStore'
 import { GraphCanvas } from './GraphCanvas'
@@ -87,6 +88,51 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
     if (!first || !last) return
     void ensureRange(repoId, first.index, last.index + 1)
   }, [repoId, virtualItems, ensureRange])
+
+  // Đồng hồ "thời gian vẽ lần đầu" của checkpoint #1 — Core Value.
+  //
+  // Bấm đồng hồ khi `repoId` đổi (tức bắt đầu nạp một repo mới) và dừng ở lần
+  // render ĐẦU TIÊN THẬT SỰ CÓ DỮ LIỆU. Mốc dừng là `commits.length > 0`, không
+  // phải lần `useEffect` đầu tiên: lần đó chạy khi màn hình còn trống, nên dừng
+  // ở đó sẽ cho một con số đẹp nhưng vô nghĩa — đúng kiểu số tự lừa mình mà
+  // plan này tồn tại để tránh.
+  //
+  // Cờ tắt → `measureFirstPaint` trả hàm rỗng, hai effect này không tốn gì.
+  const dungDongHo = useRef<(() => number) | null>(null)
+  const daGhiLanDau = useRef(false)
+
+  useEffect(() => {
+    daGhiLanDau.current = false
+    dungDongHo.current = measureFirstPaint('commit-list-first-paint')
+  }, [repoId])
+
+  useEffect(() => {
+    if (daGhiLanDau.current) return
+    if (commits.length === 0) return
+    daGhiLanDau.current = true
+    dungDongHo.current?.()
+  }, [commits.length])
+
+  // Cổng cho checkpoint #1 bước 4: đo FPS lúc cuộn từ console của webview.
+  //
+  // Phơi ra `window` thay vì đăng ký vào sổ lệnh vì `Command.run` không nhận
+  // tham số (xem ghi chú dài trong `App.tsx`), mà phép đo cần `durationMs`. Chỉ
+  // gắn khi cờ bật, nên bản release bình thường không có thuộc tính này.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    // Cờ tắt thì không gắn gì cả: bản release bình thường không có thuộc tính
+    // lạ nào trên `window`. `measureScrollFps` tự trả báo cáo rỗng khi tắt, nên
+    // đây là lớp phòng thủ thứ hai chứ không phải lớp duy nhất.
+    if (!isPerfEnabled()) return
+
+    const w = globalThis as unknown as Record<string, unknown>
+    w.gitPlumMeasureScrollFps = (durationMs = 10_000) => measureScrollFps(el, durationMs)
+    return () => {
+      delete w.gitPlumMeasureScrollFps
+    }
+  }, [])
 
   // Vị trí cuộn hiện tại. Cần vì canvas chỉ cao bằng VÙNG NHÌN THẤY
   // (`scrollHeight`) chứ không cao bằng cả danh sách, nên `y` đưa cho bộ vẽ

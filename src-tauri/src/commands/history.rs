@@ -124,6 +124,21 @@ fn repo_cua(state: &AppState, repo_id: &str) -> Result<Arc<RepoHandle>> {
         .ok_or_else(|| GitError::UnknownRepository(repo_id.to_owned()))
 }
 
+/// Cờ bật đo hiệu năng phía Rust — biến môi trường `GIT_PLUM_PERF=1`.
+///
+/// Phục vụ validation checkpoint #1 và #4. Tắt thì mọi phép đo dưới đây bị bỏ qua
+/// hoàn toàn: không `Instant::now()`, và quan trọng hơn là **không**
+/// `serde_json::to_vec` thừa để cân payload (phép đo đó serialize cả trang thêm một
+/// lần nữa — chi phí thật, không phải chi phí tưởng tượng).
+///
+/// Đọc một lần rồi nhớ: `std::env::var` mỗi lần gọi command là việc thừa, và lần nạp
+/// lịch sử đầu tiên là đúng chỗ không nên thêm việc thừa nào.
+fn do_hieu_nang() -> bool {
+    use std::sync::OnceLock;
+    static CO: OnceLock<bool> = OnceLock::new();
+    *CO.get_or_init(|| std::env::var("GIT_PLUM_PERF").as_deref() == Ok("1"))
+}
+
 /// Mili giây từ epoch. `0` nếu đồng hồ hệ thống đặt trước 1970 — không phải lý do để
 /// làm hỏng một lời gọi command.
 fn bay_gio_ms() -> u64 {
@@ -147,10 +162,24 @@ fn bay_gio_ms() -> u64 {
 /// Vì vậy: phân trang áp dụng cho **việc trả dữ liệu**, không cho việc tính toán. Cắt
 /// trang chỉ là một phép slice trên kết quả đã tính xong.
 ///
-/// Chi phí đã đo ở 100k commit: `git log` 693ms + `parse_log` 82ms + `assign` 57ms.
-/// Chạy **một lần** rồi vào cache; những lần gọi sau không sinh tiến trình git nào.
+/// Chi phí đã đo ở 100 007 commit, profile **release**, đo 2026-09-21:
+/// `git log` 633.8ms + `parse_log` 63.1ms + `assign` 51.9ms = 749.7ms đường nóng.
+/// Chạy **một lần** rồi vào cache; những lần gọi sau không sinh tiến trình git nào
+/// (trang thứ hai: 0.646ms).
+///
+/// Ba số này là **phía Rust**, chưa gồm IPC và render của React — tức chưa phải con
+/// số người dùng cảm nhận. Số đầu-tới-cuối đó là việc của checkpoint #1, xem
+/// `docs/05-phase2-performance.md`.
 async fn nap_lich_su(state: &AppState, repo: &Arc<RepoHandle>) -> Result<RepoHistory> {
     let runner = state.runner(Arc::clone(repo));
+
+    // Ba mốc đo RIÊNG cho checkpoint #1 (a: chạy git, b: phân tích, c: gán lane).
+    //
+    // Tách ba là điểm mấu chốt, không phải chi tiết trang trí: nếu (a) chiếm 90%
+    // tổng thời gian thì tối ưu (b) và (c) không đổi được gì mà người dùng cảm nhận
+    // — và benchmark criterion của plan 02-03, vốn chỉ đo (b) và (c), đang đo sai
+    // chỗ. Một con số tổng gộp không trả lời được câu hỏi đó.
+    let dong_ho_git = do_hieu_nang().then(std::time::Instant::now);
 
     let out = runner
         .read_ok(
@@ -161,7 +190,12 @@ async fn nap_lich_su(state: &AppState, repo: &Arc<RepoHandle>) -> Result<RepoHis
         )
         .await?;
 
+    let ms_git = dong_ho_git.map(|t| t.elapsed().as_millis());
+    let so_byte_stdout = out.stdout.len();
+
+    let dong_ho_parse = do_hieu_nang().then(std::time::Instant::now);
     let parsed = parse_log(&out.stdout);
+    let ms_parse = dong_ho_parse.map(|t| t.elapsed().as_millis());
 
     // HIST-11 nói không được mất dòng. Nếu vẫn mất thì phải có vết — im lặng ở đây
     // nghĩa là lỗi sẽ được báo cáo dưới dạng "thiếu commit" nhiều tháng sau, khi không
@@ -181,12 +215,30 @@ async fn nap_lich_su(state: &AppState, repo: &Arc<RepoHandle>) -> Result<RepoHis
         );
     }
 
+    let dong_ho_lane = do_hieu_nang().then(std::time::Instant::now);
     let graph_rows = crate::graph::assign(&parsed.commits);
+    let ms_lane = dong_ho_lane.map(|t| t.elapsed().as_millis());
+
     debug_assert_eq!(
         graph_rows.len(),
         parsed.commits.len(),
         "bất biến của 02-03: mỗi commit đúng một hàng đồ thị"
     );
+
+    // Một dòng duy nhất mang cả ba số, để chép nguyên vào
+    // `docs/05-phase2-performance.md`. Không ghi đường dẫn repo (T-02-24) — `repo.id`
+    // là mã băm, không phải đường dẫn trên đĩa.
+    if let (Some(git_ms), Some(parse_ms), Some(lane_ms)) = (ms_git, ms_parse, ms_lane) {
+        tracing::info!(
+            repo = %repo.id,
+            commits = parsed.commits.len(),
+            git_log_ms = git_ms,
+            parse_log_ms = parse_ms,
+            lanes_assign_ms = lane_ms,
+            stdout_bytes = so_byte_stdout,
+            "[perf] nạp lịch sử lần đầu — ba mốc đo tách riêng"
+        );
+    }
 
     Ok(RepoHistory {
         commits: parsed.commits,
@@ -249,12 +301,45 @@ pub async fn get_commit_page(
     let graph_rows = history.graph_rows[start..end].to_vec();
     debug_assert_eq!(commits.len(), graph_rows.len());
 
-    Ok(CommitPage {
+    let page = CommitPage {
         commits,
         graph_rows,
         total,
         skipped_records: 0,
-    })
+    };
+
+    // Checkpoint #4: kích thước payload JSON THẬT, đo bằng cách serialize chính
+    // trang sắp trả về. Không suy từ `size_of` của struct — `Vec<String>` trong
+    // `Commit` làm phép suy đó sai xa, và JSON hoá `GraphRow` (dữ liệu số cố định
+    // chiều rộng) tốn kém tương đối khác hẳn chuỗi commit message.
+    //
+    // Cân RIÊNG hai mảng vì câu hỏi của checkpoint #4 là "có nên chuyển
+    // `graph_rows` sang `ipc::Response` nhị phân không" — trả lời được câu đó cần
+    // tỉ lệ `graph_rows` trong tổng, không chỉ tổng.
+    //
+    // Cả khối này chỉ chạy khi `GIT_PLUM_PERF=1`: nó serialize thêm hai lần nữa,
+    // là chi phí thật không được phép rơi vào đường đi bình thường.
+    if do_hieu_nang() {
+        let tong = serde_json::to_vec(&page).map(|v| v.len()).unwrap_or(0);
+        let byte_commits = serde_json::to_vec(&page.commits)
+            .map(|v| v.len())
+            .unwrap_or(0);
+        let byte_graph_rows = serde_json::to_vec(&page.graph_rows)
+            .map(|v| v.len())
+            .unwrap_or(0);
+
+        tracing::info!(
+            repo = %repo_id,
+            rows = page.commits.len(),
+            payload_bytes = tong,
+            commits_bytes = byte_commits,
+            graph_rows_bytes = byte_graph_rows,
+            graph_rows_percent = (byte_graph_rows * 100).checked_div(tong).unwrap_or(0),
+            "[perf] kích thước payload JSON một trang"
+        );
+    }
+
+    Ok(page)
 }
 
 /// Nhánh local, nhánh remote và tag của một repo — HIST-06, HIST-07.
@@ -566,6 +651,27 @@ mod tests {
         let (files, truncated) = parse_name_status(&buf, 3);
         assert_eq!(files.len(), 3);
         assert!(truncated, "cắt danh sách phải bật cờ truncated");
+    }
+
+    /// Cờ đo phải **tắt** khi biến môi trường không được đặt.
+    ///
+    /// Ghim bằng test vì hậu quả của việc nó bật nhầm không hiện ra dưới dạng lỗi:
+    /// ứng dụng vẫn chạy đúng, chỉ là mỗi lần lật trang lại serialize payload thêm
+    /// ba lần. Một hồi quy im lặng đúng kiểu khó truy nhất.
+    ///
+    /// Test này chạy trong tiến trình `cargo test` bình thường (không đặt
+    /// `GIT_PLUM_PERF`), nên nó kiểm đúng cấu hình mặc định của người dùng.
+    #[test]
+    fn co_do_hieu_nang_tat_mac_dinh() {
+        if std::env::var("GIT_PLUM_PERF").is_ok() {
+            // Ai đó đang chạy test với cờ bật — không khẳng định gì, vì khi đó
+            // `true` mới là đúng.
+            return;
+        }
+        assert!(
+            !do_hieu_nang(),
+            "không đặt GIT_PLUM_PERF thì phép đo phải tắt hoàn toàn"
+        );
     }
 
     /// Mã cây rỗng là một hằng số của git, không phải một mã ngẫu nhiên. Ghim nó bằng
