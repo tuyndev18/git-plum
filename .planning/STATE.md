@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-09-21T05:23:05.574Z"
+status: executing
+last_updated: "2026-09-21T12:25:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
@@ -49,7 +49,7 @@ progress:
 |---|---|
 | Phases completed | 0 / 8 |
 | Plans completed | 2 |
-| v1 requirements delivered | 8 / 59 |
+| v1 requirements delivered | 3 / 59 |
 
 | Plan | Thời lượng | Tasks | Files |
 |---|---|---|---|
@@ -71,6 +71,7 @@ progress:
 - **Không cam kết tổng thời gian.** Chuỗi phase là kế hoạch, thời lượng là đầu ra.
 - **PLAT-02 (plan 01-01)**: `GIT_CONFIG_PARAMETERS` ghim đủ `log.showSignature`, `diff.noprefix`, `format.coverLetter` qua hằng `PINNED_GIT_CONFIG` trong `src-tauri/src/git/exec.rs`. `diff.external` ghim riêng bằng `GIT_EXTERNAL_DIFF=""` vì biến môi trường thắng cấu hình.
 - **`--cleanup=whitespace` bàn giao cho Phase 4** qua `docs/02-phase4-commit-notes.md`: nó là tham số dòng lệnh của `git commit`, không đặt được trong lớp ghim môi trường, và Phase 1 chưa có lệnh commit nào.
+- **Hạ tầng kiểm thử giao diện** (plan 01-02): cấu hình vitest sống trong khối `test` của `vite.config.ts`, không tách `vitest.config.ts` riêng — một nguồn sự thật cho `resolve.alias`. Giả lập IPC ở ranh giới module `@/lib/ipc`, không vá `invoke` toàn cục. Test logic store gọi thẳng `useRepoStore.getState()`, không render component.
 - Chi tiết đầy đủ các quyết định kỹ thuật: xem `.planning/PROJECT.md` mục Key Decisions và `.planning/research/SUMMARY.md` mục 3.
 
 ### Việc cần làm
