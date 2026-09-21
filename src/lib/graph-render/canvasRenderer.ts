@@ -45,7 +45,25 @@ export interface CanvasRendererOptions {
   createCanvasElement?: () => HTMLCanvasElement
 }
 
-/** Vẽ một đoạn nối giữa hai lane. Dọc nếu cùng lane, cong (bezier) nếu khác lane. */
+/**
+ * Bán kính góc bo khi đường rẽ gập từ ngang sang dọc. Nhỏ so với `LANE_WIDTH`
+ * để góc vẫn đọc ra là "gập vuông", chỉ mềm cạnh cho đỡ gắt.
+ */
+const CORNER_RADIUS = 4
+
+/**
+ * Vẽ một đoạn nối giữa hai lane. Dọc nếu cùng lane; **gập vuông góc** nếu khác
+ * lane — đi ngang trước rồi gập xuống, với một góc bo nhỏ.
+ *
+ * Vì sao gập vuông chứ không bezier chéo: ảnh tham chiếu
+ * (`docs/screenshots/main-4.png`) cho thấy đường rẽ đi **ngang** sang lane đích
+ * rồi **gập xuống** theo góc vuông. Đó là lý do đồ thị ở đó dễ lần theo dù có
+ * hàng chục nhánh cạnh nhau: mắt bám được đoạn ngang và đoạn dọc riêng biệt,
+ * trong khi nhiều đường bezier chéo cùng đi qua một vùng thì gần như không
+ * phân biệt được đường nào là đường nào — đúng hiện tượng người dùng báo "rất
+ * khó nhìn". Với `LANE_WIDTH` 14px và `ROW_HEIGHT` 28px, một đường bezier chéo
+ * còn có độ dốc tới ~63°, làm nó gần như trùng hướng với đường dọc bên cạnh.
+ */
 function drawEdge(ctx: DrawingContext2D, edge: Edge, yStart: number, yEnd: number): void {
   const xStart = laneX(edge.fromLane)
   const xEnd = laneX(edge.toLane)
@@ -57,10 +75,23 @@ function drawEdge(ctx: DrawingContext2D, edge: Edge, yStart: number, yEnd: numbe
   if (edge.fromLane === edge.toLane) {
     ctx.lineTo(xEnd, yEnd)
   } else {
-    // Đường cong bezier mượt giữa hai lane khác nhau, kiểm soát điểm giữa
-    // theo chiều Y để đường rẽ không gãy góc.
-    const midY = (yStart + yEnd) / 2
-    ctx.bezierCurveTo(xStart, midY, xEnd, midY, xEnd, yEnd)
+    // Gập vuông: ngang tới gần lane đích, bo góc, rồi dọc xuống.
+    //
+    // Đoạn ngang chạy ở `yStart` (ngang qua tâm hàng nguồn, nơi có nút commit)
+    // nên đường rẽ mọc ra đúng từ nút chứ không lửng lơ giữa hai hàng. Góc bo
+    // không được lớn hơn nửa khoảng cách còn lại theo cả hai chiều, nếu không
+    // nó sẽ vượt qua điểm đến khi hai lane sát nhau hoặc hàng quá thấp.
+    const dx = xEnd - xStart
+    const dy = yEnd - yStart
+    const r = Math.min(CORNER_RADIUS, Math.abs(dx) / 2, Math.abs(dy) / 2)
+    const sweep = Math.sign(dx)
+
+    ctx.lineTo(xEnd - sweep * r, yStart)
+    // Bo góc bằng bezier ngắn: điểm điều khiển đặt đúng tại góc vuông lý
+    // thuyết `(xEnd, yStart)` nên đường cong tiếp tuyến với cả đoạn ngang và
+    // đoạn dọc — không có chỗ gãy.
+    ctx.bezierCurveTo(xEnd, yStart, xEnd, yStart, xEnd, yStart + r)
+    ctx.lineTo(xEnd, yEnd)
   }
 
   ctx.stroke()
