@@ -23,3 +23,7 @@ Thumbs.db
 # Icon cho mobile — chưa dùng tới
 src-tauri/icons/android/
 src-tauri/icons/ios/
+
+# Repo mẫu và repo đo hiệu năng do scripts/fixtures/ sinh ra.
+# Không bao giờ commit: dựng lại được bằng script, và repo hiệu năng rất lớn.
+target/
