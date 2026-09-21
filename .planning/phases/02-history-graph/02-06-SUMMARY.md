@@ -28,7 +28,7 @@ tech-stack:
   patterns:
     - "selectionStore holds ONLY selectedCommitId per repo — CommitDetail and RefSidebar both read/write it independently, neither is a child of the other (ARCHITECTURE.md Pattern 3)"
     - "refsStore.byCommit is a Map computed once in load(), not scanned per row — RefBadges receives refs as a prop from CommitList's lookup, never subscribes to refsStore itself"
-    - "New ref badges rendered INSIDE .commit-subject (existing overflow:hidden text node), not as a new CSS grid column — checkpoint round 1 of 02-05 already proved new max-content/minmax columns collapse at narrow width + high lane count"
+    - "Ref badges get their OWN grid column (.commit-ref-cell, sized minmax(0, max-content)) — never share a column with message text. A 0-floor column yields space entirely when narrow, so it does not repeat 02-05's collapse (caused by hard max-content columns that never shrink). Matches the GitKraken reference layout."
     - "CommitDetail caches CommitDetail payloads in a bounded module-level Map (200 entries) keyed by commitId — historical diffs are immutable so the cache never needs invalidation, only a size cap"
     - "CommitList exposes scrollToIndex via forwardRef + useImperativeHandle — CommitSearch consumes it as a prop instead of creating a second useVirtualizer instance"
     - "uiStore (not selectionStore, not per-repo) holds fileListView — a user display preference that must survive both commit changes and repo changes"
@@ -45,25 +45,29 @@ key-files:
     - "src/components/RefSidebar.tsx + RefSidebar.test.tsx (7 test)"
     - "src/components/history/CommitSearch.tsx + CommitSearch.test.tsx (13 test)"
   modified:
-    - "src/components/history/CommitList.tsx — forwardRef<CommitListHandle>, RefBadges wired into row, useRefsStore.byCommit lookup"
+    - "src/components/history/CommitList.tsx — forwardRef<CommitListHandle>, useRefsStore.byCommit lookup; checkpoint round 1 fix B: RefBadges moved OUT of .commit-subject into its own .commit-ref-cell grid cell"
     - "src/components/history/CommitList.test.tsx — +3 test (ref badges render, fixed row height, scrollToIndex handle)"
     - "src/App.tsx — selectionStore replaces useState; RefSidebar/CommitDetail/CommitSearch wired into AppLayout panes"
     - "src/App.test.tsx — +2 test (placeholders replaced, selection reaches CommitDetail)"
-    - "src/styles/app.css — .commit-detail*, .file-list*, .ref-badge*, .ref-sidebar*, .commit-search*, .main-history-body blocks; checkpoint round 1 fix: overflow/min-height containment on .commit-row, .ref-badges, .ref-badge"
-    - "src/styles/app.css.test.ts — +3 test, checkpoint round 1 regression guard for row-height containment"
+    - "src/styles/app.css — .commit-detail*, .file-list*, .ref-badge*, .ref-sidebar*, .commit-search*, .main-history-body blocks; checkpoint round 1 fix A: overflow/min-height containment on .commit-row/.ref-badges/.ref-badge; fix B: 6-column grid with a dedicated .commit-ref-cell badge column"
+    - "src/styles/app.css.test.ts — +6 test total (3 CSS-string guards for fix A row-height containment; 3 STRUCTURAL guards for fix B: exact column count, badge-column 0 floor, RefBadges position in JSX outside .commit-subject)"
 
 decisions:
   - "selectionStore.selectedByRepo[repoId] upgraded from App.tsx's plan-02-05 useState — required because CommitDetail and RefSidebar both need to read/write selection and neither is a child of the other in AppLayout's three-pane structure"
-  - "Ref badges are inline content inside .commit-subject, not a new grid column — avoids repeating checkpoint round 1 of 02-05 (new max-content/minmax columns collapsed the subject column to 0px at narrow width + high lane count)"
+  - "[SUPERSEDED by checkpoint round 1 fix B] Ref badges were initially inline content inside .commit-subject to avoid adding a grid column — that choice is what caused the badge-vs-message space competition the user reported. Badges now have their own grid column; see the fix-B decision below."
   - "CommitDetail prefers historyStore.commits for metadata (zero IPC) and only calls ipc.getCommitDetail for the file list — per plan's ARCHITECTURE.md guidance that selecting a commit already in the loaded page should not round-trip to Rust"
   - "CommitDetail's module-level cache needed a test-only reset export (__resetCommitDetailCacheForTest) after mutation/isolation testing surfaced that tests reusing commit id 'c1' leaked cached state across test cases — production behavior (cache persists across mounts, sized 200 entries) is unchanged and correct"
   - "CommitSearch debounce test was insufficient as originally written — advancing fake timers by exactly 250ms cannot distinguish a 250ms delay from a 0ms delay, since both thresholds are crossed either way. Strengthened to assert no call at 249ms, then a call after +1ms."
-  - "[Checkpoint round 1] .commit-row gets overflow:hidden + min-height:0, .ref-badges/.ref-badge get max-height + overflow:hidden — CSS Grid items default min-height to auto (not 0), so multi-badge rows could force the grid track taller than the virtualizer's fixed height:28px inline style, regardless of overflow:hidden on the descendant .commit-subject. Structural containment fix, not reproduced in headless Chromium (see round-1 section) but removes the whole bug class."
+  - "[Checkpoint round 1 — fix A, row height] .commit-row gets overflow:hidden + min-height:0, .ref-badges/.ref-badge get max-height + overflow:hidden — CSS Grid items default min-height to auto (not 0), so multi-badge rows could force the grid track taller than the virtualizer's fixed height:28px inline style, regardless of overflow:hidden on the descendant .commit-subject. Not reproduced by measurement in headless Chromium, but correct per CSS spec and removes the bug class."
+  - "[Checkpoint round 1 — fix B, THE main cause] Ref badges get their own grid column (.commit-ref-cell, column 2, sized minmax(0, max-content)) instead of living inside .commit-subject. Reproduced by measurement with real Segoe UI at the real 52% main-pane width: a 4-badge group takes 258px while the subject column is only 144px at a 900px window, so the message rendered 0%. Chose a dedicated column over capping .ref-badges max-width inside the shared column because sharing one column is structurally wrong — capping only moves the breakpoint. Matches the GitKraken reference layout (docs/screenshots/main-1.png, main-4.png: separate BRANCH/TAG and COMMIT MESSAGE columns, with long branch names ellipsised inside the badge)."
+  - "[Checkpoint round 1 — fix B] The new badge column uses minmax(0, max-content), NOT hard max-content — the 0 floor lets it yield space entirely at narrow widths, which is precisely why adding a column here does not repeat 02-05's column-collapse bug (that was caused by hard max-content date/sha columns that never shrink)."
+  - "[Checkpoint round 1 — fix B] .commit-ref-cell always renders even with zero refs, because RefBadges returns null per its <behavior> spec — without the always-present wrapper, unlabelled rows would have one fewer grid cell and every later cell would shift one column left, misaligning against labelled rows."
+  - "[Checkpoint round 1 — fix B] .ref-badge has min-width: 48px rather than 0 — measured at a 900px window, a 0 floor shrank badges to unreadable single characters (m., o., o.). Showing fewer legible badges and folding the rest into +N (GitKraken's behaviour) beats showing many unreadable ones."
 
 requirements-completed: []
 
-duration: "~95min (Task 1-3 automated) + ~45min (checkpoint round 1: investigation + fix, unable to reproduce in headless Chromium, applied structural CSS containment) — Task 4 checkpoint round 2 NOT YET RUN"
-completed: "2026-09-21 (Task 1-3 + checkpoint round 1 fix only; awaiting round 2 human re-verification)"
+duration: "~95min (Task 1-3 automated) + ~45min (checkpoint round 1 fix A: row-height containment) + ~40min (checkpoint round 1 fix B: reproduced badge/message space competition with real Segoe UI, moved badges to their own grid column) — Task 4 checkpoint round 2 NOT YET RUN"
+completed: "2026-09-21 (Task 1-3 + both checkpoint round 1 fixes; awaiting round 2 human re-verification)"
 ---
 
 # Phase 2 Plan 06: Commit detail + file tree + ref sidebar + search — Summary
@@ -74,18 +78,29 @@ từ WebView2 trên Windows, không phải suy đoán). Đã sửa và chờ vò
 
 Tất cả mã tự động hoá được đã xong: `selectionStore`, `refsStore`, `uiStore`,
 `fileTree.ts`, `CommitDetail`, `FileList`, `RefBadges`, `RefSidebar`,
-`CommitSearch` đều đã cài, nối vào `App.tsx`, và có 69 test mới (176 tổng,
-từ nền 107 tại lúc đóng plan 02-05 — 66 test ban đầu + 3 test hồi quy CSS
-thêm sau checkpoint round 1). `npm run typecheck`, `npm test`, `npm run
+`CommitSearch` đều đã cài, nối vào `App.tsx`, và có 72 test mới (**179 tổng**,
+từ nền 107 tại lúc đóng plan 02-05 — 66 test Task 1-3 + 3 test hồi quy fix A
++ 3 test hồi quy cấu trúc fix B). `npm run typecheck`, `npm test`, `npm run
 build`, `npx tauri build --debug --no-bundle`, và `cargo test` đều xanh,
 **không hồi quy**.
 
 Checkpoint round 1 bị từ chối vì ba lỗi bố cục CSS ở bước 6 của 12 bước kiểm
-(xem mục "Checkpoint round 1: REJECTED" dưới đây) — đúng loại lỗi mà
-`npm test` (chạy trên happy-dom) không bắt được, giống hệt bài học của
-checkpoint round 1 plan 02-05. Đã sửa bằng CSS containment, KHÔNG tái hiện
-được bằng Playwright/Chromium headless trong phiên điều tra này (ghi rõ,
-không giả vờ). Chờ người dùng chạy lại vòng 2 trên app thật.
+— đúng loại lỗi mà `npm test` (chạy trên happy-dom) không bắt được, giống hệt
+bài học của checkpoint round 1 plan 02-05.
+
+**Ba lỗi đó có HAI nguyên nhân độc lập, cả hai đã sửa:**
+- **Nguyên nhân A** (containment chiều cao CSS Grid) — tìm ở vòng điều tra 1,
+  giải thích lỗi 1 (hàng cao hơn) và lỗi 2 (đồ thị lệch tâm hàng).
+- **🔴 Nguyên nhân B** (nhãn ref và chữ message cạnh tranh CÙNG một cột grid)
+  — tìm ở vòng điều tra 2 sau khi coordinator đọc mã và chỉ ra
+  `CommitList.tsx:164-165`. Đây là nguyên nhân **CHÍNH** của thứ người dùng
+  thấy, và **đã tái hiện được bằng số đo** (nhóm 4 badge chiếm 258px trong khi
+  cột subject chỉ còn 144px → chữ message hiển thị **0%**). Sửa bằng quyết
+  định kiến trúc: nhãn có **cột grid riêng**, khớp tham chiếu GitKraken.
+
+Vòng điều tra 1 cho **âm tính giả** vì đo trong Chromium không có Segoe UI và
+ở full viewport thay vì vùng `main` 52% thật — chi tiết ở mục dưới. Chờ người
+dùng chạy lại vòng 2 trên app thật.
 
 ## Checkpoint round 1: REJECTED
 
@@ -110,67 +125,81 @@ trực tiếp của lỗi 1: canvas vẽ theo `rowY(index) = index * ROW_HEIGHT`
 một hàng bị chồng đè hoặc tràn khỏi vùng cột dành cho chúng thay vì co
 gọn/hiện chỉ báo `+N` đúng như `<behavior>` của Task 3 đặc tả.
 
-### Điều tra — quy trình đầy đủ, kể cả phần KHÔNG tái hiện được
+### Điều tra — HAI nguyên nhân độc lập, tìm ra ở hai vòng điều tra khác nhau
 
-**Bước 1 — đọc lại `RefBadges.tsx`, `geometry.ts`, CSS `.commit-row`.**
-`RefBadges` giới hạn đúng `MAX_VISIBLE_BADGES = 3` theo chiều **ngang**
-(số badge hiện ra), nhưng không có gì giới hạn chiều **dọc** — không
-`max-height` trên `.ref-badges`/`.ref-badge`, và quan trọng hơn:
-`.commit-row` (container CSS Grid, `display: grid`) không có `overflow:
-hidden` hay `min-height: 0` của chính nó.
+Checkpoint round 1 có **hai nguyên nhân riêng biệt**, không phải một. Vòng
+điều tra đầu chỉ tìm ra nguyên nhân A (chiều cao) và cho **âm tính giả** khi
+đo — vòng thứ hai (sau khi coordinator đọc mã và chỉ ra chỗ chưa chạm tới)
+tìm ra nguyên nhân B, là nguyên nhân **chính** của thứ người dùng thấy.
 
-**Bước 2 — dựng lại đúng phương pháp Playwright/Chromium thật của 02-05.**
-Cài Playwright tạm ở thư mục scratch (không thêm vào `package.json`), dựng
-`diag-entry.tsx`/`diag.html` tạm trong `src/` (đã xoá sau khi xong), giả
-lập `window.__TAURI_INTERNALS__.invoke` để đi qua đúng đường dữ liệu thật:
-`ipc.getCommitPage`/`ipc.listRefs` → `historyStore`/`refsStore` →
-`CommitList`. Tái hiện chính xác ca người dùng báo: hàng đầu có 4 ref
-(`master` local+HEAD, `origin/HEAD`, `origin/master`, `feature-x` overflow
-→ `+1`), đo ở nhiều bề rộng cửa sổ (250px tới 900px).
+#### Nguyên nhân A — containment chiều cao (tìm ở vòng điều tra 1)
 
-**Kết quả đo (không tái hiện được):**
+`.commit-row` là **container CSS Grid**. Theo đặc tả, một **grid item** có
+`min-height` mặc định là `auto`, **không phải `0`** — nên nội dung con có
+thể ép TRACK của grid (tức chiều cao thật của `.commit-row`) giãn vượt
+`height: 28px` mà virtualizer đặt qua inline style, **bất kể** phần tử con
+có `overflow: hidden` hay không (`overflow: hidden` trên con chỉ cắt nội
+dung của CHÍNH nó, không ngăn track cha giãn). Hàng cao hơn `ROW_HEIGHT`
+làm chấm đồ thị lệch, vì canvas vẽ theo `rowY(index) = index * ROW_HEIGHT`
+cố định — đó là **lỗi 2** người dùng báo, hệ quả trực tiếp của **lỗi 1**.
 
-| Bề rộng cửa sổ | Chiều cao hàng 0 (4 badge) | Chiều cao hàng khác | So sánh |
+*Phép đo vòng 1 (chiều cao) — tất cả đều 28px, tức ÂM TÍNH GIẢ:*
+
+| Bề rộng | Chiều cao hàng 0 (4 badge) | Hàng khác | Kết luận sai lúc đó |
 |---|---|---|---|
-| 250px | 28px | 28px | Bằng nhau |
-| 400px | 28px | 28px | Bằng nhau |
-| 600px | 28px | 28px | Bằng nhau |
-| 900px | 28px | 28px | Bằng nhau |
+| 250px / 400px / 600px / 900px | 28px | 28px | "không tái hiện được" |
 
-Đo cả `scrollHeight`, `clientHeight`, chiều cao tính toán của `.commit-
-subject` (19.75px) và `.ref-badges` (16px) — đều nhỏ hơn 28px, không có
-dấu hiệu tràn ở BẤT KỲ bề rộng nào trong Chromium headless (Playwright
-1.55.0, Chromium 140.0.7339.16). Chụp ảnh trực tiếp vùng hàng 0 ở 250px và
-350px xác nhận bằng mắt: badge bị cắt gọn bằng `text-overflow: ellipsis`
-của `.commit-subject`, không tràn, không cao hơn.
+#### 🔴 Nguyên nhân B — badge và chữ message cạnh tranh CÙNG một cột grid (tìm ở vòng điều tra 2)
 
-**Kết luận trung thực:** không tái hiện được ba lỗi bằng Chromium headless
-trong phiên điều tra này. Giả thuyết khả dĩ nhất (không kiểm chứng được
-trực tiếp): WebView2 thật trên Windows dùng font hệ thống **Segoe UI**
-thật — `--font-ui` đã khai báo `'Segoe UI'` làm lựa chọn thứ hai sau
-`system-ui`, nhưng môi trường Chromium headless của Playwright (tải về,
-không phải bản cài Windows) không có font đó cài sẵn và dùng phông thay
-thế (`sans-serif` cuối bảng), có thể đo `line-height`/độ rộng ký tự khác
-đi đủ để kích hoạt tràn mà số đo ở đây không thấy.
+`RefBadges` render **BÊN TRONG** `.commit-subject`
+(`CommitList.tsx:164-165` trước khi sửa):
 
-### Nguyên nhân gốc (suy luận từ cấu trúc CSS, không phải đo trực tiếp)
+```tsx
+<span className="commit-subject" title={commit.subject}>
+  <RefBadges refs={refsByCommit?.get(commit.id) ?? []} />
+  {commit.subject}
+```
 
-`.commit-row` là **container CSS Grid** (`display: grid`). Theo đặc tả CSS
-Grid, một **grid item** (ở đây là các `<span>` con như `.commit-subject`)
-có `min-height` mặc định là `auto`, **không phải `0`**. Điều đó nghĩa là
-nội dung bên trong (`.ref-badges` với nhiều badge, đặc biệt khi đo bằng
-phông chữ thật rộng/cao hơn) có thể ép TRACK của grid — tức chiều cao thật
-sự của `.commit-row` — giãn ra vượt quá `height: 28px` mà virtualizer đặt
-qua inline style, **bất kể** `.commit-subject` bên trong có `overflow:
-hidden` hay không. `overflow: hidden` trên một phần tử **con** chỉ cắt
-được nội dung của chính nó (ở đây: cắt text theo chiều ngang bằng
-`text-overflow: ellipsis`) — nó **không** ngăn được track của container
-Grid **cha** giãn theo chiều dọc nếu bản thân container đó không tự giới
-hạn bằng `overflow: hidden` + `min-height: 0`. Đây không phải lỗi dữ liệu
-hay logic component (`RefBadges` giới hạn đúng số badge hiện ra theo chiều
-ngang) — là lỗ hổng containment CSS thuần, cùng LỚP lỗi với checkpoint
-round 1 của 02-05 (thiếu ràng buộc cứng ở đúng chỗ cần nó), khác cụ thể là
-chiều dọc thay vì chiều ngang.
+`.commit-subject` là cột grid thứ 2, chỉ có sàn `minmax(120px, 2fr)` (sàn do
+chính checkpoint round 1 của plan 02-05 thêm vào), và có `overflow: hidden;
+text-overflow: ellipsis; white-space: nowrap`. Hệ quả: **badge ăn vào cùng
+không gian với chữ message**, và chữ bị ellipsis cắt sạch ở hàng nhiều badge.
+
+*Phép đo vòng 2, ĐÃ TÁI HIỆN ĐƯỢC — Chromium + Segoe UI THẬT (nạp
+`segoeui.ttf`/`segoeuib.ttf` từ `C:/Windows/Fonts` qua `@font-face`), đo ở
+đúng bề rộng vùng `main` thật (52% cửa sổ theo `AppLayout`):*
+
+| Cửa sổ | Vùng `main` | Cột subject | Nhóm 4 badge chiếm | Chữ message hiện được |
+|---|---|---|---|---|
+| 1440px | 749px | 332px | **258px** (78%) | 74/272px = **27%** |
+| 1100px | 572px | 214px | **258px** (121%) | **0%** |
+| 900px | 468px | 144px | **258px** (179%) | **0%** |
+
+Hàng **không** badge trong cùng lần đo hiện chữ bình thường (98-100% ở
+1440px). Chỉ hàng nhiều badge mất chữ — **khớp chính xác** ảnh người dùng
+gửi. Điều này cũng giải thích **lỗi 3** (badge "chồng/tràn"): badge chiếm
+121-179% cột nên bị `overflow: hidden` cắt giữa chữ, nhìn như chồng đè.
+
+**Phát hiện quan trọng về ảnh chụp:** dấu `.` mà người dùng thấy ở hàng đó
+**không phải** thông điệp commit thật — nó là phần đuôi ellipsis còn sót
+lại hiển thị được của một thông điệp dài. Đây là điểm khác biệt then chốt so
+với checkpoint round 1 của plan 02-05, nơi `.` **thật sự** là nội dung
+commit (đã kiểm chứng bằng `parse_log` trên repo thật lúc đó).
+
+#### Vì sao phép đo vòng 1 cho ÂM TÍNH GIẢ — hai sai số cộng dồn
+
+1. **Phông chữ.** Chromium của Playwright tải rời **không có Segoe UI** cài
+   sẵn nên rơi về phông thay thế cuối bảng `--font-ui`, hẹp hơn Segoe UI
+   thật đáng kể. Ngưỡng tràn 120px vì thế đến muộn hơn nhiều so với máy thật.
+2. **Bề rộng vùng chứa.** Vòng 1 render `CommitList` ở **full viewport**
+   thay vì bề rộng vùng `main` thật (52% cửa sổ qua `AppLayout`) — cột
+   subject rộng gấp đôi thực tế.
+
+Hai sai số cộng lại làm badge "vừa đủ chỗ" trong phép đo trong khi tràn rõ
+rệt trên máy thật. **Bài học: đo layout phải khớp CẢ phông CẢ bề rộng vùng
+chứa thật** — đo đúng thứ (chiều cao) nhưng trong môi trường sai vẫn cho kết
+luận sai. Vòng 1 cũng chỉ đo chiều **cao** mà không đo cạnh tranh không gian
+theo chiều **ngang**, nên bỏ sót hẳn nguyên nhân B.
 
 ### Cách sửa
 
@@ -217,71 +246,139 @@ chiều dọc thay vì chiều ngang.
  }
 ```
 
-`overflow: hidden` + `min-height: 0` trên chính `.commit-row` là thay đổi
-quyết định — nó buộc grid TRACK tôn trọng `height` đã đặt bất kể nội dung
-con giãn bao nhiêu, loại bỏ toàn bộ lớp lỗi về mặt cấu trúc thay vì vá theo
-từng con số px cụ thể của một phông chữ. `max-height` + `overflow: hidden`
-trên `.ref-badges`/`.ref-badge` là lớp phòng thủ thứ hai (không phụ thuộc
-container cha có đúng hay không), giải quyết trực tiếp lỗi 3 (badge
-chồng/tràn): badge vượt quá 16-18px bị cắt gọn thay vì đẩy layout.
+`overflow: hidden` + `min-height: 0` trên chính `.commit-row` buộc grid
+TRACK tôn trọng `height` đã đặt bất kể nội dung con giãn bao nhiêu, loại bỏ
+lớp lỗi A về mặt cấu trúc thay vì vá theo từng con số px của một phông chữ.
+`max-height` + `overflow: hidden` trên `.ref-badges`/`.ref-badge` là lớp
+phòng thủ thứ hai (không phụ thuộc container cha có đúng hay không).
 
-### Xác nhận bằng đo lại
+#### Fix B — cột grid riêng cho nhãn (quyết định KIẾN TRÚC)
 
-Đo lại bằng đúng phương pháp Playwright ở bước 2 sau khi sửa — không phát
-hiện thay đổi (đã bằng nhau cả trước và sau, vì không tái hiện được lỗi
-gốc). **Không dừng ở đó**: đã thêm test hồi quy đọc thẳng nguồn CSS
-(`app.css.test.ts`, xem mục dưới) và chạy **kiểm mutation thật** — gỡ từng
-thuộc tính containment ra khỏi CSS và xác nhận test tương ứng đỏ đúng lúc:
+Nguyên nhân B không sửa được bằng tinh chỉnh px trong một cột dùng chung:
+badge và chữ message cạnh tranh cùng không gian là **sai về cấu trúc**, và
+mọi cách chỉnh `max-width` bên trong cột dùng chung chỉ **dịch chuyển điểm
+vỡ** chứ không loại bỏ nó.
+
+**Hai lựa chọn đã cân nhắc:**
+
+| | Cách | Vì sao chọn / không chọn |
+|---|---|---|
+| **(a)** ✅ | Tách nhãn thành **cột grid riêng** | **ĐÃ CHỌN.** Đúng cấu trúc: message có cột riêng, badge không bao giờ ăn vào. Khớp tham chiếu thiết kế GitKraken — `docs/screenshots/main-1.png` và `main-4.png` cho thấy cột `BRANCH / TAG` **tách biệt** khỏi cột `COMMIT MESSAGE`, và GitKraken xử lý đúng ca 4 nhãn này bằng cách cắt tên nhãn trong badge (`ma...`, `feature/uploa...`) chứ không để nó đẩy message. |
+| (b) ❌ | Giữ nhãn trong cột subject + `max-width` cứng cho `.ref-badges` | Không chọn: chỉ dịch điểm vỡ. Ở cửa sổ hẹp, cột subject chỉ còn 144px — dù giới hạn nhãn ở 40% (58px) thì message vẫn chỉ còn 86px, và bài toán cạnh tranh vẫn còn nguyên về bản chất. |
+
+```diff
+ .commit-row {
+   display: grid;
+-  grid-template-columns: max-content minmax(120px, 2fr) minmax(0, 1fr) minmax(60px, max-content) minmax(50px, max-content);
++  grid-template-columns: max-content minmax(0, max-content) minmax(120px, 2fr) minmax(0, 1fr) minmax(60px, max-content) minmax(50px, max-content);
+```
+
+```diff
++.commit-ref-cell {
++  display: flex;
++  align-items: center;
++  min-width: 0;
++  max-width: 220px;
++  max-height: 18px;
++  overflow: hidden;
++}
++
+ .ref-badge {
+-  flex-shrink: 0;
++  flex-shrink: 1;
++  min-width: 48px;
++  text-overflow: ellipsis;
+ }
+```
+
+`CommitList.tsx` — `RefBadges` chuyển ra khỏi `.commit-subject`, bọc trong
+ô grid `.commit-ref-cell` riêng.
+
+**Ba quyết định thiết kế đáng ghi lại:**
+
+1. **Cột nhãn là `minmax(0, max-content)`, KHÔNG phải `max-content` cứng.**
+   Sàn `0` nghĩa là cột **nhường chỗ được hoàn toàn** khi cửa sổ hẹp — trái
+   với cột date/sha `max-content` cứng từng gây lỗi co cột ở checkpoint round
+   1 của plan 02-05. Đây chính là lý do thêm cột mới lần này **không** lặp
+   lại lỗi cũ, dù bài học 02-05 cảnh báo về việc thêm cột.
+2. **`.commit-ref-cell` LUÔN render, kể cả khi không có ref.** `RefBadges`
+   trả `null` theo đúng đặc tả `<behavior>` ("không có ref → không render
+   gì"), nên nếu để nó tự làm ô grid thì hàng không nhãn sẽ **thiếu một ô** —
+   mọi ô sau đó dồn sang trái một cột và lệch cột so với hàng có nhãn. Ô rỗng
+   rộng 0px nên không tốn chỗ.
+3. **`min-width: 48px` cho `.ref-badge`, không phải `0`.** Đo thật ở cửa sổ
+   900px cho thấy `min-width: 0` làm badge co tới mức vô nghĩa (`m.`, `o.`,
+   `o.` — không đọc được nhãn nào). Thà hiện **ít** nhãn mà đọc được rồi gộp
+   phần còn lại vào `+N` (đúng cách GitKraken làm) còn hơn hiện nhiều nhãn
+   không đọc nổi.
+
+### Xác nhận bằng đo lại — trước/sau, cùng phương pháp Segoe UI thật
+
+| Cửa sổ | Cột subject TRƯỚC | Chữ hiện TRƯỚC | Cột subject SAU | Chữ hiện SAU |
+|---|---|---|---|---|
+| 1440px | 332px (badge ăn 258px) | **27%** | 178px | **66%** |
+| 1100px | 214px (badge ăn 258px) | **0%** | 120px (giữ sàn) | **44%** |
+| 900px | 144px (badge ăn 258px) | **0%** | 120px (giữ sàn) | **44%** |
+
+Hàng không nhãn: 98-100% ở 1440px, không đổi trước/sau (đúng — fix không
+được làm hỏng hàng bình thường). Ảnh chụp thật sau khi sửa ở 1440px cho
+`master H...` `origin/H...` `origin/m...` `+1` rồi tới chữ message — khớp
+bố cục tham chiếu GitKraken.
+
+### Test hồi quy mới (permanent safety net)
+
+`src/styles/app.css.test.ts` — **6 test mới tổng cộng** (3 cho fix A đọc
+nguồn CSS, 3 cho fix B kiểm **cấu trúc**). Ba test của fix B tồn tại vì
+coordinator chỉ ra đúng: test đọc chuỗi CSS **không bắt được** loại lỗi cạnh
+tranh không gian, và happy-dom cũng không (nó không tính grid track sizing):
+- `.commit-row có ĐÚNG 6 cột — cột nhãn ref là cột riêng`
+- `cột nhãn ref có sàn 0 để nhường chỗ được khi cửa sổ hẹp`
+- `RefBadges nằm trong .commit-ref-cell, không nằm trong .commit-subject`
+  (kiểm **cấu trúc DOM/JSX** — đây là test bắt trực tiếp đúng lỗi B)
+
+**Bảng mutation của fix B (đã chạy thật, khôi phục sau mỗi lần):**
 
 | # | Đột biến | Kết quả | Test nào bắt |
 |---|---|---|---|
-| 1 | `.commit-row`: bỏ `overflow: hidden; min-height: 0;` | **1 test đỏ** | `.commit-row có overflow: hidden VÀ min-height: 0` |
-| 2 | `.ref-badges`: bỏ `max-height: 18px; overflow: hidden;` | **1 test đỏ** | `.ref-badges có max-height và overflow: hidden` |
-| 3 | `.ref-badge`: bỏ `max-height: 16px; overflow: hidden;` | **1 test đỏ** | `.ref-badge có max-height khớp line-height` |
+| 4 | `CommitList.tsx`: đưa `RefBadges` trở lại **bên trong** `.commit-subject` (đúng lỗi gốc B) | **1 test đỏ** | `RefBadges nằm trong .commit-ref-cell, không nằm trong .commit-subject` |
+| 5 | `app.css`: bỏ cột nhãn khỏi `grid-template-columns` (về 5 cột) | **1 test đỏ** | `.commit-row có ĐÚNG 6 cột` |
 
-Cả ba đột biến đã khôi phục lại đúng trạng thái sau khi xác nhận đỏ.
+### Bài học
 
-### Test hồi quy mới (permanent safety net, cùng khuôn `app.css.test.ts` của 02-05)
+**Đo đúng thứ trong môi trường sai vẫn cho kết luận sai.** Vòng 1 đo chiều
+cao hàng — đúng thứ cần đo cho lỗi 1 — nhưng trong Chromium không có Segoe
+UI và ở full viewport thay vì vùng `main` 52%, nên cho âm tính giả. Hai sai
+số đó phải sửa **cùng lúc** mới tái hiện được: nạp phông thật qua
+`@font-face` **và** đo ở đúng bề rộng vùng chứa thật.
 
-`src/styles/app.css.test.ts` — 3 test mới, đọc thẳng nguồn CSS (lưới an
-toàn cấp hai, KHÔNG thay thế việc đo bằng trình duyệt thật khi có nghi ngờ
-hồi quy tương tự — xem doc comment đầy đủ trong tệp):
-- `.commit-row có overflow: hidden VÀ min-height: 0 (chặn grid track tự giãn)`
-- `.ref-badges có max-height và overflow: hidden — không được giãn theo nội dung`
-- `.ref-badge có max-height khớp line-height — không cho một badge tự cao hơn các badge khác`
+**Một triệu chứng có thể có nhiều nguyên nhân.** "Hàng cao hơn" và "hàng mất
+chữ" nhìn như một lỗi bố cục duy nhất, nhưng là hai nguyên nhân độc lập
+(containment chiều dọc vs. cạnh tranh không gian ngang). Sửa xong nguyên
+nhân A rồi báo cáo là **sớm** — nếu coordinator không đọc lại mã và chỉ ra
+`CommitList.tsx:164-165`, nguyên nhân chính đã lọt qua vòng 2.
 
-### Bài học — vì sao không tái hiện được, và ý nghĩa của việc đó
-
-Khác với checkpoint round 1 của 02-05 (tái hiện được bằng Chromium headless
-với số đo `subjectWidth: 0px` cụ thể), lần này **không** tái hiện được
-bằng cùng công cụ. Đây là kết quả trung thực cần ghi lại, không phải điều
-để giấu: nó có nghĩa cách sửa ở đây dựa trên **suy luận đúng về cấu trúc
-CSS** (grid item `min-height: auto` mặc định là sự thật luôn đúng theo đặc
-tả CSS, không phụ thuộc phông chữ), chứ không dựa trên việc "đo thấy lỗi,
-sửa, đo lại thấy hết lỗi" như round 1 của 02-05. Cách sửa (containment
-cứng) loại bỏ được lớp lỗi bất kể nguyên nhân đo đạc chính xác trên
-WebView2 là gì — nhưng **chỉ người dùng chạy lại vòng 2 trên app thật** mới
-xác nhận được liệu suy luận này có đúng hay không. Nếu vòng 2 vẫn thấy lỗi
-tương tự, đó là tín hiệu cần điều tra sâu hơn (có thể là đặc thù render
-của WebView2 khác cả Chromium lẫn suy luận CSS chuẩn ở đây), không phải
-lặp lại đúng cách sửa này.
+**Test đọc chuỗi CSS có trần rõ ràng.** `app.css.test.ts` bắt được "ai đó
+xoá `overflow: hidden`" nhưng **không thể** bắt "badge và message dùng chung
+cột" — lỗi đó nằm ở **quan hệ cấu trúc** giữa JSX và grid, không nằm trong
+một chuỗi CSS nào. Vì thế fix B cần test kiểm cấu trúc (đếm cột, kiểm vị trí
+`RefBadges` trong JSX), không phải thêm một assertion chuỗi nữa.
 
 ## Verify output (real, this session)
 
 ```
 npm run typecheck                        → exit 0
-npm test                                  → 176 passed (20 test files), 0 failed
-npm run build                             → success, dist/ 317.11 kB JS / 11.79 kB CSS
-npx tauri build --debug --no-bundle       → Built application at target\debug\git-plum.exe (rebuilt after checkpoint round 1 fix)
-cd src-tauri && cargo test                → 149 passed, 1 ignored (7 suites, 5.05s) — no regression
+npm test                                  → 179 passed (20 test files), 0 failed
+npm run build                             → success, dist/ 317.16 kB JS / 11.94 kB CSS
+npx tauri build --debug --no-bundle       → Built application at target\debug\git-plum.exe (rebuilt after BOTH checkpoint round 1 fixes)
+cd src-tauri && cargo test                → 149 passed, 1 ignored (7 suites, 2.57s) — no regression
 grep -rc 'dangerouslySetInnerHTML' src/   → 0
 grep -rln 'useVirtualizer(' src/ | wc -l  → 1 (src/components/history/CommitList.tsx)
 ```
 
 Test count arithmetic: baseline at close of 02-05 was **107**. This plan's
 Task 1-3 added 66 tests (173 total) — see per-file breakdown below. Checkpoint
-round 1's investigation added 3 more regression tests to `app.css.test.ts`
-(176 total). The plan estimated "48 ca" total across the three tasks'
+round 1 added 3 regression tests for fix A (176) and 3 structural regression
+tests for fix B (**179 total**). The plan estimated "48 ca" total across the three tasks'
 `<behavior>` blocks; actual delivered coverage is higher because several
 behaviors were split into multiple focused assertions or parameterized
 (`it.each`) for the six status labels in `FileList`.
@@ -428,11 +525,22 @@ chạy và báo lại bằng ảnh chụp, và vòng 2 cũng vậy. Bản dựng
 sàng tại `src-tauri\target\debug\git-plum.exe` (build lại SAU KHI sửa ba
 lỗi CSS ở checkpoint round 1, khớp 100% với mã đã commit ở `HEAD` hiện tại).
 
-**Đã sửa từ vòng 1, cần xác nhận lại đặc biệt ở bước 6 và bước 1-2:**
-- Bước 6 (chiều cao hàng có badge) — trực tiếp bị ảnh hưởng bởi cách sửa.
-- Bước 1-2 (thẳng hàng đồ thị lúc nghỉ/lúc cuộn) — hệ quả của lỗi 2 (canvas
-  lệch khỏi tâm hàng khi hàng đó cao bất thường); nếu sửa lỗi 1 đúng cách,
-  lỗi 2 tự hết vì `rowY(index)` lại khớp đúng vị trí DOM thật của mọi hàng.
+**Đã sửa HAI nguyên nhân từ vòng 1. Cần xác nhận lại đặc biệt:**
+- **Bước 5** (nhãn đúng hàng, local khác remote) — nhãn giờ ở **cột riêng**
+  bên trái cột thông điệp, giống bố cục GitKraken. Kiểm cả việc **chữ thông
+  điệp có hiện đầy đủ trên hàng CÓ nhãn** hay không — đây là lỗi chính của
+  vòng 1 (chữ bị nhãn ăn hết chỗ, hàng đó nhìn như chỉ có một dấu `.`).
+- **Bước 6** (chiều cao hàng có nhãn) — fix A nhắm trực tiếp vào việc này.
+- **Bước 1-2** (thẳng hàng đồ thị lúc nghỉ/lúc cuộn) — hệ quả của lỗi 2;
+  nếu fix A đúng, `rowY(index)` lại khớp vị trí DOM thật của mọi hàng.
+- **Kéo panel giữa hẹp lại rồi rộng ra** trong lúc kiểm: bài toán cạnh tranh
+  không gian chỉ lộ ra ở bề rộng hẹp, nên kéo qua nhiều bề rộng là cách bắt
+  hồi quy nhanh nhất. Ở bề rộng rất hẹp, nhãn sẽ bị cắt dần và gộp vào `+N` —
+  đó là hành vi ĐÚNG theo thiết kế (giống GitKraken), không phải lỗi.
+
+**Lưu ý:** có một tiến trình `git-plum.exe` đang chạy lúc build lại bản debug
+(đã `taskkill`) — nếu app đang mở từ trước, **phải đóng và mở lại** mới thấy
+bản đã sửa.
 
 **Đã tự động hoá xong, sẵn sàng cho người dùng kiểm:**
 - Toàn bộ 12 bước kiểm trong `<how-to-verify>` của Task 4 (xem
