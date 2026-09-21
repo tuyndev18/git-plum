@@ -1,3 +1,17 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: unknown
+last_updated: "2026-09-21T05:23:05.574Z"
+progress:
+  total_phases: 8
+  completed_phases: 0
+  total_plans: 4
+  completed_plans: 2
+  percent: 50
+---
+
 # Project State: git-plum
 
 **Last updated:** 2026-09-21
@@ -19,9 +33,9 @@
 | | |
 |---|---|
 | **Phase** | 1 — Nền tảng và lớp bọc git |
-| **Plan** | Chưa lập (chạy `/gsd-plan-phase 1`) |
-| **Status** | Roadmap đã xong, chờ lập kế hoạch phase |
-| **Progress** | Phase 0/8 hoàn thành |
+| **Plan** | 2/4 hoàn thành (01-01, 01-02) |
+| **Status** | Đang thực thi Phase 1 |
+| **Progress** | Phase 0/8 hoàn thành · Plan 2/4 của Phase 1 |
 
 ```
 [........] 0/8 phases
@@ -34,8 +48,13 @@
 | Metric | Value |
 |---|---|
 | Phases completed | 0 / 8 |
-| Plans completed | 0 |
-| v1 requirements delivered | 0 / 59 |
+| Plans completed | 2 |
+| v1 requirements delivered | 8 / 59 |
+
+| Plan | Thời lượng | Tasks | Files |
+|---|---|---|---|
+| Phase 1 P01 | 18min | 2 tasks | 2 files |
+| Phase 1 P02 | 9min | 3 tasks | 6 files |
 
 ---
 
@@ -50,6 +69,8 @@
 - **AI (Phase 7) là nhánh lá** — không có gì phụ thuộc vào nó, được phép cắt, và là ứng viên chạy song song với Phase 6.
 - **REL bị xé đôi**: REL-04 (CI ba nền tảng) vào Phase 1; REL-01/02/03 vào Phase 8.
 - **Không cam kết tổng thời gian.** Chuỗi phase là kế hoạch, thời lượng là đầu ra.
+- **PLAT-02 (plan 01-01)**: `GIT_CONFIG_PARAMETERS` ghim đủ `log.showSignature`, `diff.noprefix`, `format.coverLetter` qua hằng `PINNED_GIT_CONFIG` trong `src-tauri/src/git/exec.rs`. `diff.external` ghim riêng bằng `GIT_EXTERNAL_DIFF=""` vì biến môi trường thắng cấu hình.
+- **`--cleanup=whitespace` bàn giao cho Phase 4** qua `docs/02-phase4-commit-notes.md`: nó là tham số dòng lệnh của `git commit`, không đặt được trong lớp ghim môi trường, và Phase 1 chưa có lệnh commit nào.
 - Chi tiết đầy đủ các quyết định kỹ thuật: xem `.planning/PROJECT.md` mục Key Decisions và `.planning/research/SUMMARY.md` mục 3.
 
 ### Việc cần làm
@@ -100,9 +121,10 @@
 
 ## Session Continuity
 
-**Việc tiếp theo:** `/gsd-plan-phase 1`
+**Việc tiếp theo:** thực thi các plan còn lại của Phase 1 (01-03, 01-04). Đã xong: 01-01 (PLAT-02), 01-02.
 
 **Nếu mất ngữ cảnh, đọc theo thứ tự:**
+
 1. `.planning/ROADMAP.md` — cấu trúc 8 phase, tiêu chí thành công, ràng buộc từng phase
 2. `.planning/REQUIREMENTS.md` — 59 requirement v1 và bảng truy vết
 3. `.planning/PROJECT.md` — Core Value, ràng buộc, bảng Key Decisions (một số quyết định đã bị đảo ngược sau nghiên cứu)
