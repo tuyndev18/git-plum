@@ -19,6 +19,8 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
 
+    "types": ["vitest/globals", "vite/client"],
+
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src"],
