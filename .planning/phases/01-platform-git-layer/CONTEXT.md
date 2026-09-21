@@ -78,6 +78,12 @@ npm audit                ✅ 0 lỗ hổng
 ROADMAP đòi ghim `--cleanup=whitespace`, `diff.noprefix`, `format.coverLetter`.
 `exec.rs` hiện chỉ ghim `log.showSignature=false` qua `GIT_CONFIG_PARAMETERS`.
 
+> **Đính chính (2026-09-21):** bản đầu của mục này còn liệt kê `diff.external` là thiếu.
+> Sai. Nó đã được ghim từ commit `1002fa5`, bằng biến `GIT_EXTERNAL_DIFF=""` tại
+> `src-tauri/src/git/exec.rs:199` chứ không qua `GIT_CONFIG_PARAMETERS` — biến môi trường
+> thắng cấu hình nên cách này mạnh hơn. Chỉ còn `diff.noprefix` và `format.coverLetter`
+> là thiếu thật.
+
 Cả bốn phải nằm cùng một biến, dạng
 `'log.showSignature=false' 'diff.noprefix=false' 'format.coverLetter=false'`.
 `--cleanup=whitespace` là tham số dòng lệnh của `git commit`, không phải biến môi trường —
@@ -130,6 +136,31 @@ Người lập kế hoạch **không** đưa việc kiểm chứng đa nền t�
 
 ROADMAP ghi rõ: phải chạy kiểm thử và QA thủ công với locale hệ thống không phải tiếng Anh.
 Máy phát triển là Windows tiếng Việt, nên kiểm được ngay. Chưa làm.
+
+### G8. PLAT-09 chưa trọn — trạng thái bật tắt bảng nhật ký không sống sót qua lần khởi động
+
+Phát hiện khi rà soát kế hoạch, không phải lúc viết mã. Đã kiểm chứng trực tiếp trong mã:
+
+- `src/App.tsx:18` — `const [logVisible, setLogVisible] = useState(true)`. Là state React
+  thuần, không ghi vào đâu cả. Mỗi lần mở lại ứng dụng luôn quay về bật.
+- `src/components/AppLayout.tsx` — `Group` ngoài (mang `useDefaultLayout` của
+  `git-plum-outer`) chỉ được render khi prop `bottom` khác `undefined`.
+
+Hai điều trên cộng lại gây hai hệ quả:
+
+1. Người dùng tắt bảng nhật ký rồi thoát, mở lại thấy nó bật trở lại. Đây là **một phần
+   của bố cục không được ghi nhớ**, trong khi PLAT-09 nói kích thước và bố cục phải còn
+   nguyên sau khi mở lại.
+2. Khi bảng nhật ký đang tắt, `Group` ngoài bị gỡ khỏi cây React nên `git-plum-outer`
+   không ghi thêm gì. Kịch bản kiểm thử nào không đụng tới nút bật tắt sẽ **đỗ nhầm**.
+
+Ngoài ra, tài liệu của `react-resizable-panels` v4 cảnh báo riêng cho trường hợp `Group`
+chứa `Panel` render có điều kiện: phải truyền `panelIds` cho `useDefaultLayout`, nếu không
+bố cục lần đầu sẽ sai. `AppLayout` đúng là trường hợp đó. Đây là nguyên nhân khả dĩ nhất
+nếu phần kiểm bố cục trượt.
+
+Thêm một điểm cho Phase 2 biết: tham số `groupId` của `useDefaultLayout` **đã bị đánh dấu
+deprecated** trong v4, thay bằng `id`. Mã hiện dùng `groupId`, vẫn chạy nhưng nên đổi.
 
 ### G7. Tiêu chí thành công số 5 chưa kiểm — cửa sổ console
 
