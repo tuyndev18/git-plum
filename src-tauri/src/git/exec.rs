@@ -186,6 +186,30 @@ const LENH_CO_DIFF: [&str; 4] = ["diff", "show", "log", "diff-tree"];
 /// `-c key=value` dẫn đầu để tìm đúng vị trí lệnh con.
 ///
 /// Không chèn hai lần nếu người gọi đã tự thêm.
+///
+/// # Đo thêm: biến trỏ tới chương trình KHÔNG TỒN TẠI còn im lặng hơn chuỗi rỗng
+///
+/// Ca chuỗi rỗng (lỗi gốc) ít nhất còn ồn: exit 128 kèm stderr `cannot spawn`. Ca biến
+/// trỏ tới một đường dẫn không có thật thì tệ hơn — đo trên git 2.54.0.windows.1 với
+/// `GIT_EXTERNAL_DIFF=/nonexistent-prog`:
+///
+/// ```text
+/// show       exit=0  hunk=0  không stderr   ← mất bản vá, IM LẶNG HOÀN TOÀN
+/// diff       exit=0  hunk=0  không stderr   ← như trên
+/// diff-tree  exit=0  hunk=0  không stderr   ← như trên
+/// log -p     exit=0  hunk=1  không stderr   ← KHÔNG bị ảnh hưởng
+/// ```
+///
+/// Hai điều rút ra:
+///
+/// 1. Không thể dựa vào mã thoát để phát hiện trình diff ngoài đang phá bản vá. Người
+///    dùng có `GIT_EXTERNAL_DIFF` trỏ tới công cụ đã xoá sẽ thấy "không có thay đổi"
+///    thay vì một lỗi. Đây là lý do mạnh nhất để cờ `--no-ext-diff` nằm ở tầng này thay
+///    vì tin vào việc dọn môi trường.
+/// 2. `log` trong [`LENH_CO_DIFF`] là **phòng ngừa**, không phải sửa lỗi đã đo: `git log -p`
+///    vẫn in bản vá đúng trong cả hai ca. Giữ nó vì `log` có in bản vá và không có gì bảo
+///    đảm hành vi đó bất biến qua các bản git — thêm cờ vào một lệnh không cần thì vô hại,
+///    còn thiếu nó ở một lệnh cần thì lỗi im lặng.
 fn them_no_ext_diff(args: Vec<String>) -> Vec<String> {
     if args.iter().any(|a| a == "--no-ext-diff") {
         return args;
