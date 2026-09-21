@@ -6,17 +6,21 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 
 import { CommitSearch } from '@/components/history/CommitSearch'
 import { ipc, type Commit } from '@/lib/ipc'
 import { useHistoryStore } from '@/stores/historyStore'
 
-vi.mock('@/lib/ipc', () => ({
-  ipc: {
-    searchCommits: vi.fn(),
-  },
-}))
+vi.mock('@/lib/ipc', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/ipc')>('@/lib/ipc')
+  return {
+    ...actual,
+    ipc: {
+      searchCommits: vi.fn(),
+    },
+  }
+})
 
 const searchCommits = vi.mocked(ipc.searchCommits)
 
@@ -55,6 +59,7 @@ function seedRepo(commits: Commit[]) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  searchCommits.mockResolvedValue([])
   vi.useFakeTimers()
   useHistoryStore.setState({ byRepo: {} })
 })
@@ -76,11 +81,11 @@ describe('trì hoãn 250ms', () => {
     render(<CommitSearch repoId={REPO_ID} scrollToIndex={vi.fn()} />)
 
     const input = screen.getByRole('textbox')
-    typeInto(input, 'tu khoa')
+    act(() => typeInto(input, 'tu khoa'))
 
     expect(searchCommits).not.toHaveBeenCalled()
 
-    await vi.advanceTimersByTimeAsync(250)
+    await act(() => vi.advanceTimersByTimeAsync(250))
 
     expect(searchCommits).toHaveBeenCalledWith(REPO_ID, 'tu khoa')
   })
@@ -90,12 +95,12 @@ describe('trì hoãn 250ms', () => {
     render(<CommitSearch repoId={REPO_ID} scrollToIndex={vi.fn()} />)
 
     const input = screen.getByRole('textbox')
-    typeInto(input, 'x')
-    await vi.advanceTimersByTimeAsync(250)
+    act(() => typeInto(input, 'x'))
+    await act(() => vi.advanceTimersByTimeAsync(250))
     searchCommits.mockClear()
 
-    typeInto(input, '')
-    await vi.advanceTimersByTimeAsync(250)
+    act(() => typeInto(input, ''))
+    await act(() => vi.advanceTimersByTimeAsync(250))
 
     expect(searchCommits).not.toHaveBeenCalled()
   })
@@ -107,9 +112,10 @@ describe('kết quả', () => {
     searchCommits.mockResolvedValueOnce(['a', 'b'])
     render(<CommitSearch repoId={REPO_ID} scrollToIndex={vi.fn()} />)
 
-    typeInto(screen.getByRole('textbox'), 'x')
-    await vi.advanceTimersByTimeAsync(250)
-    await vi.waitFor(() => expect(screen.getByText(/1\s*\/\s*2/)).toBeTruthy())
+    act(() => typeInto(screen.getByRole('textbox'), 'x'))
+    await act(() => vi.advanceTimersByTimeAsync(250))
+
+    expect(screen.getByText(/1\s*\/\s*2/)).toBeTruthy()
   })
 
   it('không khớp -> thông báo "không tìm thấy", không bảng rỗng im lặng', async () => {
@@ -117,9 +123,10 @@ describe('kết quả', () => {
     searchCommits.mockResolvedValueOnce([])
     render(<CommitSearch repoId={REPO_ID} scrollToIndex={vi.fn()} />)
 
-    typeInto(screen.getByRole('textbox'), 'khong ton tai')
-    await vi.advanceTimersByTimeAsync(250)
-    await vi.waitFor(() => expect(screen.getByText(/không tìm thấy/i)).toBeTruthy())
+    act(() => typeInto(screen.getByRole('textbox'), 'khong ton tai'))
+    await act(() => vi.advanceTimersByTimeAsync(250))
+
+    expect(screen.getByText(/không tìm thấy/i)).toBeTruthy()
   })
 
   it('searchCommits ném lỗi -> hiện lỗi, hộp vẫn gõ được', async () => {
@@ -127,9 +134,10 @@ describe('kết quả', () => {
     searchCommits.mockRejectedValueOnce(new Error('boom'))
     render(<CommitSearch repoId={REPO_ID} scrollToIndex={vi.fn()} />)
 
-    typeInto(screen.getByRole('textbox'), 'x')
-    await vi.advanceTimersByTimeAsync(250)
-    await vi.waitFor(() => expect(screen.getByText(/boom/)).toBeTruthy())
+    act(() => typeInto(screen.getByRole('textbox'), 'x'))
+    await act(() => vi.advanceTimersByTimeAsync(250))
+
+    expect(screen.getByText(/boom/)).toBeTruthy()
 
     const input = screen.getByRole('textbox') as HTMLInputElement
     expect(input.disabled).toBe(false)
@@ -141,10 +149,10 @@ describe('kết quả', () => {
     const scrollToIndex = vi.fn()
     render(<CommitSearch repoId={REPO_ID} scrollToIndex={scrollToIndex} />)
 
-    typeInto(screen.getByRole('textbox'), 'x')
-    await vi.advanceTimersByTimeAsync(250)
-    await vi.waitFor(() => expect(screen.getByText(/1\s*\/\s*1/)).toBeTruthy())
+    act(() => typeInto(screen.getByRole('textbox'), 'x'))
+    await act(() => vi.advanceTimersByTimeAsync(250))
 
+    expect(screen.getByText(/1\s*\/\s*1/)).toBeTruthy()
     expect(scrollToIndex).toHaveBeenCalledWith(2)
   })
 })
