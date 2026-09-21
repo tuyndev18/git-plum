@@ -91,6 +91,14 @@ pub struct AppState {
     /// Là `Arc` để `GitRunner` giữ được một tham chiếu — mọi lệnh phải đổ vào
     /// cùng một nhật ký, nếu không người dùng sẽ thấy nhật ký thiếu.
     pub command_log: Arc<CommandLog>,
+    /// Cache lịch sử và ref, khoá theo `RepoId` (PLAT-05, HIST-01).
+    ///
+    /// Nằm ở `AppState` chứ không phải biến toàn cục hay `thread_local`: Tauri quản lý
+    /// vòng đời của `AppState`, nên cache sống và chết cùng ứng dụng mà không cần
+    /// `lazy_static`. Là `Arc` để command mượn được mà không giữ khoá của state.
+    ///
+    /// Chặn trên số lịch sử được giữ nằm ở `cache::MAX_CACHED_HISTORIES`.
+    pub cache: Arc<crate::cache::RepoCache>,
 }
 
 impl AppState {
@@ -99,6 +107,7 @@ impl AppState {
             open_repos: RwLock::new(HashMap::new()),
             active_repo: RwLock::new(None),
             command_log: Arc::new(CommandLog::new()),
+            cache: Arc::new(crate::cache::RepoCache::new()),
         }
     }
 
@@ -134,8 +143,15 @@ impl AppState {
         self.get_repo(&id)
     }
 
+    /// Đóng một repository và **giải phóng cache của nó**.
+    ///
+    /// Không gọi `cache.invalidate` ở đây thì một lịch sử ~67MB nằm lại trong RAM cho
+    /// một repo người dùng đã đóng, và `MAX_CACHED_HISTORIES` sẽ bảo vệ một thứ không
+    /// ai còn nhìn. Đây là ràng buộc RAM dưới 150MB của `PROJECT.md`, không phải dọn
+    /// dẹp cho gọn.
     pub fn close_repo(&self, id: &str) {
         self.open_repos.write().remove(id);
+        self.cache.invalidate(id);
         let mut active = self.active_repo.write();
         if active.as_deref() == Some(id) {
             *active = None;
@@ -222,6 +238,27 @@ mod tests {
         state.close_repo(&h.id);
         assert!(state.active_repo().is_none());
         assert!(state.list_repos().is_empty());
+    }
+
+    /// Đóng repository phải giải phóng cache của nó. Một lịch sử 100k commit là ~67MB;
+    /// giữ lại sau khi đóng là rò rỉ đúng nghĩa với ràng buộc RAM dưới 150MB.
+    #[test]
+    fn closing_repo_frees_its_cache() {
+        let state = AppState::new();
+        let h = state.open_repo("C:/work/repo");
+
+        state.cache.put_refs(&h.id, Vec::new());
+        assert!(
+            state.cache.get_refs(&h.id).is_some(),
+            "tiền đề: cache có dữ liệu"
+        );
+
+        state.close_repo(&h.id);
+
+        assert!(
+            state.cache.get_refs(&h.id).is_none(),
+            "đóng repository phải giải phóng cache của nó"
+        );
     }
 
     #[tokio::test]

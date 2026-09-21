@@ -1,22 +1,219 @@
 //! Phân tích đầu ra `git for-each-ref` theo byte — HIST-06, HIST-07, HIST-11.
+//!
+//! Một lệnh lấy hết: nhánh local, nhánh remote, tag, trạng thái thượng nguồn và cờ
+//! HEAD. Cùng nguyên tắc byte với [`crate::git::parsers::log`] — tên nhánh do người
+//! khác tạo ra không bảo đảm UTF-8, và một tên lạ không được làm mất cả danh sách.
 
-use crate::domain::Ref;
+use memchr::memchr_iter;
+
+use crate::domain::{Ref, RefKind};
 
 /// Chuỗi `--format=` của `git for-each-ref`. **Nguồn duy nhất** của định dạng này.
-pub const REFS_FORMAT: &str = "--format=%(refname)%x1f%(objectname)%x1f%(upstream)%x1f%(upstream:track)%x1f%(HEAD)%x1f%(*objectname)";
+///
+/// # Vì sao có `%(*objectname)` — trường thứ sáu mà tài liệu kế hoạch bỏ sót
+///
+/// Kế hoạch 02-04 đặc tả năm trường và dùng `%(objectname)` làm [`Ref::target`]. Đo
+/// thật trên một repo có tag có chú thích cho thấy điều đó **sai**:
+///
+/// ```text
+/// refs/tags/v1.0 | 5d051f68…(commit) | objecttype=commit | *objectname=
+/// refs/tags/v2.0 | dbf19145…(tag)    | objecttype=tag    | *objectname=5d051f68…
+/// ```
+///
+/// Với tag **có chú thích**, `%(objectname)` trả mã của *đối tượng tag*, không phải mã
+/// commit. `git cat-file -t dbf19145…` trả `tag`. Mã đó không xuất hiện ở bất kỳ hàng
+/// nào trong `git log`, nên nhãn tag sẽ **không neo được vào dòng nào** — nhãn biến
+/// mất khỏi đồ thị trong im lặng, đúng thứ must-have của plan này cấm ("Ref trỏ đúng
+/// mã commit để giao diện neo nhãn vào hàng commit").
+///
+/// `%(*objectname)` là mã đã giải tham chiếu, **rỗng** với ref không phải tag có chú
+/// thích. Vì vậy [`parse_refs`] lấy `*objectname` khi nó khác rỗng, còn lại lấy
+/// `objectname`. Xem test `tag_co_chu_thich_tra_ma_commit_khong_tra_ma_doi_tuong_tag`.
+///
+/// # 🔴 `%1f`, **không** phải `%x1f` — hai lệnh git dùng hai ngôn ngữ định dạng khác nhau
+///
+/// `for-each-ref` dùng ngôn ngữ `--format` của **ref**, không dùng ngôn ngữ
+/// `pretty-format` của `git log`. Escape byte thô ở đây là `%<hai chữ số hex>`, tức
+/// `%1f`. Chuỗi `%x1f` của `git log` **không** được diễn giải: git in ra đúng bốn ký
+/// tự `%`, `x`, `1`, `f`.
+///
+/// Đo thật trên git 2.54.0:
+///
+/// ```text
+/// $ git log -1 --format='%H%x1f%P' | od -c
+///   0 f 9 6 f e … 3 e 037 8 6 5 1 …        ← 037 = 0x1f, ĐÚNG
+///
+/// $ git for-each-ref --format='%(refname)%x1f%(objectname)' | od -c
+///   r e f s / h e a d s / m a i n % x 1 f 0 f 9 6 …  ← văn bản, SAI
+///
+/// $ git for-each-ref --format='%(refname)%1f%(objectname)' | od -c
+///   r e f s / h e a d s / m a i n 037 0 f 9 6 …      ← 037, ĐÚNG
+/// ```
+///
+/// `CONTEXT.md`, kế hoạch 02-04 và `docs/01-research-competitors.md` mục 5.2 đều ghi
+/// `%x1f` cho lệnh này. Cả ba **sai**. Hỏng kiểu này rất khó thấy: lệnh vẫn thoát 0,
+/// vẫn in ra dữ liệu trông hợp lý, chỉ là không có dấu phân tách nào — nên bộ phân
+/// tích thấy mỗi dòng có đúng một trường, bỏ hết, và thanh bên **rỗng trong im lặng**.
+/// Test đơn vị dựng buffer bằng tay không bao giờ bắt được: chúng tự chèn `0x1f`. Chỉ
+/// test tích hợp chạy git thật mới thấy — xem `tests/refs_fixtures.rs`.
+///
+/// Thứ tự: `%(refname) %(objectname) %(upstream) %(upstream:track) %(HEAD) %(*objectname)`,
+/// phân tách bằng `\x1f`, mỗi ref một dòng kết thúc bằng `\n`.
+///
+/// `%(*objectname)` đặt **cuối** có chủ ý: thêm trường vào cuối thì một đầu ra cũ
+/// (năm trường) vẫn đọc được phần đầu, còn chèn giữa sẽ làm lệch mọi trường sau nó.
+pub const REFS_FORMAT: &str = "--format=%(refname)%1f%(objectname)%1f%(upstream)%1f%(upstream:track)%1f%(HEAD)%1f%(*objectname)";
 
-/// Số trường REFS_FORMAT sinh ra.
-const FIELD_COUNT: usize = 6;
-
-/// Tham số của lệnh liệt kê ref.
+/// Tham số của lệnh liệt kê ref. Gom thành hằng cùng lý do như `LOG_ARGS`.
 pub const REFS_ARGS: &[&str] = &["for-each-ref"];
 
-/// Phân tích đầu ra `for-each-ref` đã định dạng bằng [`REFS_FORMAT`].
-pub fn parse_refs(_stdout: &[u8]) -> Vec<Ref> {
-    // RED: chưa cài. Các test dưới đây phải đỏ trước khi có cài đặt.
-    Vec::new()
+/// Byte phân tách trường (Unit Separator, `%x1f`).
+const UNIT_SEP: u8 = 0x1f;
+
+/// Số trường [`REFS_FORMAT`] sinh ra. Đổi định dạng thì đổi cả số này.
+const FIELD_COUNT: usize = 6;
+
+/// Giải mã một trường hiển thị từ byte sang `String`.
+///
+/// Không đánh dấu cờ lossy như `parse_log`: [`Ref`] không có trường
+/// `has_invalid_utf8`, và một tên nhánh hỏng mã hoá vẫn phải hiện ra để người dùng
+/// thấy nó tồn tại. **Không bao giờ** `from_utf8().unwrap()` — panic trên repo thật.
+fn lossy(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
 }
 
+/// Phân loại ref theo tiền tố và cắt tên rút gọn.
+///
+/// `refs/remotes/origin/main` cho `short_name == "origin/main"` chứ không phải `main`:
+/// HIST-06 đòi phân biệt local với remote, và hai nhánh cùng tên ngắn là chuyện thường.
+fn classify(full_name: &str) -> (RefKind, String) {
+    for (prefix, kind) in [
+        ("refs/heads/", RefKind::LocalBranch),
+        ("refs/remotes/", RefKind::RemoteBranch),
+        ("refs/tags/", RefKind::Tag),
+    ] {
+        if let Some(rest) = full_name.strip_prefix(prefix) {
+            return (kind, rest.to_owned());
+        }
+    }
+    // `refs/stash`, `refs/notes/*`, `refs/bisect/*`, và mọi thứ chưa nghĩ tới. Giữ
+    // nguyên tên đầy đủ làm tên hiển thị — cắt bừa một tiền tố không biết trước sẽ ra
+    // tên vô nghĩa, và một ref lạ hiện dưới nhóm "khác" tốt hơn là biến mất.
+    (RefKind::Other, full_name.to_owned())
+}
+
+/// Đọc một số thập phân không dấu ngay sau `nhan` trong `track`.
+///
+/// Không dùng regex — dự án không có crate `regex` và việc này không cần tới nó.
+///
+/// `track` có dạng `[ahead 3, behind 1]`, `[ahead 2]`, `[behind 5]`, `[gone]`, hoặc
+/// rỗng. Dấu ngoặc vuông là phần của định dạng git, nhưng hàm này **không** dựa vào
+/// chúng: nó chỉ tìm nhãn rồi đọc chữ số. Nhờ vậy một phiên bản git đổi dấu ngoặc
+/// vẫn đọc đúng số.
+///
+/// `LC_ALL=C` đã ghim ở `exec.rs`, nên nhãn luôn là tiếng Anh. Thiếu việc ghim đó thì
+/// hàm này sai trên máy đặt ngôn ngữ khác — một lỗi chỉ lộ trên máy người dùng.
+fn parse_track_count(track: &str, nhan: &str) -> u32 {
+    let Some(rest) = track.find(nhan).map(|i| &track[i + nhan.len()..]) else {
+        return 0;
+    };
+    let digits: String = rest
+        .trim_start()
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    // `saturating` thay vì `unwrap_or(0)` trên chuỗi dài: một giá trị vài trăm chữ số
+    // cho `u32::MAX` chứ không cho 0. Số đếm quá lớn vẫn là "rất nhiều", không phải
+    // "không có".
+    digits
+        .parse::<u32>()
+        .unwrap_or(if digits.is_empty() { 0 } else { u32::MAX })
+}
+
+/// Phân tích đầu ra `for-each-ref` đã định dạng bằng [`REFS_FORMAT`].
+///
+/// Không bao giờ panic và không trả `Result`, cùng lý do như
+/// [`crate::git::parsers::log::parse_log`]: một ref méo không được xoá trắng thanh bên.
+/// Dòng thiếu trường bị bỏ qua.
+pub fn parse_refs(stdout: &[u8]) -> Vec<Ref> {
+    let mut out = Vec::new();
+
+    for line in stdout.split(|&b| b == b'\n') {
+        // Bỏ `\r` cuối dòng: trên Windows git có thể kết thúc dòng bằng `\r\n`, và một
+        // `\r` sót lại trong trường cuối làm mọi phép so mã commit thất bại trong im
+        // lặng (cùng hạng lỗi với `\n` đầu bản ghi ở parse_log).
+        let line = match line.split_last() {
+            Some((b'\r', head)) => head,
+            _ => line,
+        };
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(r) = parse_line(line) {
+            out.push(r);
+        }
+    }
+
+    out
+}
+
+/// Phân tích **một** dòng. `None` khi dòng không đủ trường.
+fn parse_line(line: &[u8]) -> Option<Ref> {
+    let mut fields: Vec<&[u8]> = Vec::with_capacity(FIELD_COUNT);
+    let mut field_start = 0usize;
+    for sep in memchr_iter(UNIT_SEP, line) {
+        if fields.len() == FIELD_COUNT - 1 {
+            break;
+        }
+        fields.push(&line[field_start..sep]);
+        field_start = sep + 1;
+    }
+    fields.push(&line[field_start..]);
+
+    if fields.len() < FIELD_COUNT {
+        return None;
+    }
+
+    let full_name = lossy(fields[0]);
+    if full_name.is_empty() {
+        return None;
+    }
+    let (kind, short_name) = classify(&full_name);
+
+    let upstream = lossy(fields[2]);
+    let track = lossy(fields[3]);
+
+    // `%(HEAD)` trả `*` cho ref đang checkout và **một dấu cách** cho mọi ref khác —
+    // không phải chuỗi rỗng. Đo thật trên repo mẫu `wide`. So `== "*"` sau khi trim là
+    // đúng cho cả hai; so `!= ""` thì **mọi** ref đều thành HEAD.
+    let is_head = fields[4].contains(&b'*');
+
+    // Tag có chú thích: `%(objectname)` là mã đối tượng tag, `%(*objectname)` là mã
+    // commit. Xem doc của `REFS_FORMAT`.
+    let deref = lossy(fields[5]);
+    let target = if deref.is_empty() {
+        lossy(fields[1])
+    } else {
+        deref
+    };
+
+    Some(Ref {
+        full_name,
+        short_name,
+        kind,
+        target,
+        // `[gone]` giữ **nguyên tên** thượng nguồn: giao diện cần nói "origin/main đã
+        // mất" chứ không phải "không có thượng nguồn". Hai trạng thái đó khác nhau.
+        upstream: if upstream.is_empty() {
+            None
+        } else {
+            Some(upstream)
+        },
+        ahead: parse_track_count(&track, "ahead "),
+        behind: parse_track_count(&track, "behind "),
+        is_head,
+    })
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,7 +389,14 @@ mod tests {
     #[test]
     fn head_dau_sao_bat_co_dau_cach_thi_khong() {
         let mut buf = dong([b"refs/heads/main", &[b'a'; 40], b"", b"", b"*", b""]);
-        buf.extend(dong([b"refs/heads/other", &[b'b'; 40], b"", b"", b" ", b""]));
+        buf.extend(dong([
+            b"refs/heads/other",
+            &[b'b'; 40],
+            b"",
+            b"",
+            b" ",
+            b"",
+        ]));
         buf.extend(dong([b"refs/heads/third", &[b'c'; 40], b"", b"", b"", b""]));
 
         let out = parse_refs(&buf);
@@ -288,11 +492,11 @@ mod tests {
     /// `log_format_co_dung_so_truong` của `parse_log`.
     #[test]
     fn refs_format_co_dung_so_truong() {
-        let so_dau_phan_tach = REFS_FORMAT.matches("%x1f").count();
+        let so_dau_phan_tach = REFS_FORMAT.matches("%1f").count();
         assert_eq!(
             so_dau_phan_tach,
             FIELD_COUNT - 1,
-            "REFS_FORMAT có {} dấu %x1f nhưng FIELD_COUNT = {}",
+            "REFS_FORMAT có {} dấu %1f nhưng FIELD_COUNT = {}",
             so_dau_phan_tach,
             FIELD_COUNT
         );

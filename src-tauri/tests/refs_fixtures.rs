@@ -181,3 +181,61 @@ async fn tag_co_chu_thich_neo_vao_mot_hang_commit_that() {
         "tiền đề của test: đối tượng tag có chú thích phải có mã riêng, khác mã commit"
     );
 }
+
+/// **Cổng chống hồi quy cho cái bẫy đã thật sự xảy ra khi viết plan này.**
+///
+/// `for-each-ref` dùng escape `%1f`, còn `git log` dùng `%x1f`. Đặt `%x1f` vào định
+/// dạng này thì git in ra **văn bản** `%x1f` chứ không phải byte `0x1f`: lệnh vẫn thoát
+/// 0, vẫn có dữ liệu, chỉ là không có dấu phân tách nào — mỗi dòng thành một trường,
+/// `parse_refs` bỏ hết, và thanh bên rỗng trong im lặng.
+///
+/// Test này chạy `REFS_FORMAT` thật rồi khẳng định stdout **chứa byte 0x1f** và
+/// **không chứa** chuỗi văn bản `%x1f`. Khẳng định thứ hai là phần bắt lỗi: chỉ kiểm
+/// "có phân tích được ref nào không" sẽ không nói được vì sao khi nó đỏ.
+#[tokio::test]
+async fn refs_format_sinh_byte_phan_tach_that_khong_sinh_van_ban() {
+    let Some(repo) = require_fixture("linear") else {
+        return;
+    };
+
+    let out = GitCommand::new(&repo)
+        .args(REFS_ARGS)
+        .arg(REFS_FORMAT)
+        .run()
+        .await
+        .expect("for-each-ref phải chạy được");
+    assert_eq!(
+        out.status,
+        0,
+        "for-each-ref thất bại: {}",
+        out.stderr_lossy()
+    );
+
+    assert!(
+        out.stdout.contains(&0x1fu8),
+        "REFS_FORMAT phải sinh byte 0x1f thật. \
+         Dùng %x1f (escape của git log) thay vì %1f là nguyên nhân thường gặp nhất. \
+         stdout: {:?}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !text.contains("%x1f"),
+        "stdout chứa văn bản %x1f — git KHÔNG diễn giải escape đó trong for-each-ref: {text:?}"
+    );
+
+    // Và mỗi dòng phải cho đúng sáu trường, tức năm dấu phân tách.
+    for line in out.stdout.split(|&b| b == b'\n') {
+        if line.is_empty() {
+            continue;
+        }
+        let so_dau = line.iter().filter(|&&b| b == 0x1f).count();
+        assert_eq!(
+            so_dau,
+            5,
+            "mỗi dòng phải có đúng 5 dấu phân tách cho 6 trường, dòng này có {so_dau}: {:?}",
+            String::from_utf8_lossy(line)
+        );
+    }
+}
