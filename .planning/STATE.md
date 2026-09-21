@@ -107,7 +107,15 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 
 ### Việc cần làm
 
-- [ ] **Phase 1, việc đầu tiên**: dựng toolchain Rust. VS Build Tools 2022 (workload Desktop development with C++) **trước**, rồi rustup stable-msvc. Xác minh bằng `cargo build` chạy thành công. Không có bước này thì không kiểm chứng được gì khác.
+- [ ] **Sau khi Phase 2 xong: index dự án bằng gitnexus.** Quyết định của chủ dự án
+      2026-09-21. Lý do đợi: index bây giờ sẽ lỗi thời sau mỗi đợt, vì Phase 2 đang thêm
+      parser, thuật toán lane, command và toàn bộ lớp giao diện. Xong Phase 2 thì codebase
+      mới đủ hình dạng để đồ thị tri thức đáng giá. Chạy: `gitnexus analyze` ở gốc dự án.
+      Ba công cụ hỗ trợ đã cài sẵn và đang hoạt động — rtk 0.42.1, gitnexus (7 skill + MCP),
+      caveman (6 skill).
+- [x] ~~**Phase 1, việc đầu tiên**: dựng toolchain Rust~~ — xong. rustc/cargo 1.98.1,
+      toolchain `stable-x86_64-pc-windows-msvc`, workload C++ đã thêm vào VS Community 2022.
+      `cargo build`, `cargo test` và `npx tauri build` đều chạy tới đích.
 - [x] **Phase 2, chuẩn bị trước khi viết thuật toán lane**: xong ở plan 02-01 — chín repo mẫu tất định trong `target/fixtures/`, sinh bằng `bash scripts/fixtures/make-fixtures.sh`.
 - [x] **Phase 2**: repo đo hiệu năng — xong ở plan 02-01, nhưng **sinh** chứ không tải Linux kernel (`bash scripts/fixtures/make-perf-repo.sh`): 100 007 commit, 3 182 merge, `.git` 32MB, sinh trong 24 giây.
 - [ ] **Phase 6, trước khi chốt phạm vi**: chạy spike có giới hạn thời gian cho trình giải quyết xung đột trên CodeMirror 6.
@@ -115,19 +123,25 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 
 ### Vướng mắc
 
-- **Thiếu workload C++ trong Visual Studio.** Tình trạng máy phát triển tính đến 2026-09-21:
-  - ✅ rustc 1.98.1, cargo 1.98.1, toolchain `stable-x86_64-pc-windows-msvc` — đã cài đúng
-  - ✅ WebView2 153.0.4234.48 — có sẵn theo Windows 11
-  - ✅ Visual Studio Community 2022 — đã cài
-  - ❌ **Workload "Desktop development with C++" chưa được thêm vào bản VS Community đó**, nên không có `link.exe`. Thiếu nó thì `cargo build` vỡ ở bước liên kết.
+Không có vướng mắc nào đang chặn. Toolchain đã đủ:
 
-  Cách xử lý: thêm workload vào bản VS đã có, không cài Build Tools riêng.
-  ```powershell
-  & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe" modify `
-    --installPath "C:\Program Files\Microsoft Visual Studio\2022\Community" `
-    --add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended --quiet --norestart
-  ```
-  Xác minh: `cargo build` trong một crate bất kỳ chạy tới đích.
+- ✅ rustc 1.98.1, cargo 1.98.1, toolchain `stable-x86_64-pc-windows-msvc`
+- ✅ Visual Studio Community 2022 **kèm workload "Desktop development with C++"** — đã thêm,
+  `link.exe` có, `cargo build` và `npx tauri build` chạy tới đích
+- ✅ WebView2 153.0.4234.48 — có sẵn theo Windows 11
+- ✅ Node 22.16, npm 10.9.2, git 2.54.0.windows.1
+
+### Hai điều về môi trường, không chặn nhưng sẽ cắn lại
+
+- **PATH của cửa sổ dòng lệnh mở trước lúc cài rustup không có `.cargo\bin`.** Windows không
+  đẩy PATH mới vào tiến trình đang chạy. Triệu chứng: `npm run tauri:dev` báo
+  `failed to run 'cargo metadata' ... program not found` trong khi `cargo` chạy bình thường ở
+  chỗ khác. Cách chạy app không phụ thuộc điều này: bấm đúp `dev.cmd` ở gốc dự án — nó tự
+  thêm `.cargo\bin` vào PATH của phiên. Khởi động lại Windows một lần là hết hẳn.
+- **OneDrive giữ handle thư mục không đều.** `rm -rf` thất bại *một phần* nhưng vẫn trả mã 0,
+  nên script chạy tiếp trên thư mục còn sót rồi vỡ ở chỗ khác với thông điệp vô nghĩa
+  (`fatal: cannot lock ref 'HEAD'`). `scripts/fixtures/make-fixtures.sh` nay phát hiện và dừng
+  ngay (commit `65a32bd`). Gặp lỗi này thì chạy lại thường là xong.
 
 ### Cổng dogfood đang chờ
 
