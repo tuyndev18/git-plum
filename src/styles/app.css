@@ -465,9 +465,20 @@ button:disabled {
   pointer-events: none;
 }
 
+/*
+ * Cột subject KHÔNG BAO GIỜ được co về 0px — đó chính là lỗi checkpoint round 1
+ * (xem 02-05-SUMMARY.md "checkpoint round 1: REJECTED"). Trước đây
+ * `minmax(0, 2fr)` cho phép subject co về đúng 0px khi cột gutter (theo lane
+ * count, tới 288px ở MAX_VISIBLE_LANES=20) cộng hai cột max-content
+ * (author/time cố định theo nội dung) chiếm gần hết bề rộng ở cửa sổ hẹp —
+ * đo thật bằng Chromium tại 900px + maxLane~19 cho subjectWidth = 0px, dữ
+ * liệu DOM vẫn đúng nhưng không hiển thị được ký tự nào. `minmax(120px, 2fr)`
+ * đặt sàn cứng: subject luôn có tối thiểu 120px để hiện vài chục ký tự đầu,
+ * dù phải giẫm lên `.commit-author`/`.commit-time` (giờ co được, xem dưới).
+ */
 .commit-row {
   display: grid;
-  grid-template-columns: max-content minmax(0, 2fr) minmax(0, 1fr) max-content max-content;
+  grid-template-columns: max-content minmax(120px, 2fr) minmax(0, 1fr) minmax(60px, max-content) minmax(50px, max-content);
   align-items: center;
   gap: 10px;
   padding: 0 10px;
@@ -508,6 +519,9 @@ button:disabled {
 }
 
 .commit-sha {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-faint);

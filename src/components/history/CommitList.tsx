@@ -8,7 +8,7 @@
  * lệch hàng bất khả thi về mặt cấu trúc, không phải "được sửa cho thẳng".
  */
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
 import { ROW_HEIGHT, graphWidth } from '@/lib/graph-render/geometry'
@@ -79,7 +79,29 @@ export function CommitList({ repoId, selectedCommitId, onSelect }: Props) {
     [renderRows],
   )
 
-  const scrollHeight = scrollRef.current?.clientHeight ?? 0
+  // `scrollRef.current?.clientHeight` đọc trực tiếp trong thân render từng bị
+  // kẹt ở 0: lần render đầu tiên `scrollRef.current` còn `null` (ref chưa gắn),
+  // và không có gì buộc component render lại SAU KHI container có kích thước
+  // thật — GraphCanvas có thể nhận `height=0` vĩnh viễn nếu không có re-render
+  // nào khác xảy ra tình cờ. `ResizeObserver` theo dõi kích thước thật và ép
+  // một lần render lại đúng lúc container có chiều cao, để canvas luôn vẽ
+  // đúng vùng nhìn thấy được.
+  const [scrollHeight, setScrollHeight] = useState(0)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    setScrollHeight(el.clientHeight)
+
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (entry) setScrollHeight(entry.contentRect.height)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   return (
     <div ref={scrollRef} className="commit-scroll" data-testid="commit-scroll">
