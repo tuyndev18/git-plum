@@ -117,7 +117,16 @@ Plans:
 **Ràng buộc**: Nạp lười các chế độ ngôn ngữ CodeMirror theo phần mở rộng tệp — có hơn 30 gói, nhập sẵn tất cả sẽ phình bundle và hại thời gian khởi động, mà đó là Core Value. Không cài gói meta `codemirror`. Bộ nhớ đệm diff theo LRU (~200 mục), **không bao giờ cần vô hiệu hoá** với commit lịch sử vì diff của commit là bất biến. Dùng đầu ra kết thúc bằng NUL cho mọi biến thể diff có mang tên tệp.
 **Validation checkpoint**: #3 `@codemirror/merge` **tự tính diff từ hai tài liệu đầy đủ** — trong khi git đã đưa sẵn diff. Đo với một tệp lớn thật. Nếu chậm: tự vẽ hunk bằng decoration của CodeMirror, điều khiển bằng đầu ra `git diff`.
 **Exit gate (dogfood, bắt buộc)**: Bản chỉ-đọc lịch sử-cộng-diff phải được tác giả dùng hằng ngày trên repo thật của mình — gồm cả repo của chính dự án này và ít nhất một repo bên thứ ba lớn, lộn xộn — **trước khi bắt đầu bất kỳ việc nào thuộc thư mục làm việc.** Đây là cổng thoát phase, không phải điều nên có.
-**Plans**: TBD
+**Plans**: 5 plans (5 wave, tuần tự — mỗi plan tiêu thụ kiểu hoặc tệp của plan trước, không có hai plan nào chạy song song được)
+
+Phạm vi gồm DIFF-01…DIFF-06 **cộng word-level diff** (tô riêng phần chữ thay đổi trong một dòng đã sửa — chủ dự án yêu cầu rõ 2026-09-21, không nằm trong DIFF-01..06). **Bỏ** theo quyết định cùng ngày: minimap, nhãn encoding tệp, Blame, "Edit in Working Directory" (thuộc Phase 4).
+
+Plans:
+- [ ] 03-01-PLAN.md — Checkpoint #3 ở wave 1: đo `@codemirror/merge` so với tự vẽ hunk trên tệp lớn thật, ngưỡng chốt trước (250ms tốt nhất / 400ms tệ nhất, profile release)
+- [ ] 03-02-PLAN.md — Hợp đồng dữ liệu diff + bộ phân tích unified diff viết tay + cache LRU 200 mục khoá `(sha, path)` + cổng DIFF-06 chạy TRƯỚC `git diff` (ngưỡng 5 MB)
+- [ ] 03-03-PLAN.md — Word-level diff từ `git diff --word-diff=porcelain` (chính tả `--word-diff-porcelain` **không tồn tại** — đã đo trên git 2.54)
+- [ ] 03-04-PLAN.md — Trình xem CodeMirror: tô màu cú pháp nạp lười, hai chế độ, nhảy khối, hiện khoảng trắng (DIFF-01..04, 06) + checkpoint hiển thị 11 bước
+- [ ] 03-05-PLAN.md — Lịch sử một tệp qua `git log --follow` (DIFF-05) + **exit gate dogfood**
 **UI hint**: yes
 
 ### Phase 4: Vòng lặp commit theo tệp
@@ -239,7 +248,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Nền tảng và lớp bọc git | 3/4 | In Progress|  |
 | 2. Lịch sử và đồ thị nhánh | 3/7 | In Progress|  |
-| 3. Xem khác biệt | 0/? | Not started | - |
+| 3. Xem khác biệt | 0/5 | Planned | - |
 | 4. Vòng lặp commit theo tệp | 0/? | Not started | - |
 | 5. Staging theo khối và an toàn khi huỷ | 0/? | Not started | - |
 | 6. Nhánh, remote và xung đột | 0/? | Not started | - |
