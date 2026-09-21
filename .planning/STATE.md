@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-09-21T19:35:00.000Z"
+last_updated: "2026-09-21T19:55:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
@@ -34,7 +34,7 @@ progress:
 |---|---|
 | **Phase** | 2 — Lịch sử và đồ thị nhánh |
 | **Plan** | 5 / 7 xong, **02-06 Task 1-3 xong, checkpoint Task 4 VÒNG 1 bị từ chối + đã sửa, chờ VÒNG 2** |
-| **Status** | Plan 02-06: `selectionStore`, `refsStore`, `uiStore`, `fileTree.ts`, `CommitDetail`, `FileList`, `RefBadges`, `RefSidebar`, `CommitSearch` đã cài đủ, nối vào `App.tsx`, 176 test xanh (176 tổng, từ nền 107: 66 test Task 1-3 + 3 test hồi quy CSS checkpoint round 1). `npm run typecheck`/`npm test`/`npm run build`/`tauri build --debug`/`cargo test` đều xanh, không hồi quy. **Checkpoint round 1 bị từ chối**: ba lỗi bố cục CSS (hàng có badge cao hơn hàng thường, đồ thị lệch tâm hàng, badge chồng/tràn) — đã sửa bằng CSS containment (`7596e63`), không tái hiện được bằng Chromium headless (ghi trung thực). **Chờ người dùng chạy lại VÒNG 2**, đặc biệt bước 6 và 1-2. Xem `02-06-SUMMARY.md` mục "Checkpoint round 1: REJECTED". |
+| **Status** | Plan 02-06: `selectionStore`, `refsStore`, `uiStore`, `fileTree.ts`, `CommitDetail`, `FileList`, `RefBadges`, `RefSidebar`, `CommitSearch` đã cài đủ, nối vào `App.tsx`, **179 test xanh** (từ nền 107: 66 test Task 1-3 + 3 test hồi quy fix A + 3 test hồi quy cấu trúc fix B). `npm run typecheck`/`npm test`/`npm run build`/`tauri build --debug`/`cargo test` đều xanh, không hồi quy. **Checkpoint round 1 bị từ chối**: ba lỗi bố cục CSS có **HAI nguyên nhân độc lập** — (A) containment chiều cao Grid, sửa ở `7596e63`; (B) **nguyên nhân chính**: nhãn ref và chữ message cạnh tranh cùng một cột grid, đã tái hiện bằng số đo với Segoe UI thật (nhóm 4 badge 258px vs cột subject 144px → chữ hiện 0%), sửa bằng cột grid riêng cho nhãn ở `5ac43ef`/`970e31c`. **Chờ người dùng chạy lại VÒNG 2**, đặc biệt bước 5 (chữ message trên hàng có nhãn), 6, 1-2. Xem `02-06-SUMMARY.md` mục "Checkpoint round 1: REJECTED". |
 | **Progress** | Phase 1/8 · Phase 2 plan 5/7 (02-06 đang dở, checkpoint vòng 1 rejected + đã sửa, chờ vòng 2) |
 
 ```
@@ -75,7 +75,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 2 P03 | 65min | 3 tasks | 14 files |
 | Phase 2 P04 | 85min | 3 tasks | 14 files |
 | Phase 2 P05 | ~110min (Task 1-3) + ~90min (checkpoint round 1: điều tra + sửa) | 4/4 tasks | 16 files |
-| Phase 2 P06 | ~95min (Task 1-3) + ~45min (checkpoint round 1: điều tra + sửa) — chờ vòng 2 | 3/4 tasks | 18 files |
+| Phase 2 P06 | ~95min (Task 1-3) + ~45min (round 1 fix A: chiều cao) + ~40min (round 1 fix B: cột grid riêng cho nhãn) — chờ vòng 2 | 3/4 tasks | 18 files |
 
 ---
 
@@ -159,22 +159,45 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 chờ vòng 2.** Người dùng tự chạy app thật (WebView2/Windows), báo ba lỗi cụ thể ở bước 6 kèm
 ảnh chụp thật: (1) hàng có nhiều badge ref cao hơn hàng thường, (2) chấm đồ thị lệch khỏi tâm
 hàng đó (hệ quả trực tiếp của lỗi 1 — canvas vẽ theo `ROW_HEIGHT` cố định trong khi DOM row
-thật đã cao hơn), (3) badge chồng/tràn khỏi cột thay vì co gọn hiện `+N`. Nguyên nhân gốc suy
-luận từ cấu trúc CSS: `.commit-row` là container Grid, grid item mặc định `min-height: auto`
-(không phải `0`), nên nội dung `.ref-badges` có thể ép track Grid cao lên vượt `height: 28px`
-dù `.commit-subject` bên trong có `overflow: hidden`. **Không tái hiện được bằng
-Playwright/Chromium headless** (ghi trung thực, không giả vờ — có thể do phông Segoe UI thật
-trên Windows đo khác phông thay thế trong Chromium tải rời). Đã sửa bằng containment cứng:
-`overflow: hidden; min-height: 0;` trên `.commit-row`, `max-height` + `overflow: hidden` trên
-`.ref-badges`/`.ref-badge` (`7596e63`), có test hồi quy mới trong `app.css.test.ts` (3 test,
-kiểm mutation thật cả ba). Xây lại `tauri build --debug --no-bundle` xong. **KHÔNG tự phê
-duyệt lại** — chờ người dùng chạy lại đúng 12 bước, đặc biệt bước 6 và 1-2. Xem
-`02-06-SUMMARY.md` mục "Checkpoint round 1: REJECTED" cho điều tra đầy đủ.
+thật đã cao hơn), (3) badge chồng/tràn khỏi cột thay vì co gọn hiện `+N`.
+
+**Ba lỗi đó có HAI nguyên nhân độc lập, cả hai đã sửa:**
+
+- **Nguyên nhân A (chiều cao) — `7596e63`.** `.commit-row` là container Grid, grid item mặc
+  định `min-height: auto` (không phải `0`), nên nội dung con có thể ép track Grid cao lên vượt
+  `height: 28px` dù `.commit-subject` bên trong có `overflow: hidden`. Sửa bằng containment
+  cứng: `overflow: hidden; min-height: 0;` trên `.commit-row`, `max-height` + `overflow:
+  hidden` trên `.ref-badges`/`.ref-badge`. **Không tái hiện được bằng số đo** (ghi trung thực)
+  nhưng đúng theo đặc tả CSS. 3 test hồi quy trong `app.css.test.ts`, kiểm mutation cả ba.
+- **🔴 Nguyên nhân B (badge ăn hết chỗ của chữ) — `5ac43ef`, `970e31c`. ĐÂY LÀ NGUYÊN NHÂN
+  CHÍNH.** Tìm ra ở vòng điều tra 2 sau khi coordinator đọc mã và chỉ ra
+  `CommitList.tsx:164-165`: `RefBadges` render **bên trong** `.commit-subject` nên badge và chữ
+  message cạnh tranh **cùng một cột grid**. **Đã tái hiện được bằng số đo** với Segoe UI THẬT
+  (nạp từ `C:/Windows/Fonts` qua `@font-face`) ở đúng bề rộng vùng `main` thật (52% cửa sổ):
+  nhóm 4 badge chiếm **258px** trong khi cột subject chỉ còn 332px (cửa sổ 1440px) → 144px
+  (cửa sổ 900px), chữ message hiển thị **27% → 0%**. Hàng không badge vẫn hiện chữ bình thường
+  — khớp chính xác ảnh người dùng. Dấu `.` người dùng thấy **không phải** message thật, mà là
+  phần đuôi ellipsis còn sót (ngược với 02-05 round 1, nơi `.` là message thật). Sửa bằng
+  **quyết định kiến trúc**: badge có **cột grid riêng** (`.commit-ref-cell`, cột 2,
+  `minmax(0, max-content)`), khớp tham chiếu GitKraken (`docs/screenshots/main-1.png`,
+  `main-4.png` — cột `BRANCH / TAG` tách biệt khỏi `COMMIT MESSAGE`). 3 test hồi quy **cấu
+  trúc** (đếm cột, sàn 0 của cột badge, vị trí `RefBadges` trong JSX), kiểm mutation cả hai
+  chiều. Sau sửa: chữ message hiện 66% (1440px) / 44% (900px, giữ sàn 120px).
+
+**Vì sao vòng điều tra 1 cho âm tính giả:** đo trong Chromium **không có Segoe UI** (rơi về
+phông thay thế hẹp hơn) **và** ở full viewport thay vì vùng `main` 52% thật — hai sai số cộng
+dồn. Bài học: đo layout phải khớp CẢ phông CẢ bề rộng vùng chứa thật; và test đọc chuỗi CSS
+không thể bắt lỗi *quan hệ cấu trúc* (badge dùng chung cột với message), phải test cấu trúc.
+
+Xây lại `tauri build --debug --no-bundle` xong sau CẢ HAI fix. **KHÔNG tự phê duyệt lại** —
+chờ người dùng chạy lại 12 bước, đặc biệt **bước 5** (chữ message có hiện đủ trên hàng có
+nhãn), bước 6, bước 1-2, và kéo panel giữa qua nhiều bề rộng. Xem `02-06-SUMMARY.md` mục
+"Checkpoint round 1: REJECTED" cho điều tra đầy đủ.
 
 **Yêu cầu riêng của người dùng về đổi theme/icon/font giống GitKraken hơn** đã ghi vào
 `PROJECT.md` (`5417400`) nhưng người dùng nói "sau này sửa sau" — KHÔNG làm trong lần sửa
 checkpoint round 1 này, chỉ sửa đúng ba lỗi layout CSS nêu trên. Xác nhận qua `git show
-7596e63` không có dòng nào đổi màu/font/icon.
+7596e63`, `git show 5ac43ef`, `git show 970e31c` không có dòng nào đổi màu/font/icon.
 
 Checkpoint #2 (canvas hay SVG, plan 02-05) đã **đóng**:
 vòng 1 người dùng từ chối vì cột thông điệp commit co về gần như trống ở cửa sổ hẹp + nhiều
@@ -254,9 +277,10 @@ có catalog dịch. Đáng làm trước khi phát hành công khai (Phase 8), k
 ## Session Continuity
 
 **Việc tiếp theo:** Resume `02-06-PLAN.md` Task 4 — checkpoint người dùng thật VÒNG 2
-(gate=blocking). Vòng 1 đã chạy và bị từ chối (ba lỗi bố cục CSS), đã sửa (`7596e63`), commit
-đủ (11 commit, xem `02-06-SUMMARY.md`). KHÔNG cần agent viết thêm mã trừ khi vòng 2 trả về
-"không đạt" cho một bước cụ thể.
+(gate=blocking). Vòng 1 đã chạy và bị từ chối (ba lỗi bố cục CSS, **hai nguyên nhân độc lập**),
+đã sửa cả hai (`7596e63` fix A chiều cao, `5ac43ef`+`970e31c` fix B cột grid riêng cho nhãn),
+commit đủ (14 commit, xem `02-06-SUMMARY.md`). KHÔNG cần agent viết thêm mã trừ khi vòng 2 trả
+về "không đạt" cho một bước cụ thể.
 
 **Để resume:** đọc `02-06-SUMMARY.md` mục "Task 4 — CHECKPOINT ROUND 1 REJECTED, đã sửa, cần
 người dùng kiểm lại VÒNG 2" để lấy nguyên văn 12 bước kiểm, chuyển cho người dùng thật chạy
@@ -293,6 +317,24 @@ cầu đổi theme giống GitKraken hơn "sau này sửa sau" (`PROJECT.md` com
   `overflow: hidden` hay không (`overflow: hidden` trên con chỉ cắt nội dung của chính nó).
   Đã sửa ở checkpoint round 1 của 02-06 (`7596e63`), không tái hiện được bằng Chromium headless.
   Nếu sau này thêm nội dung mới vào `.commit-row` (không chỉ badge), áp dụng lại nguyên tắc này.
+- **🔴 Nhãn ref (`RefBadges`) có CỘT GRID RIÊNG (`.commit-ref-cell`), KHÔNG dùng chung cột với
+  chữ message** (checkpoint round 1 của 02-06, `5ac43ef` — **đảo ngược** quyết định ban đầu của
+  chính plan 02-06 là đặt nhãn inline trong `.commit-subject`). Lý do: dùng chung cột nghĩa là
+  nhãn ăn vào không gian của chữ — đo thật với Segoe UI, nhóm 4 nhãn chiếm 258px trong khi cột
+  subject chỉ còn 144px ở cửa sổ 900px, chữ message hiển thị **0%**. Cột nhãn là
+  `minmax(0, max-content)` (sàn `0` nên nhường chỗ được hoàn toàn — đó là lý do thêm cột ở đây
+  KHÔNG lặp lại lỗi co cột của 02-05, lỗi đó do cột `max-content` cứng không bao giờ co).
+  `.commit-ref-cell` **luôn render** kể cả khi không có ref, nếu không hàng không nhãn sẽ thiếu
+  một ô grid và mọi ô sau dồn sang trái. `.ref-badge` có `min-width: 48px` (không phải `0`) để
+  nhãn không teo thành một ký tự vô nghĩa. Bố cục này khớp tham chiếu GitKraken.
+- **🔴 Đo layout phải khớp CẢ phông CẢ bề rộng vùng chứa thật** (bài học đắt nhất của checkpoint
+  round 1 plan 02-06): vòng điều tra 1 đo trong Chromium **không có Segoe UI** (rơi về phông
+  thay thế hẹp hơn) và ở **full viewport** thay vì vùng `main` 52% thật → **âm tính giả**, kết
+  luận sai là "không tái hiện được". Nạp phông thật qua `@font-face` từ `C:/Windows/Fonts` và
+  đặt viewport bằng 52% cửa sổ mới tái hiện được ngay. Quy trình đo lại dùng được cho lần sau.
+- **Test đọc chuỗi CSS có trần**: `app.css.test.ts` bắt được "ai xoá `overflow: hidden`" nhưng
+  KHÔNG bắt được lỗi *quan hệ cấu trúc* (nhãn dùng chung cột với message) — lỗi đó cần test
+  **cấu trúc** (đếm số cột grid, kiểm vị trí `RefBadges` trong JSX), đã thêm ở `5ac43ef`.
 
 Phase 1 đã đóng, 4/4 plan: 01-01 (PLAT-02 ghim cấu hình git), 01-02 (hạ tầng test giao diện),
 01-03 (PLAT-07 danh sách repository gần đây), 01-04 (kịch bản QA + checkpoint locale).
