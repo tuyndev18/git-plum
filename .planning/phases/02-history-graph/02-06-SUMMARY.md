@@ -70,7 +70,7 @@ decisions:
 
 requirements-completed: []
 
-duration: "~95min (Task 1-3 automated) + ~45min (round 1 fix A: row-height containment) + ~40min (round 1 fix B: reproduced badge/message space competition with real Segoe UI, moved badges to their own grid column) + ~25min (round 1 fix C: graph edges overdrawing the next row) — Task 4 checkpoint round 2 NOT YET RUN"
+duration: "~95min (Task 1-3 automated) + ~45min (round 1 fix A: row-height containment) + ~40min (round 1 fix B: reproduced badge/message space competition with real Segoe UI, moved badges to their own grid column) + ~25min (round 1 fix C: graph edges overdrawing the next row, then redrawing branch edges as right angles instead of diagonals to match the reference) — Task 4 checkpoint round 2 NOT YET RUN"
 completed: "2026-09-21 (Task 1-3 + all three checkpoint round 1 fixes; awaiting round 2 human re-verification)"
 ---
 
@@ -106,6 +106,8 @@ bài học của checkpoint round 1 plan 02-05.
   `y + 1.5 * ROW_HEIGHT`, tức nửa hàng vượt quá ô của chính nó, đè vào ô hàng
   kế tiếp ở lane khác. Sửa: mỗi hàng vẽ strictly trong `[y, y + ROW_HEIGHT]`.
   Không test nào trong 179 test cũ bắt được vì **không test nào đọc toạ độ Y**.
+  Kèm nửa thứ hai của cùng báo cáo: cạnh rẽ nhánh vẽ **bezier chéo ~63°** thay
+  vì **góc vuông** như tham chiếu — đã sửa thành ngang-rồi-gập-vuông (`e272965`).
 
 Vòng điều tra 1 cho **âm tính giả** vì đo trong Chromium không có Segoe UI và
 ở full viewport thay vì vùng `main` 52% thật — chi tiết ở mục dưới. Chờ người
@@ -391,6 +393,31 @@ với toạ độ cũ. Tổng test: **182**.
 test một nửa. Bộ test canvas cũ kiểm rất kỹ trục X (lane nào, màu nào) nhưng
 bỏ trắng trục Y — đúng trục mà `ROW_HEIGHT`/`rowY` và ràng buộc thẳng hàng
 HIST-04 sống trên đó.
+
+### Nguyên nhân C phần 2 — cạnh rẽ nhánh vẽ đường chéo thay vì góc vuông (`e272965`)
+
+Nửa còn lại của cùng báo cáo "đồ thị khó đọc". Tham chiếu
+(`docs/screenshots/main-4.png`) vẽ cạnh rẽ nhánh thành **đoạn ngang tới lane
+đích rồi gập góc vuông xuống** — thấy rõ ở `v1.09.001` và mọi merge bên dưới.
+Đó là lý do đồ thị của GitKraken vẫn đọc được với hàng chục nhánh song song:
+mắt theo được đoạn ngang và đoạn dọc **riêng biệt**.
+
+Bản của ta vẽ **bezier chéo**. Với `LANE_WIDTH` 14px so với `ROW_HEIGHT` 28px,
+đường chéo chạy ở khoảng **63°** — gần dọc đủ để nhiều đường cắt qua cùng một
+vùng trở nên khó phân biệt, đúng như người dùng mô tả.
+
+**Sửa:** đoạn ngang ở **tâm hàng nguồn** (để cạnh mọc ra từ nút commit chứ
+không lơ lửng giữa hai hàng), một góc bo nhỏ, rồi đoạn dọc xuống mép dưới. Bán
+kính góc bo bị **clamp** vào nửa khoảng cách còn lại trên **cả hai** trục nên
+không bao giờ vượt quá khi hai lane sát nhau. Test cũ vẫn xanh vì chúng khẳng
+định `bezierCurveTo` **được gọi** (góc bo vẫn dùng nó) và các test containment
+thêm ở `60a0caa` vẫn đúng.
+
+**🔶 Còn mở, cần quyết định riêng:** `LANE_WIDTH = 14px` hẹp hơn tham chiếu
+(~22px), nhưng cap 20 lane trong `docs/04-phase2-degraded-graph.md` **suy ra
+từ** chính con số 14px — đổi `LANE_WIDTH` là đổi luôn cap. Không sửa trong
+vòng này; ghi lại để quyết định khi làm phase dựng lại bố cục (xem
+`docs/05-ui-reference-gap.md`).
 
 ### Bài học
 

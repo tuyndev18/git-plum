@@ -346,6 +346,17 @@ cầu đổi theme giống GitKraken hơn "sau này sửa sau" (`PROJECT.md` com
 - **Test đọc chuỗi CSS có trần**: `app.css.test.ts` bắt được "ai xoá `overflow: hidden`" nhưng
   KHÔNG bắt được lỗi *quan hệ cấu trúc* (nhãn dùng chung cột với message) — lỗi đó cần test
   **cấu trúc** (đếm số cột grid, kiểm vị trí `RefBadges` trong JSX), đã thêm ở `5ac43ef`.
+- **Cạnh rẽ nhánh vẽ GÓC VUÔNG (ngang rồi gập dọc), không phải bezier chéo** (`e272965`, nửa
+  thứ hai của báo cáo "đồ thị khó đọc"): tham chiếu `docs/screenshots/main-4.png` vẽ góc vuông,
+  và đó là lý do nó đọc được với hàng chục nhánh song song — mắt theo được đoạn ngang và đoạn
+  dọc riêng biệt. Bezier chéo với `LANE_WIDTH` 14px / `ROW_HEIGHT` 28px chạy ở ~63°, gần dọc đủ
+  để nhiều đường cắt nhau thành khó phân biệt. Đoạn ngang đặt ở **tâm hàng nguồn** để cạnh mọc
+  ra từ nút commit; bán kính góc bo clamp vào nửa khoảng cách còn lại trên **cả hai** trục nên
+  không overshoot khi hai lane sát nhau.
+- **🔶 CÒN MỞ — `LANE_WIDTH = 14px` hẹp hơn tham chiếu (~22px)**, nhưng cap 20 lane trong
+  `docs/04-phase2-degraded-graph.md` **suy ra từ** chính con số 14px, nên đổi `LANE_WIDTH` là
+  đổi luôn cap. Cần quyết định riêng khi làm phase dựng lại bố cục — xem
+  `docs/05-ui-reference-gap.md`. KHÔNG sửa lẻ trong plan 02-06.
 - **🔴 Test hình học chỉ kiểm MỘT trục là test một nửa** (bài học nguyên nhân C, `60a0caa`): bộ
   test `canvasRenderer` kiểm rất kỹ trục **X** (lane nào, màu nào) nhưng **không một test nào
   đọc toạ độ Y** — nên lỗi `outEdges` vẽ tràn 1.5 hàng vô hình với toàn bộ 179 test. Trục Y
