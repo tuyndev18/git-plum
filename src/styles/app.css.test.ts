@@ -168,11 +168,12 @@ describe('nhãn ref phải có cột grid riêng, không dùng chung cột với
   it('.commit-row có ĐÚNG 6 cột — cột nhãn ref là cột riêng', () => {
     const block = extractCommitRowBlock(css)
     const match = block.match(/grid-template-columns:\s*([^;]+);/)
-    expect(match, 'phải tìm thấy grid-template-columns trong .commit-row').not.toBeNull()
+    const declaration = match?.[1]
+    expect(declaration, 'phải tìm thấy grid-template-columns trong .commit-row').toBeDefined()
 
     // Đếm số track: tách theo khoảng trắng nhưng giữ nguyên các hàm
     // minmax(...)/max-content thành một track.
-    const tracks = match![1]
+    const tracks = (declaration ?? '')
       .trim()
       .split(/\s+(?![^(]*\))/)
       .filter(Boolean)
