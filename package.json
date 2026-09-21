@@ -13,6 +13,7 @@
     "tauri:build": "tauri build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "fixtures": "bash scripts/fixtures/make-fixtures.sh",
     "test:watch": "vitest"
   },
   "dependencies": {

@@ -36,12 +36,24 @@ thiserror = "2.0.20"
 bstr = "1.13.1"
 memchr = "2.8.3"
 
+# Cache diff theo SHA commit (plan 02-05). LRU có chặn trên nên RAM không phình
+# vô hạn trên repo lớn.
+lru = "0.18.4"
+
 parking_lot = "0.12.5"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 tempfile = "3.27.0"
+
+# Snapshot test cho đầu ra gán lane: chụp một Vec<GraphRow> của hình dạng đã biết rồi
+# so khác biệt khi mã đổi. Đòi repo mẫu có mã commit tất định — xem scripts/fixtures/.
+insta = "1.48.0"
+
+# Benchmark gán lane và phân tích git log ở mức 100k commit. Checkpoint #1 của phase
+# đòi việc này nằm trong CI ngay trong phase, không để sau.
+criterion = "0.8.2"
 
 [features]
 # Tính năng mặc định của Tauri; `cargo test` chạy được mà không cần webview.

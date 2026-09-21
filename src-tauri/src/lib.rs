@@ -11,6 +11,10 @@ pub mod error;
 pub mod git;
 pub mod state;
 
+/// Trợ giúp tìm repo mẫu cho test và benchmark. `pub` vì benchmark của criterion là
+/// target riêng và không thấy mã dưới `#[cfg(test)]`. Mã ứng dụng không dùng.
+pub mod testing;
+
 pub use error::{GitError, Result};
 pub use state::AppState;
 
