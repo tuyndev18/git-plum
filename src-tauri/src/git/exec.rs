@@ -251,6 +251,21 @@ fn apply_env_hardening(cmd: &mut Command) {
     cmd.env("GIT_ASKPASS", "");
     cmd.env("SSH_ASKPASS", "");
     cmd.env("GCM_INTERACTIVE", "never");
+    // Hai dòng `*_ASKPASS` trên dùng đúng cái mẫu đã gây ra lỗi `GIT_EXTERNAL_DIFF=""`
+    // (xem `them_no_ext_diff`) — đặt chuỗi rỗng với ý "không có chương trình nào". Đã đo
+    // riêng ca này trên git 2.54.0.windows.1 và ở đây **không** phải lỗi, nhưng lý do thì
+    // khác điều người ta tưởng, nên ghi lại:
+    //
+    //   GIT_ASKPASS="" + GIT_TERMINAL_PROMPT=1  → "error: failed to execute prompt script
+    //                                             (exit code 1)" — git CÓ cố chạy nó
+    //   GIT_ASKPASS="" + GIT_TERMINAL_PROMPT=0  → "fatal: could not read Username ...:
+    //                                             terminal prompts disabled"
+    //   không đặt ASKPASS + GIT_TERMINAL_PROMPT=0 → thông báo Y HỆT dòng trên
+    //
+    // Nghĩa là thứ thật sự chặn được việc treo là `GIT_TERMINAL_PROMPT=0`, không phải hai
+    // dòng askpass. Chúng chỉ là lớp phòng thủ thứ hai, và chuỗi rỗng đủ tốt **miễn là**
+    // dòng `GIT_TERMINAL_PROMPT=0` còn đó. Ai bỏ dòng đó sẽ làm lộ thông báo
+    // "failed to execute prompt script" thay vì một lỗi đọc được — đừng bỏ.
 
     // --- Loại bỏ ảnh hưởng từ cấu hình bên ngoài --------------------------
     // Xem tài liệu của `PINNED_GIT_CONFIG` ở trên để biết từng khoá chống lỗi gì.
