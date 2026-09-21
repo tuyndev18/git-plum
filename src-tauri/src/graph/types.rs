@@ -15,11 +15,23 @@ use serde::Serialize;
 
 /// Số màu trong bảng màu lane. Màu của một lane là `lane % LANE_COLORS`.
 ///
-/// Là số nguyên tố có chủ ý: hai lane cạnh nhau (chênh 1) và các bước nhảy đều đặn
-/// khác đều không rơi trùng màu sớm, nên đường kề nhau khó lẫn hơn so với một số chẵn
-/// như 8. Bảng màu thật nằm ở phía giao diện (plan 02-06); ở đây chỉ là số lượng, để
-/// Rust và React đồng ý về cùng một phép chia dư.
-pub const LANE_COLORS: u8 = 7;
+/// # Vì sao bằng đúng [`MAX_VISIBLE_LANES`], không phải một số nhỏ hơn
+///
+/// Với `7` (giá trị cũ) và cap 13 lane, **lane 0 và lane 7 nhận cùng một màu**, lane 1
+/// và lane 8 cũng vậy, … Trên repo thật có 13 nhánh sống cùng lúc, đó là sáu cặp cột
+/// dọc không phân biệt nổi — người dùng báo "khó nhìn quá" kèm ảnh 13 lane chính là ca
+/// này. Lập luận cũ ("số nguyên tố nên hai lane cạnh nhau không trùng màu sớm") chỉ
+/// đúng cho lane **kề nhau**; nó không nói gì về lane cách nhau đúng 7 cột, mà ở mật độ
+/// cao thì hai cột cách 7 vẫn nằm gọn trong tầm mắt.
+///
+/// Đặt bằng cap hiển thị thì **không hai lane nào vẽ được cùng lúc mà trùng màu** —
+/// bất biến này là thứ giữ cho đồ thị đọc được ở mật độ tối đa, và nó tự đúng theo định
+/// nghĩa chứ không phải nhờ chọn khéo con số.
+///
+/// Bảng màu thật nằm ở phía giao diện (`src/lib/graph-render/geometry.ts`); ở đây chỉ
+/// là số lượng, để Rust và React đồng ý về cùng một phép chia dư. Bảng phía giao diện
+/// **phải có đủ 13 màu** — có test ghim hai phía.
+pub const LANE_COLORS: u8 = 13;
 
 /// Số lane tối đa được vẽ trước khi chuyển sang **cách vẽ suy giảm có chủ ý**.
 ///

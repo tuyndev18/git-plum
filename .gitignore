@@ -27,3 +27,6 @@ src-tauri/icons/ios/
 # Repo mẫu và repo đo hiệu năng do scripts/fixtures/ sinh ra.
 # Không bao giờ commit: dựng lại được bằng script, và repo hiệu năng rất lớn.
 target/
+
+# Báo cáo test (sinh bởi trình bao rtk khi chạy vitest)
+.vitest/

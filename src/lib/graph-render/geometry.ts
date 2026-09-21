@@ -31,31 +31,58 @@ export const GRAPH_PADDING_LEFT = 12
 /**
  * Bán kính nút commit.
  *
- * Tham chiếu vẽ nút là vòng tròn có **viền dày** đường kính ~16px, không phải
- * chấm đặc nhỏ. Bán kính 7px + viền 2.5px cho đường kính ngoài ~17px, khớp
- * tham chiếu và đủ lớn để phân biệt commit thường với merge.
+ * Tham chiếu vẽ nút là vòng tròn có viền, **nhỏ so với chiều cao hàng**: nút
+ * ngồi trên đường lane chứ không lấp kín ô. Bán kính 5px + viền 2px cho đường
+ * kính ngoài 12px trong ô cao `ROW_HEIGHT` = 28px — còn 8px khoảng trống trên
+ * và dưới nút, nên đoạn lane nối giữa hai hàng vẫn nhìn thấy rõ.
+ *
+ * Bản trước dùng 7px + viền 2.5px (đường kính ngoài 17px): nút của hai hàng kề
+ * nhau chỉ còn cách nhau 11px, đoạn lane giữa chúng gần như biến mất và đồ thị
+ * trông như một chuỗi vòng tròn rời rạc thay vì một cái cây.
  */
-export const NODE_RADIUS = 7
+export const NODE_RADIUS = 5
 
-/** Độ dày viền nút commit. */
-export const NODE_STROKE_WIDTH = 2.5
+/** Độ dày viền nút commit — chỉ dùng cho nút nét đứt của hàng `terminates`. */
+export const NODE_STROKE_WIDTH = 2
+
+/**
+ * Bề rộng quầng nền quanh chấm commit, px.
+ *
+ * Quầng tô bằng màu nền khung trước khi tô chấm, nên nó **cắt** mọi đường lane
+ * và cạnh merge chạy sát phía sau nút. Không có quầng thì ở mật độ cao một
+ * chấm màu lane nằm đè lên một đường cùng màu lane là không phân biệt được —
+ * đúng hiện tượng "khó nhìn" ở ảnh 13 lane.
+ *
+ * Tham chiếu đạt hiệu quả này bằng ảnh avatar 22px che hẳn vùng quanh nút;
+ * git-plum không gọi mạng nên không có avatar, quầng nền là cách tương đương
+ * rẻ nhất.
+ */
+export const NODE_HALO_WIDTH = 2
 
 /**
  * Bán kính nút của merge commit — lớn hơn nút thường một chút để merge nổi bật
  * khi lần theo lịch sử, đúng cách tham chiếu phân biệt hai loại.
  */
-export const MERGE_NODE_RADIUS = 8
+export const MERGE_NODE_RADIUS = 6
 
 /**
- * Màu tô tâm nút commit — phải trùng **nền của cột đồ thị**, không phải màu
- * lane.
+ * Màu tô tâm nút commit — phải trùng **nền của hàng phía sau nút**, không phải
+ * màu lane.
  *
  * Tâm nút được tô nền trước rồi mới vẽ viền, nên đường lane chạy phía sau bị
  * cắt đúng trong lòng nút. Đó là cách tham chiếu làm nút "ngồi trên" đường thay
- * vì bị đường xuyên qua giữa. Nếu đổi nền `.graph-canvas` trong `app.css` thì
- * phải đổi cả con số này, nếu không lòng nút sẽ hiện thành một đốm khác màu.
+ * vì bị đường xuyên qua giữa.
+ *
+ * Đây chỉ là **giá trị dự phòng** cho môi trường không có DOM (test). Lúc chạy
+ * thật, `canvasRenderer` đọc `--graph-node-fill` từ `getComputedStyle` của host
+ * để lòng nút khớp nền thật ở **cả hai theme** — hằng số cứng `#161b22` của bản
+ * trước là một đốm đen giữa nền trắng khi người dùng ở theme sáng, và không
+ * khớp cả `--bg` (`#16161a`) lẫn dải xen kẽ của `.commit-row` ở theme tối.
  */
-export const NODE_FILL = '#161b22'
+export const NODE_FILL = '#16161a'
+
+/** Tên biến CSS giữ màu tô lòng nút. Khai ở `app.css`, đọc lúc chạy. */
+export const NODE_FILL_VAR = '--graph-node-fill'
 
 /** Màu vòng tròn đánh dấu hàng đang được chọn — trung tính, không theo màu lane. */
 export const SELECTION_RING = '#e6edf3'
@@ -107,20 +134,39 @@ export const REF_COL_WIDTH = 132
 export const MAX_VISIBLE_LANES = 13
 
 /**
- * Bảng màu lane, tự thiết kế — không sao chép GitKraken. Đủ tương phản trên
- * cả nền tối và nền sáng của `app.css`. Độ dài bảng không cần khớp
- * `LANE_COLORS` bên Rust (7 màu): `GraphRow.color` đã là `lane % 7` từ backend,
- * và `colorFor` chỉ việc gập chỉ số đó (hoặc bất kỳ số nào lớn hơn) vào bảng
- * của chính nó bằng modulo — hai bên độc lập về số lượng màu.
+ * Bảng màu lane — **đo từ ảnh tham chiếu**, xem `docs/06-graph-render-model.md`
+ * mục 3.
+ *
+ * Bảng cũ là dải pastel kiểu One Dark (`#e06c75 #61afef #98c379 …`). Đo pixel
+ * đường lane của tham chiếu cho thấy nó dùng dải **bão hoà cao** hẳn, và
+ * không dùng vàng/xanh lá — hai màu khó tách khỏi nhau và khỏi cam trên nền
+ * tối `#16161a` khi đường chỉ dày 2px. Ở mật độ 13 lane cùng lúc (ảnh người
+ * dùng gửi), chênh lệch này là khác biệt giữa "lần theo được một nhánh" và
+ * "một mớ sọc".
+ *
+ * Bảng **phải có đúng `MAX_VISIBLE_LANES` màu** và khớp `LANE_COLORS` bên Rust
+ * (`src-tauri/src/graph/types.rs`), vì `GraphRow.color` đến từ backend đã là
+ * `lane % LANE_COLORS`. Thiếu màu thì `colorFor` gập lần nữa và hai lane vẽ
+ * được cùng lúc lại trùng màu — đúng lỗi vừa sửa. Có test ghim hai phía.
  */
 export const LANE_COLORS: readonly string[] = [
-  '#e06c75', // đỏ san hô
-  '#61afef', // xanh dương
-  '#98c379', // xanh lá
-  '#e5c07b', // vàng nghệ
-  '#c678dd', // tím
-  '#56b6c2', // xanh ngọc
-  '#d19a66', // cam đất
+  // Bảy màu đo trực tiếp từ ảnh tham chiếu.
+  '#15a0bf', // xanh ngọc
+  '#0669f7', // xanh dương
+  '#8e00c2', // tím
+  '#c517b6', // hồng tím
+  '#d90171', // hồng sen
+  '#cd0101', // đỏ
+  '#f25d2e', // cam
+  // Sáu màu bù, chèn vào các khoảng hue mà tham chiếu bỏ trống, để đủ
+  // MAX_VISIBLE_LANES màu phân biệt. Giữ cùng mức bão hoà với bảy màu trên,
+  // nếu không lane 7..12 sẽ trông "nhạt hơn" và đọc như một lớp thứ cấp.
+  '#e8a002', // hổ phách
+  '#7cb342', // xanh lá
+  '#00897b', // xanh lục lam
+  '#5c6bc0', // chàm
+  '#a1887f', // nâu
+  '#ec407a', // hồng đào
 ]
 
 /** Toạ độ Y (px) của hàng thứ `index`. Nguồn duy nhất — xem doc comment đầu tệp. */

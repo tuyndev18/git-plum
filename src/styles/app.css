@@ -33,10 +33,34 @@
    * từng có `--row-height: 26px` trong khi `ROW_HEIGHT = 28`, chênh 2px, chỉ
    * vô hại vì không chỗ nào dùng tới nó.
    *
-   * Nền cột đồ thị — phải trùng `NODE_FILL` ở `geometry.ts`, vì tâm nút commit
-   * được tô bằng màu này để cắt đường lane chạy phía sau.
+   * Màu tô LÒNG nút commit — canvas đọc biến này lúc chạy
+   * (`canvasRenderer.readNodeFill`) để lòng nút cắt đúng đường lane chạy phía
+   * sau, ở cả hai theme.
+   *
+   * Đây KHÔNG còn là nền của cả cột đồ thị: canvas nay trong suốt để dải nền
+   * xen kẽ của `.commit-row` chạy liền từ cột nhãn sang cột thông điệp, đúng
+   * như tham chiếu (`docs/screenshots/main-4.png`). Biến cũ `--graph-bg`
+   * (#161b22) tô đè cả cột thành một mảng phẳng và không khớp `--bg` nào.
+   *
+   * Giá trị trùng `--bg` vì hàng chẵn không có nền riêng; hàng lẻ phủ thêm
+   * `--bg-raised` ở 40% alpha, lệch đủ nhỏ để lòng nút không lộ viền.
    */
-  --graph-bg: #161b22;
+  --graph-node-fill: #16161a;
+
+  /*
+   * Màu phủ hàng đang trỏ/đang chọn — **đo từ ảnh tham chiếu**.
+   *
+   * `docs/screenshots/main-4.png` cho hàng đang chọn màu `#1b2b32` trên nền
+   * `#1c1e23`: đỏ giảm 1, lục +13, lam +15 — một lớp phủ **xanh teal sáng
+   * lên**, không phải tối đi. Giải ngược ở alpha 10% ra đúng `rgb(18,160,185)`.
+   *
+   * Vì sao lift chứ không phải darken: canvas đồ thị nằm DƯỚI các hàng, nên
+   * nền hàng phải trong suốt để lane xuyên qua (xem `.commit-row:hover`). Một
+   * lớp phủ sáng mờ giữ được cả hai — thấy rõ hàng nào đang trỏ, mà đường lane
+   * và nút vẫn nguyên. Tham chiếu làm đúng vậy: đo pixel hàng đang chọn vẫn
+   * thấy nguyên các lane chạy qua nó.
+   */
+  --row-highlight: #12a0b9;
 
   /*
    * Bề rộng cột nhãn nhánh/tag — PHẢI khớp `REF_COL_WIDTH` ở
@@ -62,6 +86,15 @@
     --accent-dim: #8f6fc4;
     --danger: #c0392b;
     --success: #4a7c47;
+
+    /* Theo `--bg` của theme sáng — hằng số tối cứng của bản trước cho một đốm
+       gần đen giữa lòng mỗi nút commit trên nền trắng. */
+    --graph-node-fill: #fbfbfd;
+
+    /* Trên nền sáng, lớp phủ phải **tối đi** mới thấy được — cùng hue teal để
+       giữ nhất quán, nhưng đậm hơn hẳn. Alpha ở các quy tắc dùng chung nên chỉ
+       cần đổi màu ở đây. */
+    --row-highlight: #0b6478;
   }
 }
 
@@ -510,16 +543,36 @@ button:disabled {
  * hiện phía trên nền khung cuộn.
  */
 .graph-canvas {
-  position: sticky;
-  top: 0;
+  /*
+   * `position: fixed` theo vùng cuộn, KHÔNG phải `sticky`.
+   *
+   * Bản trước dùng `position: sticky; top: 0` cộng `margin-bottom: -100%`.
+   * Phần tử sticky **vẫn chiếm chỗ trong luồng** trước đã, nên nó đẩy toàn bộ
+   * danh sách xuống đúng chiều cao của nó, và `margin-bottom` âm là để kéo
+   * ngược lên. Nhưng **margin theo phần trăm — kể cả `margin-bottom` — quy
+   * chiếu theo BỀ RỘNG của khối chứa, không phải chiều cao** (CSS spec). Với
+   * vùng cuộn rộng 740px và canvas cao 550px, `-100%` kéo lên 740px trong khi
+   * chỉ cần kéo 550px: danh sách bị kéo lố 190px và mấy hàng đầu bị cắt cụt
+   * phía trên — đúng lỗi "bị che phần đầu". Sai số này còn đổi theo bề rộng
+   * pane, nên lúc trông đúng lúc trông sai.
+   *
+   * `position: absolute` trong `.commit-scroll` (đã `position: relative`) đưa
+   * canvas ra khỏi luồng hẳn: nó không chiếm chỗ, nên không cần margin âm nào
+   * cả. Nhưng `absolute` neo theo khối chứa nên nó CUỘN theo danh sách —
+   * trong khi canvas chỉ cao bằng vùng nhìn thấy. Vì vậy `top` được cập nhật
+   * theo `scrollTop` qua biến `--graph-scroll-top` do `CommitList` đặt: canvas
+   * luôn nằm đúng vùng đang nhìn thấy, và `renderRows` đã trừ `scrollTop` nên
+   * toạ độ bên trong canvas vẫn khớp.
+   */
+  position: absolute;
+  top: var(--graph-scroll-top, 0);
   /*
    * Dịch sang phải qua cột nhãn (cột 1) để vẽ vào đúng cột đồ thị (cột 2).
    * `10px` là `padding-left` của `.commit-row`, `10px` nữa là `gap` giữa cột 1
    * và cột 2 — cùng hai con số khai trong `.commit-row`, giữ nguyên tên biến ở
    * đó nếu đổi.
    */
-  margin-left: calc(10px + var(--ref-col-width) + 10px);
-  margin-bottom: -100%;
+  left: calc(10px + var(--ref-col-width) + 10px);
   z-index: 0;
   pointer-events: none;
 }
@@ -605,12 +658,32 @@ button:disabled {
   background: color-mix(in srgb, var(--bg-raised) 40%, transparent);
 }
 
+/*
+ * Nền hàng PHẢI trong suốt một phần — canvas đồ thị nằm DƯỚI các hàng
+ * (`.graph-canvas` có `z-index: 0`, các hàng đến sau trong DOM), nên bất kỳ
+ * nền **đục** nào cũng xoá sạch đồ thị trên đúng hàng đó.
+ *
+ * Bản trước dùng `var(--bg-inset)` đục cho `:hover`: rê chuột qua một hàng làm
+ * cả đoạn đồ thị của hàng đó biến mất, thành một vệt đen ngang — lỗi người
+ * dùng báo kèm ảnh. `.selected` cũng đục theo cách tương tự
+ * (`color-mix(... var(--bg))` với `--bg` đục là ra màu đục).
+ *
+ * Dùng `transparent` làm thành phần thứ hai của `color-mix` để giữ alpha: nền
+ * vẫn đủ rõ để thấy hàng nào đang trỏ/đang chọn, mà đường lane vẫn xuyên qua.
+ * Đây cũng là cách tham chiếu làm — đo pixel `docs/screenshots/main-4.png` cho
+ * thấy hàng đang chọn (`#1b2b32`) vẫn để lộ nguyên các lane chạy qua nó.
+ */
 .commit-row:hover {
-  background: var(--bg-inset);
+  background: color-mix(in srgb, var(--row-highlight) 10%, transparent);
 }
 
 .commit-row.selected {
-  background: color-mix(in srgb, var(--accent) 18%, var(--bg));
+  background: color-mix(in srgb, var(--row-highlight) 18%, transparent);
+}
+
+/* Hàng vừa được chọn vừa được trỏ: cộng thêm sáng, không đè mất nhau. */
+.commit-row.selected:hover {
+  background: color-mix(in srgb, var(--row-highlight) 26%, transparent);
 }
 
 /*

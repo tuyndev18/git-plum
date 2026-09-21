@@ -185,6 +185,17 @@ pub fn assign(commits: &[Commit]) -> Vec<GraphRow> {
         let mut truncated_parents: u16 = 0;
         let mut terminates = false;
 
+        // Lane được **sinh ra tại chính hàng này** cho cha thứ hai trở đi.
+        //
+        // Bước 4 phải loại chúng ra: một lane vừa ra đời ở tâm hàng thì phía TRÊN
+        // tâm nó chưa tồn tại, nên vẽ nó như đường đi xuyên qua cả ô (mép trên ->
+        // mép dưới) là bịa ra một đoạn nhánh không có thật. Trên màn hình đó là
+        // một đoạn thẳng cụt lơ lửng ngay cạnh nút merge, không nối lên đâu cả —
+        // đúng thứ nhìn thấy ở `docs/screenshots/`. `out_edges` đã mang cạnh
+        // `lane -> moi` mô tả nhánh rẽ ra từ tâm; thêm passthrough nữa là vẽ hai
+        // lần cùng một nhánh, lần thứ hai sai chỗ.
+        let mut lanes_sinh_o_hang_nay: Vec<u16> = Vec::new();
+
         match commit.parents.first() {
             // Cha đầu tiếp tục chiếm lane của hàng này.
             Some(first) if known.contains(first.as_str()) => {
@@ -230,11 +241,14 @@ pub fn assign(commits: &[Commit]) -> Vec<GraphRow> {
                 continue;
             }
             match allocate_parent_lane(&mut lanes, parent) {
-                Some(moi) => out_edges.push(Edge {
-                    from_lane: lane,
-                    to_lane: moi,
-                    color: color_of(moi),
-                }),
+                Some(moi) => {
+                    lanes_sinh_o_hang_nay.push(moi);
+                    out_edges.push(Edge {
+                        from_lane: lane,
+                        to_lane: moi,
+                        color: color_of(moi),
+                    })
+                }
                 // Hết lane vẽ được: cha vẫn còn trong `Commit.parents`, chỉ đường kẻ
                 // bị lược. Giao diện hiện `+N cha nữa`.
                 None => truncated_parents += 1,
@@ -242,8 +256,11 @@ pub fn assign(commits: &[Commit]) -> Vec<GraphRow> {
         }
 
         // --- Bước 4: mọi lane khác đang hoạt động đi thẳng xuyên qua hàng này.
+        //
+        // "Đang hoạt động" nghĩa là lane đã sống TỪ TRƯỚC hàng này. Lane vừa được
+        // bước 3 cấp cho một cha thêm thì chưa — xem `lanes_sinh_o_hang_nay`.
         for (i, slot) in lanes.iter().enumerate() {
-            if i as u16 == lane || slot.is_none() {
+            if i as u16 == lane || slot.is_none() || lanes_sinh_o_hang_nay.contains(&(i as u16)) {
                 continue;
             }
             passthrough.push(Edge {
@@ -476,6 +493,52 @@ mod tests {
                 "mọi cạnh ra đều xuất phát từ lane của merge"
             );
         }
+    }
+
+    /// Lane sinh ra cho cha thêm **không được** kèm passthrough ở chính hàng merge.
+    ///
+    /// Bước 3 cấp lane cho cha thứ hai, rồi bước 4 quét mọi lane đang sống — nếu bước
+    /// 4 không loại lane vừa sinh, nó phát một `Edge { from: 1, to: 1 }` mô tả một
+    /// nhánh đi **xuyên qua cả ô** của hàng merge. Nhưng lane đó mới ra đời ở TÂM
+    /// hàng: nửa trên của ô nó chưa tồn tại. Bộ vẽ dựng đúng theo dữ liệu sẽ cho một
+    /// đoạn thẳng cụt lơ lửng bên cạnh nút merge, không nối lên đâu — cộng thêm việc
+    /// `out_edges` đã có cạnh `0 -> 1` mô tả chính nhánh đó, thành vẽ hai lần.
+    ///
+    /// Đây là nguyên nhân của đoạn nhánh "gãy" trong `docs/screenshots/`.
+    #[test]
+    fn hang_merge_khong_co_passthrough_tren_lane_vua_sinh() {
+        // Hình dạng thật của một merge: `m` gộp `p1` và `p2`, cả hai cùng về `base`.
+        let commits = vec![
+            commit("m", &["p1", "p2"]),
+            commit("p1", &["base"]),
+            commit("p2", &["base"]),
+            commit("base", &[]),
+        ];
+        let rows = assign(&commits);
+
+        khang_dinh_mot_hang_moi_commit(&commits, &rows);
+        khang_dinh_mau_khop_lane(&rows);
+
+        assert_eq!(
+            rows[0].passthrough,
+            vec![],
+            "hàng merge không có nhánh nào đi xuyên qua: lane 1 mới sinh ở chính hàng \
+             này, và `out_edges` đã mô tả nó bằng cạnh 0 -> 1"
+        );
+        assert_eq!(
+            lanes_cua(&rows[0].out_edges),
+            vec![0, 1],
+            "nhánh rẽ ra mô tả bằng cạnh ra, không phải bằng passthrough"
+        );
+
+        // Hàng NGAY SAU merge thì lane 1 đã sống từ trước → passthrough là đúng.
+        assert_eq!(
+            rows[1].passthrough.len(),
+            1,
+            "hàng sau merge: lane 1 đã tồn tại từ hàng trên nên đi xuyên qua"
+        );
+        assert_eq!(rows[1].passthrough[0].from_lane, 1);
+        assert_eq!(rows[1].passthrough[0].to_lane, 1);
     }
 
     /// **Test quan trọng nhất về octopus.** Merge bốn cha sinh đúng bốn cạnh ra: một

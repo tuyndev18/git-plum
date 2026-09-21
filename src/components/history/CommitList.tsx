@@ -8,6 +8,7 @@
  * lệch hàng bất khả thi về mặt cấu trúc, không phải "được sửa cho thẳng".
  */
 
+import type { CSSProperties } from 'react'
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
@@ -174,10 +175,21 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
         <span className="commit-header-subject">Thông điệp commit</span>
       </div>
 
-      <div ref={scrollRef} className="commit-scroll" data-testid="commit-scroll">
+      <div
+        ref={scrollRef}
+        className="commit-scroll"
+        data-testid="commit-scroll"
+        // Canvas `position: absolute` neo theo khối chứa nên nó cuộn đi cùng
+        // danh sách; đẩy `top` theo `scrollTop` giữ nó đứng yên ở vùng nhìn
+        // thấy. Đặt qua biến CSS thay vì style trực tiếp trên canvas để
+        // `.graph-canvas` giữ trọn phần định vị trong `app.css` — xem khối
+        // comment ở đó cho lý do bỏ `position: sticky`.
+        style={{ '--graph-scroll-top': `${scrollTop}px` } as CSSProperties}
+      >
         {/*
-        Canvas nằm NGOÀI div nội dung và `position: sticky; top: 0` để nó dính
-        theo vùng nhìn thấy thay vì cuộn đi cùng danh sách.
+        Canvas nằm NGOÀI div nội dung và `position: absolute` + `top` chạy theo
+        `scrollTop` để nó đứng yên ở vùng nhìn thấy thay vì cuộn đi cùng danh
+        sách.
 
         Trước đây canvas nằm TRONG div cao `getTotalSize()` (có thể hàng chục
         nghìn px) nhưng bản thân chỉ cao `scrollHeight` (~550px) và neo ở top 0

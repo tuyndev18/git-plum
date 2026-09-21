@@ -334,8 +334,14 @@ describe('mọi đường vẽ phải nằm trong ô của hàng — không trà
       y + ROW_HEIGHT,
     )
 
-    // Chỉ outEdges: phải bắt đầu ở TÂM (nút commit nằm đó) và xuống mép dưới,
-    // để nửa trên của hàng kế tiếp nối tiếp liền mạch.
+    // Chỉ outEdges: ô của hàng phải được LÁT KÍN theo chiều dọc trên lane của
+    // nút — đoạn vào (mép trên -> tâm) rồi đoạn ra (tâm -> mép dưới).
+    //
+    // Khẳng định theo TẬP đoạn được vẽ chứ không theo thứ tự lời gọi: đoạn vào
+    // là một nét riêng do `drawRow` sinh (không đến từ `passthrough` hay
+    // `outEdges` của backend), nên bám `moveTo.mock.calls[0]` sẽ gãy chỉ vì
+    // đổi thứ tự vẽ, trong khi điều thật sự phải đúng là "không còn khe hở
+    // giữa mép trên và mép dưới".
     const out = fakeContext()
     const h2 = fakeHost(out)
     const r2 = createCanvasRenderer(h2.host as unknown as HTMLElement, {
@@ -344,11 +350,94 @@ describe('mọi đường vẽ phải nằm trong ô của hàng — không trà
     r2.resize(800, 600, 1)
     const outRow = baseRow({ outEdges: [{ fromLane: 0, toLane: 0, color: 0 }] })
     r2.draw([renderRow(outRow, index)], null)
-    expect(out.moveTo.mock.calls[0]?.[1], 'outEdge phải bắt đầu ở TÂM hàng (nơi có nút)').toBe(
-      y + ROW_HEIGHT / 2,
+
+    const segments = out.moveTo.mock.calls.map((call, i) => ({
+      from: (call as [number, number])[1],
+      to: (out.lineTo.mock.calls[i] as [number, number] | undefined)?.[1],
+    }))
+
+    expect(segments, 'phải có đoạn vào: mép TRÊN -> TÂM (nếu thiếu, nút trôi nổi)').toContainEqual({
+      from: y,
+      to: y + ROW_HEIGHT / 2,
+    })
+    expect(segments, 'phải có đoạn ra: TÂM -> mép DƯỚI').toContainEqual({
+      from: y + ROW_HEIGHT / 2,
+      to: y + ROW_HEIGHT,
+    })
+  })
+
+  /**
+   * `passthrough` KHÔNG phải lúc nào cũng thẳng đứng.
+   *
+   * `lanes.rs` bước 2 đẩy vào `passthrough` cả các cạnh HỢP NHÁNH
+   * (`from_lane != to_lane`): một lane khác đang chờ đúng commit này nên nó rẽ
+   * vào lane của hàng rồi CHẾT ở đó. Bộ vẽ từng giả định mọi phần tử của
+   * `passthrough` là đường dọc mép-trên -> mép-dưới, nên nó kéo cạnh hợp nhánh
+   * xuyên qua mép dưới vào một lane đã được giải phóng — sinh ra các đoạn cụt
+   * không nối vào đâu, đúng hiện tượng "đồ thị vỡ" người dùng báo.
+   */
+  it('passthrough hợp nhánh (fromLane != toLane) dừng ở TÂM, không xuyên mép dưới', () => {
+    const ctx = fakeContext()
+    const { host, canvasEl } = fakeHost(ctx)
+    const renderer = createCanvasRenderer(host as unknown as HTMLElement, {
+      createCanvasElement: () => canvasEl as unknown as HTMLCanvasElement,
+    })
+    renderer.resize(800, 600, 1)
+
+    const index = 2
+    const y = index * ROW_HEIGHT
+    // Lane 2 chờ commit này, hàng nằm ở lane 0 → cạnh hợp nhánh 2 -> 0.
+    const row = baseRow({ lane: 0, passthrough: [{ fromLane: 2, toLane: 0, color: 2 }] })
+    renderer.draw([renderRow(row, index)], null)
+
+    const endsAtBottom = ctx.lineTo.mock.calls.some(
+      (call) => (call as [number, number])[1] === y + ROW_HEIGHT,
     )
-    expect(out.lineTo.mock.calls[0]?.[1], 'outEdge phải kết thúc ở mép DƯỚI hàng').toBe(
-      y + ROW_HEIGHT,
+    expect(
+      endsAtBottom,
+      'cạnh hợp nhánh không được chạy xuống mép dưới — lane nguồn đã chết ở hàng này',
+    ).toBe(false)
+  })
+})
+
+/*
+ * Chấm commit phải nằm ĐÚNG GIỮA hàng theo chiều dọc.
+ *
+ * Cột chữ dùng `.commit-row { align-items: center }` với hàng cao `ROW_HEIGHT`
+ * đặt tại `translateY(v.start)`, nên chữ căn giữa tại `v.start + ROW_HEIGHT/2`.
+ * Canvas phải vẽ chấm tại đúng cao độ đó (đã trừ `scrollTop` — xem
+ * `CommitList.renderRows`), nếu không chấm trôi lên mép hàng và không còn chỉ
+ * đúng vào dòng chữ của chính nó.
+ *
+ * git-plum KHÔNG có avatar tác giả (ràng buộc Privacy: không gọi mạng), nên
+ * nút luôn là chấm tròn đặc màu lane — không có ca nào vẽ ảnh vuông lệch tâm.
+ */
+describe('chấm commit nằm giữa hàng theo chiều dọc', () => {
+  it('tâm chấm = y + ROW_HEIGHT / 2 ở mọi hàng', () => {
+    const ctx = fakeContext()
+    const { host, canvasEl } = fakeHost(ctx)
+    const renderer = createCanvasRenderer(host as unknown as HTMLElement, {
+      createCanvasElement: () => canvasEl as unknown as HTMLCanvasElement,
+    })
+    renderer.resize(400, 400, 1)
+
+    const indices = [0, 1, 5]
+    renderer.draw(
+      indices.map((i) => renderRow(baseRow({ commitId: `c${i}` }), i)),
+      null,
     )
+
+    // `arc` được gọi cho quầng nền và cho chấm; mọi lời gọi đều phải ở tâm hàng.
+    const centers = ctx.arc.mock.calls.map((call) => (call as [number, number, number])[1])
+    expect(centers.length, 'phải có chấm được vẽ').toBeGreaterThan(0)
+
+    const expected = indices.map((i) => i * ROW_HEIGHT + ROW_HEIGHT / 2)
+    for (const cy of centers) {
+      expect(
+        expected,
+        `chấm vẽ ở y=${cy} nhưng tâm các hàng là ${expected.join(', ')} — ` +
+          `chấm lệch khỏi giữa hàng thì nó không còn chỉ đúng dòng chữ của mình`,
+      ).toContain(cy)
+    }
   })
 })

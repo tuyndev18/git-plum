@@ -281,3 +281,92 @@ describe('REF_COL_WIDTH phải khớp giữa geometry.ts và app.css', () => {
     ).toContain('--ref-col-width')
   })
 })
+
+/*
+ * Canvas đồ thị nằm DƯỚI các hàng commit (`.graph-canvas` có `z-index: 0`, các
+ * `.commit-row` đến sau trong DOM). Nên **mọi** nền hàng phải trong suốt một
+ * phần: một nền đục xoá sạch đoạn đồ thị của đúng hàng đó.
+ *
+ * Lỗi đã xảy ra thật: `.commit-row:hover { background: var(--bg-inset) }` —
+ * `--bg-inset` là màu đục, nên rê chuột qua một hàng làm cả đoạn lane/nút của
+ * hàng đó biến mất thành một vệt đen ngang. `.commit-row.selected` dùng
+ * `color-mix(... var(--bg))` cũng ra màu đục theo cách tương tự.
+ *
+ * Tham chiếu làm ngược lại: đo `docs/screenshots/main-4.png` cho hàng đang
+ * chọn màu `#1b2b32` trên nền `#1c1e23` — một lớp phủ teal **sáng lên**, và
+ * các lane vẫn hiện nguyên xuyên qua nó.
+ */
+describe('nền hàng commit phải trong suốt để không xoá đồ thị', () => {
+  /** Trích thân của một quy tắc CSS theo selector chính xác. */
+  function ruleBody(selector: string): string {
+    const marker = `${selector} {`
+    const start = css.indexOf(marker)
+    expect(start, `phải tìm thấy quy tắc \`${selector}\` trong app.css`).toBeGreaterThan(-1)
+    return css.slice(start + marker.length, css.indexOf('}', start))
+  }
+
+  for (const selector of ['.commit-row:hover', '.commit-row.selected']) {
+    it(`${selector} dùng nền trong suốt một phần`, () => {
+      const body = ruleBody(selector)
+      const background = body
+        .split('\n')
+        .map((l) => l.trim())
+        .find((l) => l.startsWith('background'))
+
+      expect(background, `${selector} phải khai background`).toBeTruthy()
+
+      // `transparent` là thành phần thứ hai của color-mix => kết quả có alpha.
+      expect(
+        background,
+        `${selector} có nền \`${background}\` — nếu nó đục thì canvas đồ thị bên dưới ` +
+          `bị xoá đúng trên hàng đó (vệt đen ngang khi hover). Phải trộn với ` +
+          `\`transparent\` để giữ alpha.`,
+      ).toContain('transparent')
+
+      // Các biến nền đặc của bảng màu không được dùng trực tiếp ở đây.
+      for (const opaque of ['var(--bg-inset)', 'var(--bg-raised)', 'var(--bg)']) {
+        expect(
+          background,
+          `${selector} không được dùng ${opaque} làm nền đặc — đó chính là lỗi đã sửa`,
+        ).not.toContain(`${opaque};`)
+      }
+    })
+  }
+})
+
+/*
+ * Canvas đồ thị **không được** định vị bằng `margin` phần trăm.
+ *
+ * Bản trước: `position: sticky; top: 0` + `margin-bottom: -100%`. Phần tử
+ * sticky vẫn chiếm chỗ trong luồng, nên nó đẩy danh sách xuống đúng chiều cao
+ * của nó và margin âm là để kéo ngược lên. Nhưng **margin phần trăm — kể cả
+ * `margin-bottom` — quy chiếu theo BỀ RỘNG khối chứa, không phải chiều cao**
+ * (CSS spec). Vùng cuộn rộng 740px, canvas cao 550px => `-100%` kéo lên 740px
+ * thay vì 550px, lố 190px, mấy hàng đầu bị cắt cụt ("bị che phần đầu"). Sai số
+ * đổi theo bề rộng pane nên lỗi lúc ẩn lúc hiện.
+ */
+describe('.graph-canvas không định vị bằng margin phần trăm', () => {
+  const start = css.indexOf('.graph-canvas {')
+  // Bỏ comment trước khi khẳng định: khối này CÓ nhắc `margin-bottom: -100%`
+  // trong phần giải thích vì sao đã bỏ nó, và test đọc CSS thô sẽ khớp nhầm
+  // chính đoạn văn đó thay vì khớp một khai báo thật.
+  const block = css.slice(start, css.indexOf('}', start)).replace(/\/\*[\s\S]*?\*\//g, '')
+
+  it('không dùng margin-bottom âm theo phần trăm', () => {
+    expect(
+      block,
+      '`margin-bottom: -100%` quy chiếu theo BỀ RỘNG khối chứa, không phải chiều cao — ' +
+        'canvas cao 550px trong vùng cuộn rộng 740px sẽ bị kéo lố 190px và cắt mất ' +
+        'các hàng đầu. Đưa canvas ra khỏi luồng bằng `position: absolute` thay vì bù ' +
+        'bằng margin âm.',
+    ).not.toMatch(/margin-bottom:\s*-\d+%/)
+  })
+
+  it('ra khỏi luồng bằng position: absolute', () => {
+    expect(
+      block,
+      'canvas phải `position: absolute` để không chiếm chỗ trong luồng — `sticky` chiếm ' +
+        'chỗ nên lại cần margin âm bù lại, đúng cái bẫy vừa sửa',
+    ).toMatch(/position:\s*absolute/)
+  })
+})

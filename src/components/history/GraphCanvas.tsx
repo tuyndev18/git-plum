@@ -38,16 +38,25 @@ export function GraphCanvas({ rows, width, height, selectedCommitId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // `devicePixelRatio` đọc lại ở đây (không đọc trong canvasRenderer) để bộ
-  // vẽ vẫn test được mà không phải vá `window` — người dùng kéo cửa sổ sang
-  // màn hình khác thì effect này chạy lại vì `width`/`height` đổi theo layout.
+  // `resize` và `draw` phải nằm trong CÙNG một effect, theo đúng thứ tự.
+  //
+  // Gán `canvas.width`/`canvas.height` **xoá sạch** canvas và đặt lại ma trận
+  // biến đổi — đó là hành vi của chính DOM, không phải của bộ vẽ. Tách làm hai
+  // effect với hai mảng phụ thuộc khác nhau thì có một đường chạy để lại màn
+  // hình sai: `width` đổi (rất hay xảy ra — `graphWidth(maxLane)` đổi mỗi khi
+  // số lane lớn nhất trong vùng nhìn thấy đổi lúc cuộn) trong khi `rows` giữ
+  // nguyên danh tính, nên `resize` chạy và xoá canvas còn `draw` KHÔNG chạy
+  // lại. Kết quả: cột đồ thị trống trơn hoặc còn lại hình vẽ dở của lần trước,
+  // trong khi cột chữ vẫn đủ hàng.
+  //
+  // `devicePixelRatio` đọc ở đây (không đọc trong `canvasRenderer`) để bộ vẽ
+  // vẫn test được mà không phải vá `window`.
   useEffect(() => {
-    rendererRef.current?.resize(width, height, window.devicePixelRatio)
-  }, [width, height])
-
-  useEffect(() => {
-    rendererRef.current?.draw(rows, selectedCommitId)
-  }, [rows, selectedCommitId])
+    const renderer = rendererRef.current
+    if (!renderer) return
+    renderer.resize(width, height, window.devicePixelRatio)
+    renderer.draw(rows, selectedCommitId)
+  }, [width, height, rows, selectedCommitId])
 
   // Canvas thuần trình bày (ràng buộc số 5): không bắt sự kiện bấm nào ở đây
   // hay trong CSS `.graph-canvas` (`pointer-events: none`). Chọn hàng là việc

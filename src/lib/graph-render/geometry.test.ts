@@ -194,6 +194,47 @@ describe('MAX_VISIBLE_LANES phải khớp giữa frontend và backend', () => {
     ).toBe(MAX_VISIBLE_LANES)
   })
 
+  /*
+   * Bất biến đọc được của đồ thị: **không hai lane nào vẽ được cùng lúc mà
+   * trùng màu**.
+   *
+   * `GraphRow.color` đến từ backend đã là `lane % LANE_COLORS` (Rust). Nếu số
+   * đó nhỏ hơn cap hiển thị thì lane 0 và lane `LANE_COLORS` nhận đúng cùng một
+   * màu — với giá trị cũ (7 màu, cap 13) là sáu cặp cột dọc không phân biệt
+   * nổi trên repo có 13 nhánh sống cùng lúc. Đó chính là ảnh "khó nhìn quá"
+   * người dùng gửi.
+   *
+   * Ghim cả ba phía: hằng số Rust, độ dài bảng màu TS, và cap hiển thị.
+   */
+  it('LANE_COLORS (Rust) == độ dài bảng màu (TS) == MAX_VISIBLE_LANES', async () => {
+    const { readFileSync } = await import('node:fs')
+    const path = await import('node:path')
+
+    const rustPath = path.join(process.cwd(), 'src-tauri', 'src', 'graph', 'types.rs')
+    const rust = readFileSync(rustPath, 'utf8')
+
+    const match = rust.match(/pub const LANE_COLORS:\s*u8\s*=\s*(\d+);/)
+    const rustValue = Number(match?.[1])
+    expect(match?.[1], 'phải tìm thấy khai báo LANE_COLORS trong types.rs').toBeDefined()
+
+    expect(
+      LANE_COLORS.length,
+      `Rust có LANE_COLORS = ${rustValue} nhưng bảng màu TS có ${LANE_COLORS.length} màu. ` +
+        `Thiếu màu thì colorFor() gập lại và hai lane vẽ cùng lúc trùng màu.`,
+    ).toBe(rustValue)
+
+    expect(
+      rustValue,
+      `LANE_COLORS = ${rustValue} nhỏ hơn MAX_VISIBLE_LANES = ${MAX_VISIBLE_LANES}: ` +
+        `lane 0 và lane ${rustValue} vẽ được cùng lúc mà trùng màu hệt nhau.`,
+    ).toBe(MAX_VISIBLE_LANES)
+  })
+
+  it('mọi màu trong bảng là duy nhất — không có hai lane cùng màu', () => {
+    const duplicates = LANE_COLORS.filter((c, i) => LANE_COLORS.indexOf(c) !== i)
+    expect(duplicates, `màu bị lặp trong bảng: ${duplicates.join(', ')}`).toEqual([])
+  })
+
   it('cap suy ra đúng từ LANE_WIDTH và GRAPH_PADDING_LEFT hiện tại', () => {
     // Ghim lại chính phép tính trong doc comment, để đổi LANE_WIDTH mà quên
     // đổi cap thì test đỏ ngay chứ không phải phát hiện bằng mắt.
