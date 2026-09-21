@@ -171,16 +171,33 @@ Với mỗi commit C tại hàng r:
   2. Mọi lane khác cũng đang chờ C (nhiều nhánh cùng trỏ về C)
      -> đó là các điểm hợp nhánh. Vẽ đường chéo từ lane đó về lane của C, rồi giải phóng lane.
 
-  3. Gán cha:
-     - Cha thứ nhất  -> tiếp tục chiếm lane của C.
-     - Cha thứ hai trở đi (merge commit) -> cấp lane trống mới, vẽ đường chéo rẽ nhánh.
-     - Nếu C không có cha -> giải phóng lane của C (commit gốc).
+  3. Gán cha — LẶP qua toàn bộ danh sách cha, không giả định chỉ có tối đa hai:
+     - parents[0]      -> tiếp tục chiếm lane của C.
+     - parents[1..n]   -> với MỖI cha còn lại, cấp một lane trống mới và vẽ một đường
+                          chéo rẽ nhánh riêng. Merge octopus có 3, 4 hay nhiều cha đều
+                          phải chạy đúng.
+     - Nếu C không có cha -> giải phóng lane của C (commit gốc hoặc nhánh mồ côi).
 
   4. Mọi lane khác đang hoạt động -> vẽ một đoạn thẳng dọc đi xuyên qua hàng r.
 ```
 
 Độ phức tạp `O(n × số_lane_đang_hoạt_động)`, thực tế gần như tuyến tính vì số lane hoạt
 động hiếm khi vượt 20.
+
+**Các trường hợp biên bắt buộc phải có kiểm thử riêng.** Cách cài đặt ngây thơ chỉ xử lý
+merge hai cha sẽ vỡ ở những trường hợp sau, và đây đều là dữ liệu có thật trong repo thật:
+
+| Trường hợp | Vì sao vỡ | Cách xử lý |
+|---|---|---|
+| **Merge octopus** (3 cha trở lên) | Cài đặt chỉ đọc `parents[1]` sẽ bỏ sót các cha còn lại, đường nối biến mất và lane bị rò rỉ | Lặp qua `parents[1..]`, mỗi cha một lane mới |
+| **Nhánh mồ côi** (`git checkout --orphan`) | Không có cha chung với phần còn lại, thuật toán tưởng là commit gốc giữa chừng lịch sử | Xử lý như commit không cha: giải phóng lane, không nối ngược |
+| **Lịch sử không liên quan** (`merge --allow-unrelated-histories`) | Hai cây tách rời gặp nhau, số lane tăng đột biến | Không cần xử lý riêng nếu bước 3 lặp đúng |
+| **Shallow clone** (`--depth`) | Commit ở biên có mã cha trỏ tới thứ không tồn tại trong tập dữ liệu | Bỏ qua cha không có trong tập đã nạp, kết thúc lane bằng dấu hiệu "còn tiếp" |
+| **HEAD tách rời** | Không có nhãn nhánh nào neo vào, dễ bị coi là rác | Neo nhãn `HEAD` riêng, không lẫn với nhãn nhánh |
+| **Commit submodule** | Không ảnh hưởng lane, nhưng cần kiểm tra để chắc chắn | Thêm một repo mẫu có submodule vào bộ kiểm thử |
+
+Lỗi sai ở merge octopus không phải giả thuyết — chính công cụ của Microsoft từng có lỗi
+tính lệch vị trí khi dựng commit-graph cho merge nhiều cha.
 
 ### 4.3 Cấu trúc dữ liệu đầu ra
 
@@ -207,6 +224,43 @@ Giao diện chỉ việc vẽ SVG từ cấu trúc này. Không cần tính toá
 ---
 
 ## 5. Phân tích đầu ra của git
+
+### 5.0 Bắt buộc: cấu hình môi trường cho mọi tiến trình git
+
+**Mọi** lệnh git sinh ra từ ứng dụng phải đi qua một lớp bọc chung, thiết lập sẵn các biến
+môi trường sau. Thiếu chúng thì các định dạng dành cho máy đọc ở những mục bên dưới vẫn
+không đủ an toàn.
+
+```rust
+cmd.env("LC_ALL", "C");             // Ngày tháng, stderr, chữ gợi ý — đều phụ thuộc locale
+cmd.env("LANG", "C");
+cmd.env("GIT_TERMINAL_PROMPT", "0"); // Chặn git hỏi thông tin đăng nhập
+cmd.env("GIT_ASKPASS", "");          // Chặn cả hộp thoại hỏi mật khẩu dạng đồ hoạ
+cmd.env("GCM_INTERACTIVE", "never");
+cmd.stdin(Stdio::null());            // Đóng stdin — nếu không, git chờ nhập liệu vô hạn
+```
+
+Thêm nữa, trên Windows phải đặt cờ `CREATE_NO_WINDOW` khi sinh tiến trình:
+
+```rust
+#[cfg(windows)]
+{
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+```
+
+**Vì sao quan trọng:**
+
+| Thiếu thứ gì | Hậu quả |
+|---|---|
+| `GIT_TERMINAL_PROMPT=0` và đóng stdin | Khi repo cần đăng nhập mà chưa có thông tin lưu sẵn, git chờ nhập mật khẩu trên stdin. Giao diện **treo vĩnh viễn**, không có thông báo lỗi. Đây là cái bẫy kinh điển nhất khi bọc git bằng GUI. |
+| `LC_ALL=C` | Trên máy đặt ngôn ngữ khác tiếng Anh, chuỗi ngày tháng và thông báo lỗi đổi định dạng, bộ phân tích vỡ trên máy người dùng nhưng chạy tốt trên máy lập trình viên. |
+| `CREATE_NO_WINDOW` (Windows) | Cửa sổ console đen nháy lên mỗi lần gọi git. **Không thấy khi chạy `tauri dev`, chỉ thấy ở bản đóng gói release.** Phải kiểm bằng tệp `.exe` release thật. |
+
+Ngoài ra, mọi thao tác *ghi* vào repo (stage, commit, merge, rebase, checkout) phải được
+xếp hàng tuần tự qua một khoá duy nhất cho mỗi repo. Chạy song song sẽ đụng `index.lock`.
 
 ### 5.1 Đọc lịch sử
 
@@ -255,14 +309,27 @@ git diff --patch --no-color --cached
 
 Kết quả là unified diff chuẩn, tự viết bộ phân tích khoảng 150–250 dòng.
 
+**Khi lệnh diff trả về tên tệp thì phải dùng `-z`.** Bản thân nội dung bản vá thì không cần,
+nhưng mọi biến thể liệt kê tên tệp đều cần, nếu không `core.quotepath` sẽ bọc và thoát ký tự
+với tên tệp chứa dấu cách hoặc ký tự Unicode:
+
+```bash
+git diff --name-status -z --find-renames <parent>..<commit>
+git diff --name-only -z --cached
+```
+
+Lý do giống hệt `git status --porcelain=v2 -z` ở mục 5.3.
+
 ### 5.5 Staging theo hunk
 
 Đây là phần tinh tế nhất. Cách làm:
 
-1. Lấy diff đầy đủ của tệp.
+1. Lấy diff đầy đủ của tệp, **ghi lại mã băm blob của tệp tại thời điểm đọc**.
 2. Người dùng chọn một hoặc vài hunk.
-3. Dựng lại một bản vá chỉ chứa các hunk được chọn (giữ nguyên phần header của tệp).
-4. Đưa vào git qua stdin:
+3. **Đọc lại trạng thái tệp và so mã băm với bước 1.** Nếu khác, tệp đã bị sửa từ lúc
+   hiển thị diff — huỷ thao tác và báo người dùng làm mới, không được cố áp vào.
+4. Dựng lại một bản vá chỉ chứa các hunk được chọn (giữ nguyên phần header của tệp).
+5. Đưa vào git qua stdin:
 
 ```bash
 git apply --cached -
@@ -272,6 +339,16 @@ Muốn bỏ staging thì thêm `--reverse`.
 
 Chọn theo *từng dòng* thì phức tạp hơn: phải tự tính lại số đếm trong header `@@`, và
 chuyển các dòng không được chọn thành dòng ngữ cảnh.
+
+**Bước 3 không được bỏ qua.** Nếu người dùng (hoặc trình soạn thảo, hoặc một tiến trình
+khác) sửa tệp trong khoảng thời gian giữa lúc giao diện vẽ diff và lúc bấm nút stage, bản
+vá dựng lại sẽ không khớp với nội dung thật. Khi đó `git apply` hoặc báo lỗi, hoặc tệ hơn
+là áp nhầm vị trí do cơ chế so khớp mờ. Cả Sourcetree lẫn Magit đều từng có lỗi thuộc đúng
+lớp này. Cách xử lý đúng là báo cho người dùng biết tệp đã đổi, chứ không im lặng áp bừa.
+
+**Các trường hợp biên của staging cần kiểm thử riêng:** tệp nhị phân, tệp không có dòng
+trống cuối cùng (`\ No newline at end of file`), tệp vừa đổi tên vừa sửa nội dung, và
+tương tác giữa chuẩn hoá xuống dòng CRLF/LF với việc chỉ stage một phần.
 
 ---
 
