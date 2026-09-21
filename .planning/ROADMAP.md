@@ -93,7 +93,7 @@ Plans:
 **Plans**: 7 plans (7 wave, tuần tự — mỗi plan tiêu thụ kiểu hoặc tệp của plan trước, không có hai plan nào chạy song song được)
 
 Plans:
-- [ ] 02-01-PLAN.md — Bộ repo mẫu (9 hình dạng) + script sinh repo 100k commit + dev-dependency (insta, criterion, lru)
+- [x] 02-01-PLAN.md — Bộ repo mẫu (9 hình dạng) + script sinh repo 100k commit + dev-dependency (insta, criterion, lru)
 - [ ] 02-02-PLAN.md — Hợp đồng dữ liệu (Commit, Ref, GraphRow, Edge) + bộ phân tích `git log` theo byte
 - [ ] 02-03-PLAN.md — Thuật toán gán lane (TDD) + snapshot insta trên 8 repo mẫu + benchmark criterion vào CI
 - [ ] 02-04-PLAN.md — Bộ phân tích `for-each-ref` + cache theo RepoId + 4 Tauri command + kiểu TypeScript
@@ -238,7 +238,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Nền tảng và lớp bọc git | 3/4 | In Progress|  |
-| 2. Lịch sử và đồ thị nhánh | 0/7 | Planned | - |
+| 2. Lịch sử và đồ thị nhánh | 1/7 | In Progress|  |
 | 3. Xem khác biệt | 0/? | Not started | - |
 | 4. Vòng lặp commit theo tệp | 0/? | Not started | - |
 | 5. Staging theo khối và an toàn khi huỷ | 0/? | Not started | - |

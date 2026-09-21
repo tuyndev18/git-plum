@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-09-21T05:45:00.000Z"
+last_updated: "2026-09-21T07:47:45.680Z"
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 4
-  completed_plans: 3
-  percent: 75
+  total_plans: 11
+  completed_plans: 4
+  percent: 36
 ---
 
 # Project State: git-plum
@@ -22,7 +22,7 @@ progress:
 
 **Core Value:** Đọc và hiểu lịch sử của một repository phải tức thì — đồ thị commit mở ra trong dưới một giây và cuộn mượt kể cả trên repo hàng chục nghìn commit.
 
-**Current focus:** Phase 1 — Nền tảng và lớp bọc git
+**Current focus:** Phase 2 — Lịch sử và đồ thị nhánh (Core Value)
 
 **Mode:** mvp (Vertical MVP) · **Granularity:** standard · **Parallelization:** enabled
 
@@ -33,9 +33,9 @@ progress:
 | | |
 |---|---|
 | **Phase** | 2 — Lịch sử và đồ thị nhánh |
-| **Plan** | Chưa lập (chạy `/gsd-plan-phase 2`) |
-| **Status** | Phase 1 đóng với nợ QA thủ công — xem bên dưới |
-| **Progress** | Phase 1/8 · Phase 1 đóng ở mức "đạt phần tự động hoá được" |
+| **Plan** | 1 / 7 xong (02-01 — bộ repo mẫu và bộ sinh repo hiệu năng) |
+| **Status** | Wave 1 của Phase 2 xong; wave 2 (phân tích `git log`) sẵn sàng chạy |
+| **Progress** | Phase 1/8 · Phase 2 plan 1/7 |
 
 ```
 [#.......] 1/8 phases
@@ -62,7 +62,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Metric | Value |
 |---|---|
 | Phases completed | 1 / 8 (có nợ) |
-| Plans completed | 4 |
+| Plans completed | 5 |
 | v1 requirements delivered | 7 / 59 đã kiểm chứng · 2 nữa có mã nhưng chưa kiểm thật (PLAT-07, PLAT-09) · PLAT-01 và REL-04 đạt ở mức yếu hơn ROADMAP |
 
 | Plan | Thời lượng | Tasks | Files |
@@ -70,6 +70,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 1 P01 | 18min | 2 tasks | 2 files |
 | Phase 1 P02 | 9min | 3 tasks | 6 files |
 | Phase 1 P03 | 14min | 3 tasks | 6 files |
+| Phase 2 P01 | 50min | 3 tasks | 9 files |
 
 ---
 
@@ -89,14 +90,19 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 - **Hạ tầng kiểm thử giao diện** (plan 01-02): cấu hình vitest sống trong khối `test` của `vite.config.ts`, không tách `vitest.config.ts` riêng — một nguồn sự thật cho `resolve.alias`. Giả lập IPC ở ranh giới module `@/lib/ipc`, không vá `invoke` toàn cục. Test logic store gọi thẳng `useRepoStore.getState()`, không render component.
 - **Danh sách repository gần đây** (plan 01-03, PLAT-07): lưu qua `tauri-plugin-store` vào `recent-repos.json`, giới hạn `MAX_RECENT = 10`. Logic thuần tuý (`mergeRecent`, `sanitizeRecent`, `normalizeRepoPath`) tách khỏi vỏ bọc Tauri để kiểm thử được trực tiếp. `normalizeRepoPath` sao chép chính xác `state::repo_id_for` bên Rust — đổi `\` thành `/`, cắt `/` ở cuối, **không** đổi chữ thường — để phép khử trùng lặp phía giao diện không bất đồng với `RepoId` phía backend.
 - **Danh sách gần đây là tiện ích, không phải dữ liệu quan trọng**: mọi lời gọi store bọc `try/catch` và trả mảng rỗng khi hỏng. `rememberRepo` thất bại **không được** làm hỏng `openRepository` — người dùng đã mở được repo rồi.
+- **Đếm commit bằng `git rev-list`, không bao giờ bằng `git log`** (plan 02-01): `git log` áp *history simplification* và **lược bỏ** commit có tree trùng một cha — một merge không sửa tệp nào sẽ biến mất khỏi `git log` dù repo có merge thật. `--sparse`, `--full-history`, `--boundary`, `-m` đều không cứu được. Hệ quả cho fixture: **mọi** commit phải đổi nội dung tệp, kể cả commit merge.
+- **`git fast-import` là cách duy nhất giữ được byte thô không-UTF-8** (plan 02-01, HIST-11): shell chuyển `printf 'caf\351.txt'` thành UTF-8 trước khi tới hệ thống tệp, và `git commit -F` chuyển `\377` thành `\303\277`. Chỉ luồng fast-import giữ nguyên byte ở cả đường dẫn và thông điệp. Repo mẫu `non-utf8` vì vậy dựng bằng fast-import.
+- **Merge octopus: không dùng `--no-ff`** (plan 02-01): `--no-ff` thêm chính `main` làm một cha nữa (5 cha thay vì 4). Và `main` phải có commit riêng trước khi rẽ nhánh, nếu không chiến lược octopus fast-forward và chỉ ra 3 cha.
+- **`module testing` là `pub`, không phải `#[cfg(test)]`** (plan 02-01): benchmark `criterion` là target riêng và không thấy mã dưới `#[cfg(test)]`, mà checkpoint #1 đòi benchmark gán lane ở 100k commit. Thiếu fixture thì `require_fixture` bỏ qua **ồn ào** (`eprintln!` + `None`), không panic — người mới clone repo chạy `cargo test` phải thấy xanh kèm lời nhắc.
+- **Repo mẫu phải tất định tuyệt đối** (plan 02-01): ghim cả sáu biến `GIT_AUTHOR_*`/`GIT_COMMITTER_*`, dấu thời gian tăng dần cố định, `--initial-branch=main`, `core.autocrlf=false` (đặt **lúc clone**, không phải sau). Lý do: plan 02-03 chụp snapshot `insta` của đầu ra gán lane, SHA trôi thì snapshot đỏ vô cớ.
 - **Hai thao tác có tham số đi ngoài sổ đăng ký PLAT-04** (`onOpen`/`onForget` truyền bằng prop): `Command.run` có chữ ký `() => void | Promise<void>`, không nhận tham số. Mở rộng sổ đăng ký cho lệnh có tham số để dành cho v2 lúc làm bảng lệnh gõ nhanh. `repo.open` và `repo.close` vẫn đi qua sổ đăng ký như cũ.
 - Chi tiết đầy đủ các quyết định kỹ thuật: xem `.planning/PROJECT.md` mục Key Decisions và `.planning/research/SUMMARY.md` mục 3.
 
 ### Việc cần làm
 
 - [ ] **Phase 1, việc đầu tiên**: dựng toolchain Rust. VS Build Tools 2022 (workload Desktop development with C++) **trước**, rồi rustup stable-msvc. Xác minh bằng `cargo build` chạy thành công. Không có bước này thì không kiểm chứng được gì khác.
-- [ ] **Phase 2, chuẩn bị trước khi viết thuật toán lane**: dựng bộ repo mẫu (octopus 4 cha, hai gốc không liên quan, nhánh mồ côi, 20+ lane đồng thời, tên tệp không UTF-8 + thông điệp emoji, bản sao nông).
-- [ ] **Phase 2**: sao chép sẵn một repo 50k–100k commit (Linux kernel hoặc Chromium) để đo hiệu năng.
+- [x] **Phase 2, chuẩn bị trước khi viết thuật toán lane**: xong ở plan 02-01 — chín repo mẫu tất định trong `target/fixtures/`, sinh bằng `bash scripts/fixtures/make-fixtures.sh`.
+- [x] **Phase 2**: repo đo hiệu năng — xong ở plan 02-01, nhưng **sinh** chứ không tải Linux kernel (`bash scripts/fixtures/make-perf-repo.sh`): 100 007 commit, 3 182 merge, `.git` 32MB, sinh trong 24 giây.
 - [ ] **Phase 6, trước khi chốt phạm vi**: chạy spike có giới hạn thời gian cho trình giải quyết xung đột trên CodeMirror 6.
 - [ ] **Câu hỏi còn mở, quyết khi tới nơi**: nhiều repo mở theo thẻ (v1 hay v2 — kiến trúc đã sẵn sàng nhờ PLAT-05) · blame ở phase đánh bóng v1 hay v1.x (quyết ở cuối Phase 3, theo lịch thực tế) · giá trị thật của AI (xác thực với người dùng beta trước khi đầu tư quá 3–5 ngày công).
 
