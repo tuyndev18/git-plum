@@ -531,3 +531,180 @@ button:disabled {
   grid-column: 1 / -1;
   height: 1em;
 }
+
+/* --- Chi tiết commit (Phase 2, plan 02-06) — HIST-08 -------------------- */
+
+.commit-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.commit-detail-empty,
+.commit-detail-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.commit-detail-error pre {
+  margin: 0;
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.commit-detail-subject {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.commit-detail-body {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--bg-inset);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.commit-detail-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.commit-detail-meta dt {
+  color: var(--text-faint);
+}
+
+.commit-detail-meta dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.commit-detail-email {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.commit-detail-sha {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.commit-detail-root {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.commit-detail-parents {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.commit-detail-parent-link {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.commit-detail-parent-link:hover {
+  text-decoration: underline;
+}
+
+/* --- Danh sách tệp (Phase 2, plan 02-06) — HIST-09 ----------------------- */
+
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.file-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.file-list-count {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.file-list-truncated {
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg-inset));
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+.file-list-empty {
+  color: var(--text-faint);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.file-list-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.file-status {
+  flex-shrink: 0;
+  min-width: 60px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.file-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.file-old-path {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.file-tree-dir-name {
+  padding: 3px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+}

@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 
-import { CommitDetail } from '@/components/history/CommitDetail'
+import { CommitDetail, __resetCommitDetailCacheForTest } from '@/components/history/CommitDetail'
 import { ipc, type Commit, type CommitDetail as CommitDetailPayload } from '@/lib/ipc'
 import { useHistoryStore } from '@/stores/historyStore'
 import { useSelectionStore } from '@/stores/selectionStore'
@@ -49,6 +49,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   useHistoryStore.setState({ byRepo: {} })
   useSelectionStore.setState({ selectedByRepo: {} })
+  __resetCommitDetailCacheForTest()
 })
 
 describe('selectedCommitId null', () => {
@@ -58,7 +59,7 @@ describe('selectedCommitId null', () => {
 
     render(<CommitDetail repoId={REPO_ID} />)
 
-    expect(screen.getByText(/chọn một commit/i)).toBeInTheDocument()
+    expect(screen.getByText(/chọn một commit/i)).toBeTruthy()
   })
 })
 
@@ -84,13 +85,13 @@ describe('có id -> hiện metadata', () => {
 
     await waitFor(() => expect(getCommitDetail).toHaveBeenCalled())
 
-    expect(screen.getByText('feat: something')).toBeInTheDocument()
-    expect(screen.getByText(/dong 1/)).toBeInTheDocument()
-    expect(screen.getByText(/dong 2/)).toBeInTheDocument()
-    expect(screen.getByText(/dong 3/)).toBeInTheDocument()
-    expect(screen.getByText('Nguyen Van A')).toBeInTheDocument()
-    expect(screen.getByText('a@x.com')).toBeInTheDocument()
-    expect(screen.getByText('abc123def456')).toBeInTheDocument()
+    expect(screen.getByText('feat: something')).toBeTruthy()
+    expect(screen.getByText(/dong 1/)).toBeTruthy()
+    expect(screen.getByText(/dong 2/)).toBeTruthy()
+    expect(screen.getByText(/dong 3/)).toBeTruthy()
+    expect(screen.getByText('Nguyen Van A')).toBeTruthy()
+    expect(screen.getByText('a@x.com')).toBeTruthy()
+    expect(screen.getByText('abc123def456')).toBeTruthy()
   })
 
   it('commit hai cha -> hiện cả hai mã cha', async () => {
@@ -113,8 +114,8 @@ describe('có id -> hiện metadata', () => {
     render(<CommitDetail repoId={REPO_ID} />)
     await waitFor(() => expect(getCommitDetail).toHaveBeenCalled())
 
-    expect(screen.getByText('p1')).toBeInTheDocument()
-    expect(screen.getByText('p2')).toBeInTheDocument()
+    expect(screen.getByText('p1')).toBeTruthy()
+    expect(screen.getByText('p2')).toBeTruthy()
   })
 
   it('commit BỐN cha (octopus) -> hiện cả bốn mã cha', async () => {
@@ -137,10 +138,10 @@ describe('có id -> hiện metadata', () => {
     render(<CommitDetail repoId={REPO_ID} />)
     await waitFor(() => expect(getCommitDetail).toHaveBeenCalled())
 
-    expect(screen.getByText('p1')).toBeInTheDocument()
-    expect(screen.getByText('p2')).toBeInTheDocument()
-    expect(screen.getByText('p3')).toBeInTheDocument()
-    expect(screen.getByText('p4')).toBeInTheDocument()
+    expect(screen.getByText('p1')).toBeTruthy()
+    expect(screen.getByText('p2')).toBeTruthy()
+    expect(screen.getByText('p3')).toBeTruthy()
+    expect(screen.getByText('p4')).toBeTruthy()
   })
 
   it('commit gốc (parents rỗng) -> hiện nhãn "commit gốc", không danh sách cha rỗng', async () => {
@@ -163,7 +164,7 @@ describe('có id -> hiện metadata', () => {
     render(<CommitDetail repoId={REPO_ID} />)
     await waitFor(() => expect(getCommitDetail).toHaveBeenCalled())
 
-    expect(screen.getByText(/commit gốc/i)).toBeInTheDocument()
+    expect(screen.getByText(/commit gốc/i)).toBeTruthy()
   })
 
   it('getCommitDetail ném lỗi -> hiện thông báo qua describeError, không trắng vùng', async () => {
@@ -185,7 +186,7 @@ describe('có id -> hiện metadata', () => {
 
     render(<CommitDetail repoId={REPO_ID} />)
 
-    await waitFor(() => expect(screen.getByText(/boom/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/boom/)).toBeTruthy())
   })
 
   it('truncated === true -> hiện cảnh báo danh sách tệp bị cắt kèm số', async () => {
@@ -212,7 +213,7 @@ describe('có id -> hiện metadata', () => {
 
     render(<CommitDetail repoId={REPO_ID} />)
 
-    await waitFor(() => expect(screen.getByText(/cắt/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/cắt/i)).toBeTruthy())
   })
 
   it('đổi selectedCommitId -> gọi getCommitDetail cho id mới; chọn lại CÙNG id -> KHÔNG gọi lại', async () => {

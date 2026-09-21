@@ -6,7 +6,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 
 import { FileList } from '@/components/history/FileList'
 import { clearCommands } from '@/lib/commands'
@@ -26,42 +26,43 @@ describe('dạng phẳng (mặc định)', () => {
   it('mỗi FileChange một hàng, hiện status và path đầy đủ', () => {
     render(<FileList files={[fc('src/a.ts'), fc('src/b.ts', { status: 'A' })]} truncated={false} />)
 
-    expect(screen.getByText('src/a.ts')).toBeInTheDocument()
-    expect(screen.getByText('src/b.ts')).toBeInTheDocument()
+    expect(screen.getByText('src/a.ts')).toBeTruthy()
+    expect(screen.getByText('src/b.ts')).toBeTruthy()
   })
 })
 
 describe('chuyển dạng', () => {
-  it('bấm nút chuyển -> dạng cây: thấy tên thư mục, tệp hiện tên ngắn không kèm đường dẫn cha', () => {
+  it('bấm nút chuyển -> dạng cây: thấy tên thư mục, tệp hiện tên ngắn không kèm đường dẫn cha', async () => {
     render(<FileList files={[fc('src/a.ts')]} truncated={false} />)
 
     screen.getByRole('button', { name: /cây|dạng/i }).click()
 
-    expect(screen.getByText('src')).toBeInTheDocument()
-    expect(screen.getByText('a.ts')).toBeInTheDocument()
-    expect(screen.queryByText('src/a.ts')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('src')).toBeTruthy())
+    expect(screen.getByText('a.ts')).toBeTruthy()
+    expect(screen.queryByText('src/a.ts')).toBeNull()
   })
 
-  it('bấm lại -> về dạng phẳng', () => {
+  it('bấm lại -> về dạng phẳng', async () => {
     render(<FileList files={[fc('src/a.ts')]} truncated={false} />)
 
     const toggle = screen.getByRole('button', { name: /cây|dạng/i })
     toggle.click()
+    await waitFor(() => expect(screen.getByText('src')).toBeTruthy())
     toggle.click()
 
-    expect(screen.getByText('src/a.ts')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('src/a.ts')).toBeTruthy())
   })
 
-  it('trạng thái chọn dạng còn nguyên khi đổi sang commit khác (files prop đổi)', () => {
+  it('trạng thái chọn dạng còn nguyên khi đổi sang commit khác (files prop đổi)', async () => {
     const { rerender } = render(<FileList files={[fc('src/a.ts')]} truncated={false} />)
 
     screen.getByRole('button', { name: /cây|dạng/i }).click()
-    expect(screen.getByText('src')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('src')).toBeTruthy())
 
     rerender(<FileList files={[fc('lib/b.ts')]} truncated={false} />)
 
-    expect(screen.getByText('lib')).toBeInTheDocument()
-    expect(screen.queryByText('lib/b.ts')).not.toBeInTheDocument()
+    expect(screen.getByText('lib')).toBeTruthy()
+    expect(screen.queryByText('lib/b.ts')).toBeNull()
   })
 })
 
@@ -74,8 +75,8 @@ describe('đổi tên', () => {
       />,
     )
 
-    expect(screen.getByText(/old\.ts/)).toBeInTheDocument()
-    expect(screen.getByText(/new\.ts/)).toBeInTheDocument()
+    expect(screen.getByText(/old\.ts/)).toBeTruthy()
+    expect(screen.getByText(/new\.ts/)).toBeTruthy()
   })
 })
 
@@ -83,8 +84,8 @@ describe('danh sách rỗng', () => {
   it('thông báo đọc được, không bảng rỗng', () => {
     render(<FileList files={[]} truncated={false} />)
 
-    expect(screen.queryByRole('table')).not.toBeInTheDocument()
-    expect(screen.getByText(/không có tệp|rỗng/i)).toBeInTheDocument()
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(screen.getByText(/không có tệp|rỗng/i)).toBeTruthy()
   })
 })
 
@@ -92,7 +93,7 @@ describe('byte lossy (HIST-11)', () => {
   it('đường dẫn chứa U+FFFD vẫn hiện một hàng', () => {
     render(<FileList files={[fc('caf�.txt')]} truncated={false} />)
 
-    expect(screen.getByText(/caf.*\.txt/)).toBeInTheDocument()
+    expect(screen.getByText(/caf.*\.txt/)).toBeTruthy()
   })
 })
 
@@ -106,12 +107,12 @@ describe('trạng thái nhãn', () => {
     ['T', 'Đổi kiểu'],
   ])('status %s -> nhãn chứa %s', (status, expected) => {
     render(<FileList files={[fc('x.ts', { status })]} truncated={false} />)
-    expect(screen.getByText(new RegExp(expected))).toBeInTheDocument()
+    expect(screen.getByText(new RegExp(expected))).toBeTruthy()
   })
 
   it('ký tự lạ -> hiện nguyên ký tự, không bỏ hàng', () => {
     render(<FileList files={[fc('x.ts', { status: 'Z' })]} truncated={false} />)
-    expect(screen.getByText('x.ts')).toBeInTheDocument()
+    expect(screen.getByText('x.ts')).toBeTruthy()
   })
 })
 
