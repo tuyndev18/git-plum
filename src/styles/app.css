@@ -473,10 +473,30 @@ button:disabled {
 
 /* Canvas thuần trình bày (ràng buộc số 5) — không bao giờ bắt sự kiện bấm.
    Chọn hàng đi qua .commit-row bên dưới, không qua toạ độ canvas. */
+/*
+ * Canvas đồ thị dính theo VÙNG NHÌN THẤY, không cuộn cùng danh sách.
+ *
+ * `position: sticky; top: 0` giữ canvas ở đỉnh khung cuộn, và
+ * `margin-bottom: -100%` kéo div nội dung lên đè lên đúng chỗ canvas vừa
+ * chiếm — nếu không, canvas sẽ đẩy toàn bộ danh sách xuống dưới đúng chiều cao
+ * của nó. `-100%` (không phải một số px) để luôn khớp dù chiều cao canvas đổi
+ * theo kích thước cửa sổ.
+ *
+ * Vì sao không dùng `position: absolute` như trước: canvas chỉ cao bằng vùng
+ * nhìn thấy (`scrollHeight`), nên neo tuyệt đối ở `top: 0` của một div cao
+ * hàng chục nghìn px khiến nó chỉ phủ được phần đầu danh sách — mọi hàng cuộn
+ * xuống dưới không còn canvas để vẽ lên. Xem `CommitList.tsx`.
+ *
+ * `z-index: 0` cộng `pointer-events: none`: canvas nằm dưới các hàng về thứ tự
+ * nhận chuột (ràng buộc số 5 — bấm vào đường kẻ vẫn chọn được hàng), nhưng vẫn
+ * hiện phía trên nền khung cuộn.
+ */
 .graph-canvas {
-  position: absolute;
-  left: 0;
+  position: sticky;
   top: 0;
+  left: 0;
+  margin-bottom: -100%;
+  z-index: 0;
   pointer-events: none;
 }
 

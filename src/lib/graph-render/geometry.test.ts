@@ -103,3 +103,61 @@ describe('hằng số hình học', () => {
     expect(NODE_RADIUS).toBeLessThan(ROW_HEIGHT / 2)
   })
 })
+
+/*
+ * Hệ quy chiếu của `GraphRenderRow.y`: toạ độ TRONG CANVAS, không phải trong
+ * danh sách.
+ *
+ * Canvas đồ thị chỉ cao bằng vùng nhìn thấy (`scrollHeight`, thường ~550px),
+ * không cao bằng cả danh sách (`getTotalSize()`, có thể hàng chục nghìn px).
+ * Nên `CommitList` phải đưa `y = virtualItem.start - scrollTop`, không phải
+ * `y = virtualItem.start`.
+ *
+ * Lỗi đã xảy ra thật: đưa `v.start` tuyệt đối làm hàng thứ 100 (`start = 2800`)
+ * được vẽ ở y=2800 trên canvas cao 550px — ra ngoài vùng vẽ và mất hẳn. Chỉ
+ * những hàng có `start` nhỏ hơn chiều cao canvas còn thấy, nên đồ thị trông
+ * như chỉ có một chấm ở hàng đầu.
+ *
+ * happy-dom không có cuộn thật và không tính layout, nên không viết được test
+ * DOM-level cho lỗi này; test dưới đây ghim phép tính hệ quy chiếu ở dạng số
+ * học thuần.
+ */
+describe('hệ quy chiếu y của hàng đồ thị — phải nằm trong canvas', () => {
+  /** Đúng phép tính mà `CommitList.renderRows` dùng. */
+  function canvasY(virtualStart: number, scrollTop: number): number {
+    return virtualStart - scrollTop
+  }
+
+  it('hàng đầu vùng nhìn thấy luôn ở y=0 bất kể đã cuộn bao xa', () => {
+    // Cuộn tới hàng 100: virtualizer báo start=2800, scrollTop=2800.
+    expect(canvasY(100 * ROW_HEIGHT, 100 * ROW_HEIGHT)).toBe(0)
+    // Cuộn tới hàng 5000: vẫn phải là 0, không phải 140000.
+    expect(canvasY(5000 * ROW_HEIGHT, 5000 * ROW_HEIGHT)).toBe(0)
+  })
+
+  it('mọi hàng trong vùng nhìn thấy có y nằm trong chiều cao canvas', () => {
+    const canvasHeight = 550
+    const rowsVisible = Math.ceil(canvasHeight / ROW_HEIGHT)
+    // Đã cuộn sâu — đây là ca mà bản lỗi hiển thị sai.
+    const scrollTop = 3000 * ROW_HEIGHT
+    const firstVisibleIndex = 3000
+
+    for (let i = 0; i < rowsVisible; i++) {
+      const y = canvasY((firstVisibleIndex + i) * ROW_HEIGHT, scrollTop)
+      expect(y, `hàng ${firstVisibleIndex + i} phải có y >= 0`).toBeGreaterThanOrEqual(0)
+      expect(
+        y,
+        `hàng ${firstVisibleIndex + i} có y=${y}, vượt chiều cao canvas ${canvasHeight} — ` +
+          `sẽ vẽ ra ngoài vùng canvas và mất hẳn`,
+      ).toBeLessThan(canvasHeight + ROW_HEIGHT)
+    }
+  })
+
+  it('dùng y tuyệt đối (không trừ scrollTop) thì hàng cuộn sâu vẽ ra ngoài canvas', () => {
+    // Ghim lại chính xác cái SAI, để test này giải thích được vì sao phép trừ
+    // tồn tại nếu ai đó định "dọn dẹp" nó đi.
+    const canvasHeight = 550
+    const yTuyetDoi = 3000 * ROW_HEIGHT // = 84000, cách bản lỗi từng làm
+    expect(yTuyetDoi).toBeGreaterThan(canvasHeight)
+  })
+})

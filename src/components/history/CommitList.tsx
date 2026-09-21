@@ -87,17 +87,42 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
     void ensureRange(repoId, first.index, last.index + 1)
   }, [repoId, virtualItems, ensureRange])
 
+  // Vị trí cuộn hiện tại. Cần vì canvas chỉ cao bằng VÙNG NHÌN THẤY
+  // (`scrollHeight`) chứ không cao bằng cả danh sách, nên `y` đưa cho bộ vẽ
+  // phải là toạ độ TRONG canvas, không phải toạ độ trong danh sách.
+  //
+  // Thiếu phép trừ này thì hàng thứ 100 có `v.start = 2800` được vẽ ở y=2800
+  // trên một canvas cao ~550px — tức vẽ ra ngoài vùng canvas và mất hẳn. Chỉ
+  // vài hàng đầu (`v.start < chiều cao canvas`) là còn thấy, đúng hiện tượng
+  // "đồ thị chỉ có một chấm ở hàng đầu" mà người dùng báo.
+  const [scrollTop, setScrollTop] = useState(0)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    setScrollTop(el.scrollTop)
+    const onScroll = () => setScrollTop(el.scrollTop)
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
   // Đồ thị vẽ từ CÙNG virtualItems, khớp theo chỉ số với graphRows.
+  //
+  // `y` là `v.start - scrollTop`: vẫn MỘT nguồn toạ độ duy nhất (virtualizer),
+  // chỉ đổi hệ quy chiếu từ "trong danh sách" sang "trong canvas". Cột văn bản
+  // dùng `translateY(v.start)` vì nó nằm trong div cao bằng cả danh sách; canvas
+  // dính theo vùng nhìn thấy nên phải trừ đi phần đã cuộn qua.
   const renderRows: GraphRenderRow[] = useMemo(
     () =>
       virtualItems
         .map((v) => {
           const row = graphRows[v.index]
           if (!row) return null
-          return { row, index: v.index, y: v.start }
+          return { row, index: v.index, y: v.start - scrollTop }
         })
         .filter((r): r is GraphRenderRow => r !== null),
-    [virtualItems, graphRows],
+    [virtualItems, graphRows, scrollTop],
   )
 
   const maxLane = useMemo(
@@ -131,13 +156,23 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
 
   return (
     <div ref={scrollRef} className="commit-scroll" data-testid="commit-scroll">
+      {/*
+        Canvas nằm NGOÀI div nội dung và `position: sticky; top: 0` để nó dính
+        theo vùng nhìn thấy thay vì cuộn đi cùng danh sách.
+
+        Trước đây canvas nằm TRONG div cao `getTotalSize()` (có thể hàng chục
+        nghìn px) nhưng bản thân chỉ cao `scrollHeight` (~550px) và neo ở top 0
+        — nên nó chỉ phủ được phần đầu danh sách, và mọi hàng cuộn xuống dưới
+        không còn canvas để vẽ lên. Kết hợp với `y` tuyệt đối (xem `renderRows`)
+        là hai lỗi cùng gây ra hiện tượng "đồ thị chỉ còn một chấm".
+      */}
+      <GraphCanvas
+        rows={renderRows}
+        width={graphWidth(maxLane)}
+        height={scrollHeight}
+        selectedCommitId={selectedCommitId}
+      />
       <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-        <GraphCanvas
-          rows={renderRows}
-          width={graphWidth(maxLane)}
-          height={scrollHeight}
-          selectedCommitId={selectedCommitId}
-        />
         {virtualItems.map((v) => {
           const commit = commits[v.index]
           const isSelected = commit !== undefined && commit.id === selectedCommitId
