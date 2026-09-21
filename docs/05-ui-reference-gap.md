@@ -1,15 +1,31 @@
 # Khoảng cách giữa giao diện hiện tại và ảnh tham chiếu
 
 **Ngày:** 2026-09-21
-**Bối cảnh:** Người dùng đối chiếu app sau wave 6 với `docs/screenshots/` và kết luận
-"không giống thiết kế". Quyết định: **đóng wave 6 trước** (chỉ cần 3 lỗi checkpoint đã
-hết), việc dựng lại layout theo tham chiếu tách thành **phase riêng**.
 
-Người dùng đã chọn phạm vi: **làm toàn bộ layout giống tham chiếu** — toolbar, tab repo,
-sidebar có icon và số đếm, panel phải đầy đủ. Không chỉ sửa thứ tự cột.
+> ## ⛔ ĐÃ ĐÓNG — phần còn lại KHÔNG LÀM (quyết định 2026-09-21)
+>
+> Chủ dự án quyết định **không làm tiếp** phần giống tham chiếu còn lại: toolbar
+> (Undo/Redo/Pull/Push/Branch/Stash/Pop), tab repo nhiều repo, sidebar có icon và gập,
+> panel phải đầy đủ (avatar, `N modified`, `View all files`, icon màu theo trạng thái
+> tệp), nhãn thời gian tương đối dạng bong bóng, thanh trạng thái đầy đủ hơn.
+>
+> Tài liệu này giữ lại làm **ghi chép khảo sát**, không phải kế hoạch. Không lập phase UI
+> riêng. Mục 4 ("Điều cần quyết trước khi lập phase UI") vì vậy cũng không còn hiệu lực.
+>
+> **Đã làm và giữ lại** (commit `544ae5f`, `157b398`): thứ tự cột NHÃN → ĐỒ THỊ → THÔNG
+> ĐIỆP, header cột, nút commit vòng viền dày (merge lớn hơn, có tâm đặc), đường lane 2px,
+> `LANE_WIDTH` 22px kèm cap lane 13, nền cột đồ thị, hàng xen kẽ, đường nối nhãn, phần
+> body xám nối sau subject.
+
+**Bối cảnh ban đầu:** Người dùng đối chiếu app sau wave 6 với `docs/screenshots/` và kết
+luận "không giống thiết kế". Quyết định lúc đó: đóng wave 6 trước (chỉ cần 3 lỗi
+checkpoint đã hết), việc dựng lại layout theo tham chiếu tách thành phase riêng — **phần
+tách ra đó nay đã bị bỏ, xem khung trên**.
 
 Xem thêm `.planning/PROJECT.md` mục Constraints về quyết định sao chép màu/icon/font của
-GitKraken và rủi ro giấy phép kèm theo (commit `5417400`).
+GitKraken và rủi ro giấy phép kèm theo (commit `5417400`). Quyết định bỏ phần UI còn lại
+**không** xoá bỏ ghi chú rủi ro đó: những gì đã sao chép (bố cục cột, hình dạng nút, cách
+vẽ đường gập vuông) vẫn nằm trong mã.
 
 ---
 
