@@ -53,7 +53,7 @@ key-files:
     - "src/styles/app.css.test.ts — +6 test total (3 CSS-string guards for fix A row-height containment; 3 STRUCTURAL guards for fix B: exact column count, badge-column 0 floor, RefBadges position in JSX outside .commit-subject)"
     - "src/lib/graph-render/canvasRenderer.ts — checkpoint round 1 fix C: outEdges now stop at the row's own bottom edge instead of y + 1.5 * ROW_HEIGHT, so no row paints into its neighbour's cell"
     - "src/lib/graph-render/canvasRenderer.test.ts — +3 test asserting Y-axis containment (the pre-existing outEdges tests only ever asserted X coordinates, which is why the 1.5-row overflow was invisible to all 179 earlier tests)"
-    - "docs/05-ui-reference-gap.md — NEW: gap between the current UI and docs/screenshots/, split by owning phase, after the user compared the app against the reference and chose to rebuild the layout as its own phase"
+    - "docs/07-ui-reference-gap.md — NEW: gap between the current UI and docs/screenshots/, split by owning phase, after the user compared the app against the reference and chose to rebuild the layout as its own phase"
 
 decisions:
   - "selectionStore.selectedByRepo[repoId] upgraded from App.tsx's plan-02-05 useState — required because CommitDetail and RefSidebar both need to read/write selection and neither is a child of the other in AppLayout's three-pane structure"
@@ -417,7 +417,7 @@ thêm ở `60a0caa` vẫn đúng.
 (~22px), nhưng cap 20 lane trong `docs/04-phase2-degraded-graph.md` **suy ra
 từ** chính con số 14px — đổi `LANE_WIDTH` là đổi luôn cap. Không sửa trong
 vòng này; ghi lại để quyết định khi làm phase dựng lại bố cục (xem
-`docs/05-ui-reference-gap.md`).
+`docs/07-ui-reference-gap.md`).
 
 ### Bài học
 

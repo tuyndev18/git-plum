@@ -107,12 +107,21 @@ profile **release**, repo 100 007 commit, ngày 2026-09-21.
 
 | Đoạn | Thời gian | Ghi chú |
 |---|---:|---|
-| (a) chạy `git log --all --topo-order` + đọc hết stdout | **633.8 ms** | 84.5% tổng đường nóng |
-| (b) `parse_log` | **63.1 ms** | 8.4% |
-| (c) `lanes::assign` | **51.9 ms** | 6.9% |
-| cache put + get + cắt trang + JSON một trang 100 commit | **0.86 ms** | 0.1% |
-| **Tổng đường nóng phía Rust** | **749.7 ms** | mốc 1000 ms |
-| Trang thứ hai (cache hit, không sinh git) | **0.646 ms** | |
+| Đoạn | Lần 1 | Lần 2 | Ghi chú |
+|---|---:|---:|---|
+| (a) chạy `git log --all --topo-order` + đọc hết stdout | **633.8 ms** | **640.4 ms** | 84–84.5% tổng đường nóng |
+| (b) `parse_log` | **63.1 ms** | **66.9 ms** | 8.4–8.8% |
+| (c) `lanes::assign` | **51.9 ms** | **54.0 ms** | 6.9–7.1% |
+| cache put + get + cắt trang + JSON một trang 100 commit | **0.86 ms** | **0.88 ms** | 0.1% |
+| **Tổng đường nóng phía Rust** | **749.7 ms** | **762.2 ms** | mốc 1000 ms |
+| Trang thứ hai (cache hit, không sinh git) | **0.646 ms** | **0.732 ms** | |
+
+**Hai lần đo độc lập.** Lần 1 trên repo 100k sinh ngày 2026-09-21 sáng; lần 2 trên repo
+**sinh lại từ đầu** cùng ngày sau khi thư mục fixture bị dọn mất (cùng
+`make-perf-repo.sh`, cùng hình dạng: 100 007 commit, 3 182 merge, 320 octopus). Chênh
+lệch **1.7%** trên tổng — nằm trong nhiễu của phép đo một lần, nên cả hai dùng được và
+không cần chọn một con số "đúng". Điều đáng tin là **tỉ lệ**: `git log` chiếm 84% ở cả hai
+lần.
 
 **Điều quan trọng nhất đọc được từ bảng này:** `git log` chiếm **84.5%**. Tối ưu
 `parse_log` và `assign` — cộng lại chỉ 15.3% — không thể đổi được con số người dùng

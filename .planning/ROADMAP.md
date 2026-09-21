@@ -99,7 +99,7 @@ Plans:
 - [x] 02-04-PLAN.md — Bộ phân tích `for-each-ref` + cache theo RepoId + 4 Tauri command + kiểu TypeScript
 - [x] 02-05-PLAN.md — Cột đồ thị canvas sau interface + danh sách ảo hoá một scroll container (checkpoint #2 — chốt canvas, người dùng chấp thuận ở vòng 2 sau khi sửa lỗi bố cục vòng 1)
 - [ ] 02-06-PLAN.md — Chi tiết commit, cây/phẳng, nhãn ref, thanh bên, tìm kiếm (tiêu chí 3, 4, 5, 6)
-- [ ] 02-07-PLAN.md — Đo thật checkpoint #1 và #4 + VERIFICATION.md
+- [~] 02-07-PLAN.md — Đo thật checkpoint #1 và #4 + VERIFICATION.md (dụng cụ đo + tài liệu + VERIFICATION.md xong; **checkpoint #1 chưa chạy** nên HIST-05 còn Pending, checkpoint #4 hoãn)
 
 **UI hint**: yes
 

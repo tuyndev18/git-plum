@@ -3,13 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-09-21T20:05:00.000Z"
+last_updated: "2026-09-21T21:40:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 11
-  completed_plans: 9
-  percent: 82
+  completed_plans: 11
+  # % tính trên số PLAN ĐÃ LẬP (Phase 1 + 2 = 11 plan), KHÔNG phải toàn dự án:
+  # Phase 3–8 chưa lập plan nào. Toàn dự án vẫn là 1/8 phase xong.
+  # Và "11/11" là mã đã thực thi — hai checkpoint người kiểm của Phase 2 còn nợ,
+  # nên Phase 2 chưa đóng. Xem Current Position và VERIFICATION.md.
+  percent: 100
 ---
 
 # Project State: git-plum
@@ -33,9 +37,9 @@ progress:
 | | |
 |---|---|
 | **Phase** | 2 — Lịch sử và đồ thị nhánh |
-| **Plan** | 5 / 7 xong, **02-06 Task 1-3 xong, checkpoint Task 4 VÒNG 1 bị từ chối + đã sửa, chờ VÒNG 2** |
-| **Status** | Plan 02-06: `selectionStore`, `refsStore`, `uiStore`, `fileTree.ts`, `CommitDetail`, `FileList`, `RefBadges`, `RefSidebar`, `CommitSearch` đã cài đủ, nối vào `App.tsx`, **182 test xanh** (từ nền 107: 66 test Task 1-3 + 3 test hồi quy fix A + 3 test hồi quy cấu trúc fix B + 3 test containment trục Y fix C). `npm run typecheck`/`npm test`/`npm run build`/`tauri build --debug`/`cargo test` đều xanh, không hồi quy. **Checkpoint round 1 bị từ chối**: ba lỗi bố cục CSS có **BA nguyên nhân độc lập** — (A) containment chiều cao Grid, sửa ở `7596e63`; (B) **nguyên nhân chính**: nhãn ref và chữ message cạnh tranh cùng một cột grid, đã tái hiện bằng số đo với Segoe UI thật (nhóm 4 badge 258px vs cột subject 144px → chữ hiện 0%), sửa bằng cột grid riêng cho nhãn ở `5ac43ef`/`970e31c`; (C) cạnh đồ thị `outEdges` vẽ tràn nửa hàng sang ô hàng kế tiếp (người dùng báo "đồ thị rất khó đọc và bị vỡ"), sửa ở `60a0caa`. **Chờ người dùng chạy lại VÒNG 2**, đặc biệt bước 2 (đồ thị vùng rẽ nhánh), bước 5 (chữ message trên hàng có nhãn), 6, 1. Xem `02-06-SUMMARY.md` mục "Checkpoint round 1: REJECTED". |
-| **Progress** | Phase 1/8 · Phase 2 plan 5/7 (02-06 đang dở, checkpoint vòng 1 rejected + đã sửa, chờ vòng 2) |
+| **Plan** | **7 / 7 đã thực thi**; hai checkpoint người kiểm CHƯA CHẠY nên 7/11 requirement còn Pending |
+| **Status** | Mã của cả 7 plan đã xong: **212 test frontend + 149 test Rust (+1 ignored)**, `typecheck`/`build`/`tauri build --release` đều xanh. Còn **hai việc nợ, cả hai cần người chạy app**: (1) **checkpoint 12 bước của 02-06** — vòng 1 bị từ chối với BA nguyên nhân độc lập, cả ba đã sửa (`7596e63` containment chiều cao Grid; `5ac43ef`/`970e31c` nhãn ref và chữ message tranh cùng cột grid, tái hiện bằng số đo Segoe UI thật 258px vs 144px → chữ hiện 0%; `60a0caa` cạnh `outEdges` vẽ tràn nửa hàng), chờ vòng 2; (2) **checkpoint #1 của 02-07** — đo hiệu năng repo 100k, **bị bỏ qua** theo quyết định chủ dự án nên HIST-05 còn Pending và Core Value chưa kiểm chứng đầu-tới-cuối. Phía Rust đã đo hai lần độc lập: **749.7ms / 762.2ms** (mốc 1000ms), `git log` chiếm **84%**. Checkpoint #4 **hoãn** (giữ JSON) vì cần phần dư IPC từ checkpoint #1. Xem `VERIFICATION.md` cho bằng chứng từng requirement. |
+| **Progress** | Phase 1/8 · Phase 2: 7/7 plan đã thực thi, 2 checkpoint người kiểm còn nợ |
 
 ```
 [#.......] 1/8 phases
@@ -62,7 +66,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Metric | Value |
 |---|---|
 | Phases completed | 1 / 8 (có nợ) |
-| Plans completed | 9 |
+| Plans completed | 11 (mã đã thực thi; Phase 2 chưa đóng — 2 checkpoint người kiểm còn nợ) |
 | v1 requirements delivered | 12 / 59 đã kiểm chứng (thêm HIST-01, HIST-02, HIST-04, HIST-11 ở plan 02-05, checkpoint #2 người dùng chấp thuận) · 2 nữa có mã nhưng chưa kiểm thật (PLAT-07, PLAT-09) · PLAT-01 và REL-04 đạt ở mức yếu hơn ROADMAP |
 
 | Plan | Thời lượng | Tasks | Files |
@@ -356,7 +360,7 @@ cầu đổi theme giống GitKraken hơn "sau này sửa sau" (`PROJECT.md` com
 - **🔶 CÒN MỞ — `LANE_WIDTH = 14px` hẹp hơn tham chiếu (~22px)**, nhưng cap 20 lane trong
   `docs/04-phase2-degraded-graph.md` **suy ra từ** chính con số 14px, nên đổi `LANE_WIDTH` là
   đổi luôn cap. Cần quyết định riêng khi làm phase dựng lại bố cục — xem
-  `docs/05-ui-reference-gap.md`. KHÔNG sửa lẻ trong plan 02-06.
+  `docs/07-ui-reference-gap.md`. KHÔNG sửa lẻ trong plan 02-06.
 - **🔴 Test hình học chỉ kiểm MỘT trục là test một nửa** (bài học nguyên nhân C, `60a0caa`): bộ
   test `canvasRenderer` kiểm rất kỹ trục **X** (lane nào, màu nào) nhưng **không một test nào
   đọc toạ độ Y** — nên lỗi `outEdges` vẽ tràn 1.5 hàng vô hình với toàn bộ 179 test. Trục Y
