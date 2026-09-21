@@ -162,6 +162,24 @@ impl GitCommand {
     }
 }
 
+/// Các khoá cấu hình git bị ghim cho mọi tiến trình con, dạng của
+/// `GIT_CONFIG_PARAMETERS` (git ≥ 2.31): mỗi cặp `key=value` bọc trong một dấu nháy
+/// đơn, các cặp ngăn nhau bằng một dấu cách. **Sai định dạng thì git bỏ qua toàn bộ
+/// chuỗi trong im lặng** — đó là lý do phải có test đọc ngược từng giá trị từ tiến
+/// trình con thay vì soát chuỗi này bằng mắt.
+///
+/// Từng khoá chống một lỗi cụ thể:
+///
+/// - `log.showSignature=false` — chữ ký GPG in thêm dòng vào đầu ra `git log`,
+///   làm lệch bộ phân tích.
+/// - `diff.noprefix=false` — người dùng đặt `diff.noprefix=true` sẽ làm mọi đầu ra
+///   diff mất tiền tố `a/` `b/`, khiến bộ phân tích tên tệp ở Phase 3 và bộ áp bản vá
+///   ở Phase 5 đọc sai đường dẫn.
+/// - `format.coverLetter=false` — chặn `format-patch` sinh thêm tệp thư giới thiệu
+///   ngoài dự kiến.
+const PINNED_GIT_CONFIG: &str =
+    "'log.showSignature=false' 'diff.noprefix=false' 'format.coverLetter=false'";
+
 /// Ghim môi trường cho tiến trình git.
 ///
 /// Mỗi dòng dưới đây chống lại một lỗi cụ thể. Đọc kỹ trước khi sửa.
@@ -183,8 +201,16 @@ fn apply_env_hardening(cmd: &mut Command) {
     cmd.env("GCM_INTERACTIVE", "never");
 
     // --- Loại bỏ ảnh hưởng từ cấu hình bên ngoài --------------------------
-    // Chữ ký GPG in thêm dòng vào đầu ra của `git log`, làm lệch bộ phân tích.
-    cmd.env("GIT_CONFIG_PARAMETERS", "'log.showSignature=false'");
+    // Xem tài liệu của `PINNED_GIT_CONFIG` ở trên để biết từng khoá chống lỗi gì.
+    // Khoá thứ tư mà ROADMAP đòi — `diff.external` — KHÔNG nằm trong chuỗi này:
+    // nó được ghim mạnh hơn bằng biến `GIT_EXTERNAL_DIFF=""` bên dưới, vì biến môi
+    // trường thắng cấu hình. Không phải bỏ sót.
+    cmd.env("GIT_CONFIG_PARAMETERS", PINNED_GIT_CONFIG);
+
+    // TODO(Phase 4): ràng buộc `--cleanup=whitespace` của PLAT-02 không đặt được ở
+    // đây — nó là tham số dòng lệnh của `git commit`, không phải biến môi trường.
+    // Phase 1 chưa có lệnh commit nào. Chi tiết và cách kiểm chứng:
+    // `docs/02-phase4-commit-notes.md`.
 
     // Người dùng có thể đã đặt sẵn các biến này trong shell; thừa hưởng chúng
     // sẽ khiến commit do ứng dụng tạo ra mang danh tính sai.
@@ -196,6 +222,9 @@ fn apply_env_hardening(cmd: &mut Command) {
     cmd.env_remove("GIT_COMMITTER_DATE");
 
     // Trình khác biệt bên ngoài sẽ thay thế đầu ra chuẩn của `git diff`.
+    // Đây chính là cách ghim khoá `diff.external` mà ROADMAP đòi: đặt biến này rỗng
+    // vô hiệu hoá `diff.external` của người dùng, và biến môi trường thắng cấu hình
+    // nên cách này mạnh hơn việc thêm một cặp vào `PINNED_GIT_CONFIG`.
     cmd.env("GIT_EXTERNAL_DIFF", "");
 
     // Trình phân trang chặn tiến trình chờ người dùng bấm phím.
@@ -309,7 +338,10 @@ mod tests {
         assert!(out.is_success(), "git config --get-regexp thất bại");
         let listing = String::from_utf8_lossy(&out.stdout).to_lowercase();
         for key in ["log.showsignature", "diff.noprefix", "format.coverletter"] {
-            assert!(listing.contains(key), "thiếu {key} trong đầu ra:\n{listing}");
+            assert!(
+                listing.contains(key),
+                "thiếu {key} trong đầu ra:\n{listing}"
+            );
         }
     }
 }
