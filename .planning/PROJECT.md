@@ -196,6 +196,16 @@ nhưng tự thiết kế lại phần nhìn. Không sao chép bảng màu, icon 
 - **Privacy**: Tính năng AI phải chọn tham gia (opt-in) và cho phép dùng model local — Nội dung
   diff có thể chứa mã nguồn nhạy cảm. Không gửi gì ra ngoài khi chưa được cho phép rõ ràng.
 - **Licensing**: Giấy phép mã nguồn mở (dự kiến MIT) — Phù hợp định vị sản phẩm công khai.
+- **🔴 Thiết kế UI (2026-09-21, đảo ngược quyết định ban đầu)**: Người dùng yêu cầu sao chép
+  **sát** màu sắc/icon/font của GitKraken (không chỉ bố cục), với lý do hiện tại chỉ dùng cá
+  nhân. Quyết định ban đầu của dự án là "lấy cảm hứng, tự do thiết kế lại — không sao chép
+  bảng màu/icon/font". Đã cảnh báo rủi ro: dự án định vị **mã nguồn mở công khai, giấy phép
+  MIT** (ngay phía trên) — sao chép sát giao diện của GitKraken (sản phẩm thương mại có
+  thương hiệu riêng) có thể vướng vấn đề bản quyền look-and-feel/nhận diện thương hiệu nếu
+  sau này repo được công khai hoặc phân phối. Người dùng xác nhận chấp nhận rủi ro này.
+  **Trước khi công khai repo hoặc phát hành bản build cho người ngoài, phải xét lại quyết
+  định này** — hoặc thay icon/màu/font bằng bản tự thiết kế, hoặc xác nhận rõ ràng đã được
+  phép/không vi phạm.
 
 ## Key Decisions
 
