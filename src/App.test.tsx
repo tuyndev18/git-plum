@@ -9,7 +9,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 
 import { App } from '@/App'
 import { ipc, type RepoInfo } from '@/lib/ipc'
@@ -263,7 +263,7 @@ describe('App', () => {
 
     render(<App />)
 
-    screen.getByText('commit chon duoc').click()
+    act(() => screen.getByText('commit chon duoc').click())
 
     await vi.waitFor(() => {
       // Subject xuất hiện ở CẢ hàng CommitList lẫn CommitDetail sau khi chọn.

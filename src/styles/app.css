@@ -179,6 +179,21 @@ button:disabled {
   overflow: hidden;
 }
 
+/* Bọc CommitSearch (chiều cao cố định) + CommitList (chiếm phần còn lại) —
+   CommitSearch thêm ở plan 02-06, HIST-10. `.commit-scroll` bên trong dùng
+   `height: 100%` nên cha nó (đây) phải có chiều cao xác định qua flex, không
+   phải `height: 100%` của `.main` truyền thẳng xuống hai con. */
+.main-history-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.main-history-body .commit-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
 .pane h2 {
   margin: 0 0 10px;
   font-size: 11px;

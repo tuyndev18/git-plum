@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 
 import { describeError, ipc } from '@/lib/ipc'
@@ -6,10 +6,14 @@ import { clearCommands, registerCommands, runCommand } from '@/lib/commands'
 import { forgetRepo } from '@/lib/recentRepos'
 import { useActiveRepo, useRepoStore } from '@/stores/repoStore'
 import { useHistoryStore } from '@/stores/historyStore'
+import { useSelectionStore } from '@/stores/selectionStore'
 import { AppLayout } from '@/components/AppLayout'
 import { CommandLogPanel } from '@/components/CommandLogPanel'
 import { RecentRepoList } from '@/components/RecentRepoList'
-import { CommitList } from '@/components/history/CommitList'
+import { RefSidebar } from '@/components/RefSidebar'
+import { CommitList, type CommitListHandle } from '@/components/history/CommitList'
+import { CommitDetail } from '@/components/history/CommitDetail'
+import { CommitSearch } from '@/components/history/CommitSearch'
 
 export function App() {
   const activeRepo = useActiveRepo()
@@ -24,12 +28,22 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [logVisible, setLogVisible] = useState(true)
   const [logRefreshKey, setLogRefreshKey] = useState(0)
-  // Trạng thái chọn commit ở dạng useState cho plan này. Plan 02-06 cần vùng
-  // chi tiết đọc cùng id, và ARCHITECTURE.md Pattern 3 khuyên một
-  // selectionStore riêng ("giữ CHỈ id, không giữ dữ liệu commit") — ghi rõ ở
-  // SUMMARY để plan 02-06 biết phải nâng cấp lên store nếu cần chia sẻ giữa
-  // nhiều component không phải con của App.
-  const [selectedCommitId, setSelectedCommitId] = useState<string | null>(null)
+  const commitListRef = useRef<CommitListHandle>(null)
+
+  // Trạng thái chọn commit nâng cấp lên `selectionStore` (từ `useState` của
+  // plan 02-05) — ARCHITECTURE.md Pattern 3: vùng chi tiết (`CommitDetail`)
+  // và thanh bên (`RefSidebar`, bấm nhánh để điều hướng) đều cần đọc/ghi
+  // cùng id, và cả hai không phải con trực tiếp của nhau trong cây component
+  // (đều là con của `App` qua `AppLayout`). Store chỉ giữ id — không dữ liệu
+  // commit — nên chọn commit khác không làm `CommitList` (đọc `historyStore`
+  // riêng) render lại.
+  const selectedCommitId = useSelectionStore((s) =>
+    activeRepoId ? (s.selectedByRepo[activeRepoId] ?? null) : null,
+  )
+  const selectCommit = useSelectionStore((s) => s.select)
+  const setSelectedCommitId = (commitId: string) => {
+    if (activeRepoId) selectCommit(activeRepoId, commitId)
+  }
 
   // Mọi thao tác đi qua sổ đăng ký lệnh (PLAT-04), không gắn thẳng vào onClick.
   useEffect(() => {
@@ -62,9 +76,9 @@ export function App() {
           if (id) {
             await closeRepository(id)
             useHistoryStore.getState().reset(id)
+            useSelectionStore.getState().clear(id)
           }
           setError(null)
-          setSelectedCommitId(null)
         },
       },
       {
@@ -207,17 +221,28 @@ export function App() {
           sidebar={
             <aside className="pane sidebar">
               <h2>Nhánh</h2>
-              <p className="placeholder">Plan 02-06 sẽ điền phần này.</p>
+              {activeRepo ? (
+                <RefSidebar repoId={activeRepo.info.id} onSelectCommit={setSelectedCommitId} />
+              ) : (
+                <p className="placeholder">Mở một repository để xem nhánh và tag.</p>
+              )}
             </aside>
           }
           main={
             <main className={`pane main${activeRepo ? ' main-history' : ''}`}>
               {activeRepo ? (
-                <CommitList
-                  repoId={activeRepo.info.id}
-                  selectedCommitId={selectedCommitId}
-                  onSelect={setSelectedCommitId}
-                />
+                <div className="main-history-body">
+                  <CommitSearch
+                    repoId={activeRepo.info.id}
+                    scrollToIndex={(index) => commitListRef.current?.scrollToIndex(index)}
+                  />
+                  <CommitList
+                    ref={commitListRef}
+                    repoId={activeRepo.info.id}
+                    selectedCommitId={selectedCommitId}
+                    onSelect={setSelectedCommitId}
+                  />
+                </div>
               ) : (
                 <div className="empty-state">
                   <h2>Chưa mở repository nào</h2>
@@ -234,7 +259,11 @@ export function App() {
           detail={
             <aside className="pane detail">
               <h2>Chi tiết</h2>
-              <p className="placeholder">Plan 02-06 sẽ điền phần này.</p>
+              {activeRepo ? (
+                <CommitDetail repoId={activeRepo.info.id} />
+              ) : (
+                <p className="placeholder">Chọn một repository để xem chi tiết commit.</p>
+              )}
             </aside>
           }
           bottom={logVisible ? <CommandLogPanel refreshKey={logRefreshKey} /> : undefined}
