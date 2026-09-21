@@ -176,6 +176,77 @@ export interface CommitDetail {
   truncated: boolean
 }
 
+// --- Kiểu của trình xem diff (Phase 3) ------------------------------------
+//
+// Khớp `domain::diff` bên Rust, và tên khoá đã được ghim bằng test ở
+// `domain/diff.rs`. Lưu ý một cái bẫy đã gặp thật khi viết phía Rust:
+// `#[serde(rename_all = "camelCase")]` đặt ở **cấp enum** chỉ đổi tên **biến thể**,
+// KHÔNG đổi tên trường bên trong biến thể — nên mỗi biến thể mang dữ liệu phải lặp
+// lại thuộc tính đó. Bản đầu serialize `old_size` trong khi phía này đọc `oldSize`,
+// và không bên nào lỗi biên dịch.
+
+/** Loại của một dòng trong bản vá. Khớp `domain::diff::LineKind`. */
+export type LineKind = 'context' | 'added' | 'removed'
+
+/**
+ * Một dòng trong một hunk. Khớp `domain::diff::DiffLine`.
+ *
+ * `oldLine` và `newLine` là hai trường riêng vì chế độ **hai cột** (DIFF-02) dựng bố
+ * cục từ đúng hai số này: dòng ngữ cảnh chiếm một hàng ở cả hai cột, dòng `added` chỉ
+ * ở cột phải, dòng `removed` chỉ ở cột trái.
+ */
+export interface DiffLine {
+  kind: LineKind
+  /** Không kèm ký tự tiền tố và không kèm ký tự kết thúc dòng (kể cả `\r`). */
+  content: string
+  /** `null` với dòng `added`. */
+  oldLine: number | null
+  /** `null` với dòng `removed`. */
+  newLine: number | null
+  /** `true` khi ngay sau dòng này git in `\ No newline at end of file`. */
+  noNewlineAtEof: boolean
+}
+
+/** Một khối thay đổi liền mạch. Khớp `domain::diff::Hunk`. */
+export interface Hunk {
+  oldStart: number
+  oldCount: number
+  newStart: number
+  newCount: number
+  /** Phần sau cặp `@@` thứ hai — git đặt tên hàm chứa hunk vào đó. Rỗng khi không có. */
+  heading: string
+  lines: DiffLine[]
+}
+
+/**
+ * Năm dạng kết quả xem diff. Khớp `domain::diff::DiffKind`, serialize với
+ * `#[serde(tag = "kind")]` nên đây là *discriminated union* phẳng: phân nhánh theo
+ * `kind` và TypeScript thu hẹp kiểu giúp.
+ *
+ * `binary` **không có** trường nội dung — DIFF-06 chặn ở tầng kiểu ở cả hai phía
+ * (T-03-13), không ở một nhánh `if` mà người sau có thể xoá.
+ */
+export type DiffKind =
+  | { kind: 'text'; hunks: Hunk[]; truncated: boolean }
+  | { kind: 'binary'; oldSize: number; newSize: number }
+  /** `limit` là ngưỡng đang áp (5 MB). Hiện cả hai số để người dùng biết vượt bao nhiêu. */
+  | { kind: 'tooLarge'; size: number; limit: number }
+  /** `size` là số **trong con trỏ**, không phải kích thước tệp con trỏ (~130 byte). */
+  | { kind: 'lfsPointer'; oid: string; size: number }
+  /** Hai phía giống hệt nhau — xảy ra với commit chỉ đổi mode tệp. */
+  | { kind: 'unchanged' }
+
+/** Diff của một tệp trong một commit. Khớp `domain::diff::FileDiff`. */
+export interface FileDiff {
+  /** Đường dẫn ở phía mới. */
+  path: string
+  /** Chỉ khác `null` khi tệp bị đổi tên hoặc sao chép. */
+  oldPath: string | null
+  /** Chữ trạng thái git kèm điểm tương đồng: `M`, `A`, `D`, `R77`, `C75`. */
+  status: string
+  kind: DiffKind
+}
+
 /**
  * Dữ liệu đầu vào cho **cả hai** đường đo của checkpoint #3. Khớp
  * `commands::diff_spike::SpikeBlobPair` bên Rust.
@@ -234,6 +305,15 @@ export const ipc = {
 
   searchCommits: (repoId: string, query: string) =>
     invoke<string[]>('search_commits', { repoId, query }),
+
+  // --- Trình xem diff (Phase 3) ---
+  //
+  // Lời gọi thứ hai cho cùng `(commitId, path)` được cache phía Rust trả lời và
+  // **không sinh tiến trình git nào** — tiêu chí thành công số 5 của phase. Nên phía
+  // này không cần tự nhớ kết quả; `staleTime: Infinity` của TanStack Query là đủ, và
+  // cả hai lớp cùng dựa trên một sự thật: diff của commit lịch sử là bất biến.
+  getFileDiff: (repoId: string, commitId: string, path: string) =>
+    invoke<FileDiff>('get_file_diff', { repoId, commitId, path }),
 
   // --- Spike đo hiệu năng diff (plan 03-01, checkpoint #3) ---
   //

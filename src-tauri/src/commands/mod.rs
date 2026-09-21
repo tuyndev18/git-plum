@@ -4,10 +4,12 @@
 //! Không chứa logic nghiệp vụ — logic nằm ở `git` và `domain` để kiểm thử được
 //! mà không cần chạy Tauri.
 
+pub mod diff;
 pub mod diff_spike;
 pub mod history;
 pub mod repo;
 
+pub use diff::*;
 pub use diff_spike::*;
 pub use history::*;
 pub use repo::*;
