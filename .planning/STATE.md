@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-09-21T19:55:00.000Z"
+last_updated: "2026-09-21T20:05:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
@@ -34,7 +34,7 @@ progress:
 |---|---|
 | **Phase** | 2 — Lịch sử và đồ thị nhánh |
 | **Plan** | 5 / 7 xong, **02-06 Task 1-3 xong, checkpoint Task 4 VÒNG 1 bị từ chối + đã sửa, chờ VÒNG 2** |
-| **Status** | Plan 02-06: `selectionStore`, `refsStore`, `uiStore`, `fileTree.ts`, `CommitDetail`, `FileList`, `RefBadges`, `RefSidebar`, `CommitSearch` đã cài đủ, nối vào `App.tsx`, **179 test xanh** (từ nền 107: 66 test Task 1-3 + 3 test hồi quy fix A + 3 test hồi quy cấu trúc fix B). `npm run typecheck`/`npm test`/`npm run build`/`tauri build --debug`/`cargo test` đều xanh, không hồi quy. **Checkpoint round 1 bị từ chối**: ba lỗi bố cục CSS có **HAI nguyên nhân độc lập** — (A) containment chiều cao Grid, sửa ở `7596e63`; (B) **nguyên nhân chính**: nhãn ref và chữ message cạnh tranh cùng một cột grid, đã tái hiện bằng số đo với Segoe UI thật (nhóm 4 badge 258px vs cột subject 144px → chữ hiện 0%), sửa bằng cột grid riêng cho nhãn ở `5ac43ef`/`970e31c`. **Chờ người dùng chạy lại VÒNG 2**, đặc biệt bước 5 (chữ message trên hàng có nhãn), 6, 1-2. Xem `02-06-SUMMARY.md` mục "Checkpoint round 1: REJECTED". |
+| **Status** | Plan 02-06: `selectionStore`, `refsStore`, `uiStore`, `fileTree.ts`, `CommitDetail`, `FileList`, `RefBadges`, `RefSidebar`, `CommitSearch` đã cài đủ, nối vào `App.tsx`, **182 test xanh** (từ nền 107: 66 test Task 1-3 + 3 test hồi quy fix A + 3 test hồi quy cấu trúc fix B + 3 test containment trục Y fix C). `npm run typecheck`/`npm test`/`npm run build`/`tauri build --debug`/`cargo test` đều xanh, không hồi quy. **Checkpoint round 1 bị từ chối**: ba lỗi bố cục CSS có **BA nguyên nhân độc lập** — (A) containment chiều cao Grid, sửa ở `7596e63`; (B) **nguyên nhân chính**: nhãn ref và chữ message cạnh tranh cùng một cột grid, đã tái hiện bằng số đo với Segoe UI thật (nhóm 4 badge 258px vs cột subject 144px → chữ hiện 0%), sửa bằng cột grid riêng cho nhãn ở `5ac43ef`/`970e31c`; (C) cạnh đồ thị `outEdges` vẽ tràn nửa hàng sang ô hàng kế tiếp (người dùng báo "đồ thị rất khó đọc và bị vỡ"), sửa ở `60a0caa`. **Chờ người dùng chạy lại VÒNG 2**, đặc biệt bước 2 (đồ thị vùng rẽ nhánh), bước 5 (chữ message trên hàng có nhãn), 6, 1. Xem `02-06-SUMMARY.md` mục "Checkpoint round 1: REJECTED". |
 | **Progress** | Phase 1/8 · Phase 2 plan 5/7 (02-06 đang dở, checkpoint vòng 1 rejected + đã sửa, chờ vòng 2) |
 
 ```
@@ -75,7 +75,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 2 P03 | 65min | 3 tasks | 14 files |
 | Phase 2 P04 | 85min | 3 tasks | 14 files |
 | Phase 2 P05 | ~110min (Task 1-3) + ~90min (checkpoint round 1: điều tra + sửa) | 4/4 tasks | 16 files |
-| Phase 2 P06 | ~95min (Task 1-3) + ~45min (round 1 fix A: chiều cao) + ~40min (round 1 fix B: cột grid riêng cho nhãn) — chờ vòng 2 | 3/4 tasks | 18 files |
+| Phase 2 P06 | ~95min (Task 1-3) + ~45min (round 1 fix A: chiều cao) + ~40min (round 1 fix B: cột grid riêng cho nhãn) + ~25min (round 1 fix C: cạnh đồ thị) — chờ vòng 2 | 3/4 tasks | 18 files |
 
 ---
 
@@ -184,6 +184,17 @@ thật đã cao hơn), (3) badge chồng/tràn khỏi cột thay vì co gọn hi
   trúc** (đếm cột, sàn 0 của cột badge, vị trí `RefBadges` trong JSX), kiểm mutation cả hai
   chiều. Sau sửa: chữ message hiện 66% (1440px) / 44% (900px, giữ sàn 120px).
 
+- **🔴 Nguyên nhân C (cạnh đồ thị vẽ tràn sang hàng kế tiếp) — `60a0caa`.** Người dùng báo tiếp
+  sau khi A và B đã sửa: đồ thị "rất khó đọc và bị vỡ". `outEdges` trong `canvasRenderer.ts` vẽ
+  từ tâm hàng tới `y + 1.5 * ROW_HEIGHT` — **nửa hàng vượt quá ô của chính nó**, đè vào ô hàng
+  kế tiếp ở lane khác, nên mọi hàng có rẽ nhánh vẽ một đường xuyên qua hàng bên cạnh. Với
+  virtualizer chỉ dựng hàng đang thấy, đường tràn còn có thể chạy xuống hàng **chưa được dựng**.
+  Sửa: mỗi hàng vẽ **strictly** trong `[y, y + ROW_HEIGHT]` — `outEdges` đi từ tâm tới mép dưới,
+  nửa trên của hàng kế tiếp do `passthrough` của hàng đó vẽ, hai nửa gặp ở mép chung nên liền
+  mạch. **Không test nào trong 179 test cũ bắt được** vì hai test `outEdges` chỉ khẳng định toạ
+  độ **X** — không một test nào đọc toạ độ **Y**. Đã thêm 3 test containment trục Y, mutation đỏ
+  cả ba. Bài học: test hình học chỉ kiểm một trục là test một nửa.
+
 **Vì sao vòng điều tra 1 cho âm tính giả:** đo trong Chromium **không có Segoe UI** (rơi về
 phông thay thế hẹp hơn) **và** ở full viewport thay vì vùng `main` 52% thật — hai sai số cộng
 dồn. Bài học: đo layout phải khớp CẢ phông CẢ bề rộng vùng chứa thật; và test đọc chuỗi CSS
@@ -278,8 +289,8 @@ có catalog dịch. Đáng làm trước khi phát hành công khai (Phase 8), k
 
 **Việc tiếp theo:** Resume `02-06-PLAN.md` Task 4 — checkpoint người dùng thật VÒNG 2
 (gate=blocking). Vòng 1 đã chạy và bị từ chối (ba lỗi bố cục CSS, **hai nguyên nhân độc lập**),
-đã sửa cả hai (`7596e63` fix A chiều cao, `5ac43ef`+`970e31c` fix B cột grid riêng cho nhãn),
-commit đủ (14 commit, xem `02-06-SUMMARY.md`). KHÔNG cần agent viết thêm mã trừ khi vòng 2 trả
+đã sửa cả hai (`7596e63` fix A chiều cao, `5ac43ef`+`970e31c` fix B cột grid riêng cho nhãn, `60a0caa` fix C cạnh đồ thị),
+commit đủ (16 commit, xem `02-06-SUMMARY.md`). KHÔNG cần agent viết thêm mã trừ khi vòng 2 trả
 về "không đạt" cho một bước cụ thể.
 
 **Để resume:** đọc `02-06-SUMMARY.md` mục "Task 4 — CHECKPOINT ROUND 1 REJECTED, đã sửa, cần
@@ -335,6 +346,11 @@ cầu đổi theme giống GitKraken hơn "sau này sửa sau" (`PROJECT.md` com
 - **Test đọc chuỗi CSS có trần**: `app.css.test.ts` bắt được "ai xoá `overflow: hidden`" nhưng
   KHÔNG bắt được lỗi *quan hệ cấu trúc* (nhãn dùng chung cột với message) — lỗi đó cần test
   **cấu trúc** (đếm số cột grid, kiểm vị trí `RefBadges` trong JSX), đã thêm ở `5ac43ef`.
+- **🔴 Test hình học chỉ kiểm MỘT trục là test một nửa** (bài học nguyên nhân C, `60a0caa`): bộ
+  test `canvasRenderer` kiểm rất kỹ trục **X** (lane nào, màu nào) nhưng **không một test nào
+  đọc toạ độ Y** — nên lỗi `outEdges` vẽ tràn 1.5 hàng vô hình với toàn bộ 179 test. Trục Y
+  chính là trục mà `ROW_HEIGHT`/`rowY` và ràng buộc thẳng hàng HIST-04 sống trên đó. Mọi test
+  hình học mới phải kiểm **cả hai trục**.
 
 Phase 1 đã đóng, 4/4 plan: 01-01 (PLAT-02 ghim cấu hình git), 01-02 (hạ tầng test giao diện),
 01-03 (PLAT-07 danh sách repository gần đây), 01-04 (kịch bản QA + checkpoint locale).
