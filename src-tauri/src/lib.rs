@@ -9,6 +9,7 @@ pub mod commands;
 pub mod domain;
 pub mod error;
 pub mod git;
+pub mod graph;
 pub mod state;
 
 /// Trợ giúp tìm repo mẫu cho test và benchmark. `pub` vì benchmark của criterion là
