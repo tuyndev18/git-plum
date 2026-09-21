@@ -45,6 +45,7 @@ pub fn run() {
             commands::list_refs,
             commands::get_commit_detail,
             commands::search_commits,
+            commands::spike_blob_pair,
         ])
         .run(tauri::generate_context!())
         .expect("không khởi động được ứng dụng Tauri");

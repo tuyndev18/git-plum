@@ -176,6 +176,30 @@ export interface CommitDetail {
   truncated: boolean
 }
 
+/**
+ * Dữ liệu đầu vào cho **cả hai** đường đo của checkpoint #3. Khớp
+ * `commands::diff_spike::SpikeBlobPair` bên Rust.
+ *
+ * Hai đường phải đo trên **cùng một byte đầu vào**, nên một lời gọi trả cả hai
+ * dạng: `oldText`/`newText` cho đường A (`@codemirror/merge` tự tính diff) và
+ * `patch` cho đường B (decoration dựng từ đầu ra `git diff`).
+ *
+ * **Chỉ phục vụ spike.** Xoá cùng lúc với `SpikeHarness` khi Task 3 của plan
+ * 03-01 chốt xong đường đi.
+ */
+export interface SpikeBlobPair {
+  oldText: string
+  newText: string
+  patch: string
+  oldBytes: number
+  newBytes: number
+  patchBytes: number
+  oldLines: number
+  newLines: number
+  /** Thời gian phía Rust (ba lệnh git), để tách "git chậm" khỏi "CodeMirror chậm". */
+  rustMs: number
+}
+
 // --- Các lệnh -------------------------------------------------------------
 
 export const ipc = {
@@ -210,4 +234,11 @@ export const ipc = {
 
   searchCommits: (repoId: string, query: string) =>
     invoke<string[]>('search_commits', { repoId, query }),
+
+  // --- Spike đo hiệu năng diff (plan 03-01, checkpoint #3) ---
+  //
+  // Không nằm trên đường người dùng: chỉ `SpikeHarness` gọi, và harness chỉ hiện
+  // khi `localStorage.gitPlumPerf === '1'`.
+  spikeBlobPair: (repoId: string, commitId: string, path: string) =>
+    invoke<SpikeBlobPair>('spike_blob_pair', { repoId, commitId, path }),
 }
