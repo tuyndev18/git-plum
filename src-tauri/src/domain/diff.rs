@@ -77,10 +77,24 @@ pub struct Hunk {
 /// [`DiffKind::Binary`] **không có** trường nội dung. Một cài đặt lỡ tay muốn nhét
 /// byte tệp nhị phân vào payload sẽ không biên dịch được, chứ không phải đi qua một
 /// nhánh `if` nào đó mà người sau có thể xoá (T-03-13).
+///
+/// # ⚠️ `rename_all` phải lặp lại trên **từng biến thể** — đã đo, không đọc tài liệu
+///
+/// `#[serde(rename_all = "camelCase")]` đặt ở **cấp enum** chỉ đổi tên **biến thể**
+/// (`LfsPointer` thành `lfsPointer`). Nó **không** chạm tới tên **trường bên trong**
+/// biến thể. Bản đầu của tệp này chỉ có một dòng ở cấp enum và serialize ra
+/// `old_size`/`new_size` — trong khi `src/lib/ipc.ts` đọc `oldSize`/`newSize`, tức
+/// giao diện nhận `undefined` và hiện kích thước trống, **không** lỗi biên dịch ở
+/// bên nào.
+///
+/// Đây đúng lớp lỗi mà CONTEXT.md gọi là "lệch một bên không gây lỗi biên dịch ở cả
+/// hai phía". Nó bị bắt vì test `binary_khong_mang_byte_noi_dung` liệt kê **toàn bộ**
+/// khoá JSON rồi so bằng, chứ không chỉ kiểm khoá mình mong có mặt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum DiffKind {
     /// Tệp văn bản: các hunk đã phân tích.
+    #[serde(rename_all = "camelCase")]
     Text {
         hunks: Vec<Hunk>,
         /// `true` khi bản vá bị cắt ở `MAX_HUNKS` hoặc `MAX_DIFF_LINES`.
@@ -88,13 +102,16 @@ pub enum DiffKind {
     },
     /// Tệp nhị phân theo phán quyết của **chính git** (`--numstat` in hai dấu gạch).
     /// Chỉ có kích thước hai phía — không byte nội dung nào.
+    #[serde(rename_all = "camelCase")]
     Binary { old_size: u64, new_size: u64 },
     /// Tệp vượt ngưỡng. `size` là `max(phía cũ, phía mới)`; `limit` là ngưỡng đang áp.
     /// Giao diện hiện cả hai số, nên người dùng biết vượt bao nhiêu chứ không chỉ
     /// biết "quá lớn".
+    #[serde(rename_all = "camelCase")]
     TooLarge { size: u64, limit: u64 },
     /// Con trỏ Git LFS. `oid` và `size` đọc **từ nội dung con trỏ**, không phải kích
     /// thước của chính tệp con trỏ (~130 byte) — hai số hoàn toàn khác nhau.
+    #[serde(rename_all = "camelCase")]
     LfsPointer { oid: String, size: u64 },
     /// Hai phía giống hệt nhau. Xảy ra thật với commit chỉ đổi mode tệp
     /// (`100644` sang `100755`): git không in hunk nào.

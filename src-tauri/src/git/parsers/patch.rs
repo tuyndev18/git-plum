@@ -64,13 +64,6 @@ pub struct PatchParse {
 /// Điều này cũng làm `/dev/null` (tệp mới thêm / tệp bị xoá) trở thành ca không cần
 /// xử lý riêng: nó chỉ xuất hiện ở header, và header không được đọc.
 pub fn parse_patch(stdout: &[u8]) -> PatchParse {
-    // RED: chưa cài đặt.
-    let _ = stdout;
-    PatchParse::default()
-}
-
-#[allow(dead_code)]
-fn parse_patch_chua_cai_dat(stdout: &[u8]) -> PatchParse {
     let mut ra = PatchParse::default();
 
     let mut hunk_dang_mo: Option<Hunk> = None;
