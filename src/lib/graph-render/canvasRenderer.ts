@@ -70,18 +70,30 @@ function drawEdge(ctx: DrawingContext2D, edge: Edge, yStart: number, yEnd: numbe
 function drawRow(ctx: DrawingContext2D, item: GraphRenderRow, selectedCommitId: string | null) {
   const { row, y } = item
   const yCenter = y + ROW_HEIGHT / 2
-  const yNext = y + ROW_HEIGHT + ROW_HEIGHT / 2
+  const yBottom = y + ROW_HEIGHT
 
   // Đoạn đi ngang qua (không dừng ở hàng này) — luôn dọc theo định nghĩa của
   // `passthrough` (backend chỉ sinh passthrough khi from === to, xem
   // graph::types::Edge doc comment).
   for (const edge of row.passthrough) {
-    drawEdge(ctx, edge, y, y + ROW_HEIGHT)
+    drawEdge(ctx, edge, y, yBottom)
   }
 
-  // Cạnh nối từ hàng này xuống cha ở hàng kế tiếp.
+  // Cạnh nối từ nút hàng này xuống MÉP DƯỚI của chính hàng này — **không** kéo
+  // sang tận tâm hàng kế tiếp.
+  //
+  // Mỗi hàng chỉ được vẽ trong ô của chính nó: nửa dưới do `outEdges` của hàng
+  // này vẽ (tâm -> mép dưới), nửa trên của hàng kế tiếp do `passthrough` hoặc
+  // `outEdges` của hàng đó vẽ. Hai nửa gặp nhau ở mép chung nên đường liền
+  // mạch.
+  //
+  // Vẽ tới `y + 1.5 * ROW_HEIGHT` (bản trước) làm đường tràn vào ô của hàng
+  // dưới và **vẽ đè** lên đường mà hàng đó tự vẽ, ở lane khác nhau — đó là
+  // nguyên nhân đồ thị trông chồng chéo và "vỡ" khi có nhánh. Lỗi càng rõ khi
+  // virtualizer chỉ dựng các hàng đang thấy: đường tràn vẫn vẽ xuống một hàng
+  // có thể chưa được dựng, nên nó không bao giờ khớp với gì cả.
   for (const edge of row.outEdges) {
-    drawEdge(ctx, edge, yCenter, yNext)
+    drawEdge(ctx, edge, yCenter, yBottom)
   }
 
   // Nút tròn của chính hàng này.

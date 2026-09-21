@@ -239,3 +239,115 @@ describe('createCanvasRenderer', () => {
     expect(() => renderer.dispose()).not.toThrow()
   })
 })
+
+/*
+ * Mọi đường của một hàng phải nằm TRONG ô của hàng đó: `[y, y + ROW_HEIGHT]`.
+ *
+ * Bản cài đầu tiên vẽ `outEdges` tới `y + 1.5 * ROW_HEIGHT` — tràn nửa hàng
+ * xuống ô của hàng dưới và vẽ đè lên đường mà hàng đó tự vẽ, ở lane khác nhau.
+ * Đó là nguyên nhân người dùng báo đồ thị "rất khó nhìn và vỡ" khi có nhánh.
+ *
+ * Các test `outEdges` phía trên KHÔNG bắt được lỗi này vì chúng chỉ khẳng định
+ * toạ độ **x** (`moveArgs[0]` so với `lineArgs[0]`) và việc có gọi `bezierCurveTo`
+ * — không một test nào kiểm toạ độ **y**. Đây chính là loại lỗ hổng "test xanh
+ * không chứng minh được hành vi" đã gặp ở mutation #4 của plan 02-06 và
+ * mutation #6 của plan 02-05.
+ */
+describe('mọi đường vẽ phải nằm trong ô của hàng — không tràn sang hàng dưới', () => {
+  /** Thu mọi toạ độ y mà một lượt vẽ chạm tới. */
+  function allDrawnY(ctx: ReturnType<typeof fakeContext>): number[] {
+    const ys: number[] = []
+    for (const call of ctx.moveTo.mock.calls) ys.push((call as [number, number])[1])
+    for (const call of ctx.lineTo.mock.calls) ys.push((call as [number, number])[1])
+    for (const call of ctx.bezierCurveTo.mock.calls) {
+      const [, cp1y, , cp2y, , yEnd] = call as [number, number, number, number, number, number]
+      ys.push(cp1y, cp2y, yEnd)
+    }
+    return ys
+  }
+
+  it('outEdges dọc không vẽ quá mép dưới của hàng', () => {
+    const ctx = fakeContext()
+    const { host, canvasEl } = fakeHost(ctx)
+    const renderer = createCanvasRenderer(host as unknown as HTMLElement, {
+      createCanvasElement: () => canvasEl as unknown as HTMLCanvasElement,
+    })
+    renderer.resize(800, 600, 1)
+
+    // Hàng thứ 3 để mép trên/dưới khác 0 — lỗi tràn sẽ lộ rõ hơn hàng 0.
+    const index = 3
+    const y = index * ROW_HEIGHT
+    const row = baseRow({ outEdges: [{ fromLane: 0, toLane: 0, color: 0 }] })
+    renderer.draw([renderRow(row, index)], null)
+
+    const ys = allDrawnY(ctx)
+    expect(ys.length, 'phải có toạ độ y được vẽ').toBeGreaterThan(0)
+    for (const drawnY of ys) {
+      expect(
+        drawnY,
+        `đường vẽ tới y=${drawnY} nhưng ô của hàng ${index} chỉ là [${y}, ${y + ROW_HEIGHT}] — ` +
+          `vẽ quá mép dưới nghĩa là đè lên ô của hàng kế tiếp`,
+      ).toBeLessThanOrEqual(y + ROW_HEIGHT)
+      expect(drawnY, `đường vẽ tới y=${drawnY}, trên mép trên ${y} của hàng`).toBeGreaterThanOrEqual(y)
+    }
+  })
+
+  it('outEdges chéo (bezier) cũng không vẽ quá mép dưới của hàng', () => {
+    const ctx = fakeContext()
+    const { host, canvasEl } = fakeHost(ctx)
+    const renderer = createCanvasRenderer(host as unknown as HTMLElement, {
+      createCanvasElement: () => canvasEl as unknown as HTMLCanvasElement,
+    })
+    renderer.resize(800, 600, 1)
+
+    const index = 3
+    const y = index * ROW_HEIGHT
+    // Rẽ nhánh sang lane 2 — đây là ca tạo ra hình "vỡ" mà người dùng thấy.
+    const row = baseRow({ outEdges: [{ fromLane: 0, toLane: 2, color: 0 }] })
+    renderer.draw([renderRow(row, index)], null)
+
+    for (const drawnY of allDrawnY(ctx)) {
+      expect(
+        drawnY,
+        `đường chéo vẽ tới y=${drawnY} nhưng ô của hàng ${index} chỉ là [${y}, ${y + ROW_HEIGHT}]`,
+      ).toBeLessThanOrEqual(y + ROW_HEIGHT)
+    }
+  })
+
+  it('outEdges bắt đầu từ TÂM hàng, passthrough từ MÉP TRÊN — hai nửa khớp nhau', () => {
+    const ctx = fakeContext()
+    const { host, canvasEl } = fakeHost(ctx)
+    const renderer = createCanvasRenderer(host as unknown as HTMLElement, {
+      createCanvasElement: () => canvasEl as unknown as HTMLCanvasElement,
+    })
+    renderer.resize(800, 600, 1)
+
+    const index = 2
+    const y = index * ROW_HEIGHT
+
+    // Chỉ passthrough: phải chạy hết chiều cao hàng, mép trên -> mép dưới.
+    const pass = baseRow({ passthrough: [{ fromLane: 0, toLane: 0, color: 0 }] })
+    renderer.draw([renderRow(pass, index)], null)
+    expect(ctx.moveTo.mock.calls[0]?.[1], 'passthrough phải bắt đầu ở mép TRÊN hàng').toBe(y)
+    expect(ctx.lineTo.mock.calls[0]?.[1], 'passthrough phải kết thúc ở mép DƯỚI hàng').toBe(
+      y + ROW_HEIGHT,
+    )
+
+    // Chỉ outEdges: phải bắt đầu ở TÂM (nút commit nằm đó) và xuống mép dưới,
+    // để nửa trên của hàng kế tiếp nối tiếp liền mạch.
+    const out = fakeContext()
+    const h2 = fakeHost(out)
+    const r2 = createCanvasRenderer(h2.host as unknown as HTMLElement, {
+      createCanvasElement: () => h2.canvasEl as unknown as HTMLCanvasElement,
+    })
+    r2.resize(800, 600, 1)
+    const outRow = baseRow({ outEdges: [{ fromLane: 0, toLane: 0, color: 0 }] })
+    r2.draw([renderRow(outRow, index)], null)
+    expect(out.moveTo.mock.calls[0]?.[1], 'outEdge phải bắt đầu ở TÂM hàng (nơi có nút)').toBe(
+      y + ROW_HEIGHT / 2,
+    )
+    expect(out.lineTo.mock.calls[0]?.[1], 'outEdge phải kết thúc ở mép DƯỚI hàng').toBe(
+      y + ROW_HEIGHT,
+    )
+  })
+})
