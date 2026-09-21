@@ -15,6 +15,7 @@ import { CommitList, type CommitListHandle } from '@/components/history/CommitLi
 import { useHistoryStore } from '@/stores/historyStore'
 import { useRefsStore } from '@/stores/refsStore'
 import type { Commit, GitRef, GraphRow } from '@/lib/ipc'
+import { colorFor } from '@/lib/graph-render/geometry'
 
 vi.mock('@/lib/ipc', () => ({
   ipc: {
@@ -65,6 +66,7 @@ function stubCanvasContext() {
     restore: vi.fn(),
     scale: vi.fn(),
     clearRect: vi.fn(),
+    fillRect: vi.fn(),
     beginPath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),
@@ -248,6 +250,7 @@ describe('CommitList', () => {
       restore: vi.fn(),
       scale: vi.fn(),
       clearRect: vi.fn(),
+      fillRect: vi.fn(),
       beginPath: vi.fn(),
       moveTo: vi.fn(),
       lineTo: vi.fn(),
@@ -257,14 +260,25 @@ describe('CommitList', () => {
       fill: vi.fn(),
       fillText: vi.fn(),
       setLineDash: vi.fn(),
-      fillStyleHistory: [] as string[],
-      strokeStyle: '',
+      // Theo dõi CẢ HAI kênh màu. Màu lane của một nút commit thường nằm ở
+      // `strokeStyle` (nút là vòng tròn viền dày, tâm tô màu nền để cắt đường
+      // lane phía sau), còn `fillStyle` mang màu nền nút và màu tâm của nút
+      // merge. Chỉ theo dõi `fillStyle` thì test này không còn đo được điều nó
+      // muốn đo — đó chính là cách nó đỏ khi nút chuyển từ chấm đặc sang vòng
+      // viền.
+      colorHistory: [] as string[],
       lineWidth: 1,
       get fillStyle() {
         return ''
       },
       set fillStyle(v: string) {
-        this.fillStyleHistory.push(v)
+        this.colorHistory.push(v)
+      },
+      get strokeStyle() {
+        return ''
+      },
+      set strokeStyle(v: string) {
+        this.colorHistory.push(v)
       },
     }
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
@@ -273,10 +287,17 @@ describe('CommitList', () => {
 
     render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
 
-    // Ba hàng có color 0/1/2 khác nhau — nếu bộ vẽ hardcode một màu, chỉ có
-    // một giá trị duy nhất xuất hiện trong lịch sử fillStyle thay vì ba.
-    const distinctColorsUsed = new Set(fakeCtx.fillStyleHistory)
-    expect(distinctColorsUsed.size).toBeGreaterThanOrEqual(3)
+    // Ba hàng có color 0/1/2 khác nhau. Khẳng định đúng ba màu lane ĐÓ có mặt,
+    // không chỉ đếm số màu khác nhau: đếm suông sẽ xanh cả khi bộ vẽ dùng ba
+    // màu tuỳ ý nào đó (kể cả màu nền nút và vòng chọn), tức không chứng minh
+    // được nó đọc `row.color`.
+    const used = new Set(fakeCtx.colorHistory)
+    for (const colorIndex of [0, 1, 2]) {
+      expect(
+        used,
+        `thiếu màu lane ${colorIndex} (${colorFor(colorIndex)}) — bộ vẽ không đọc row.color`,
+      ).toContain(colorFor(colorIndex))
+    }
   })
 })
 

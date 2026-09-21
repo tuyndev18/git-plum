@@ -25,7 +25,25 @@
     system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --font-mono: 'Cascadia Code', 'JetBrains Mono', Consolas, 'Courier New', monospace;
 
-  --row-height: 26px;
+  /*
+   * Chiều cao hàng commit là hằng số của JS, KHÔNG phải của CSS: canvas đồ thị
+   * tính toạ độ Y từ `ROW_HEIGHT` ở `src/lib/graph-render/geometry.ts`, và
+   * virtualizer đặt chiều cao hàng bằng inline style từ chính con số đó. Khai
+   * một biến CSS song song ở đây là mời gọi hai nguồn số liệu lệch nhau — đã
+   * từng có `--row-height: 26px` trong khi `ROW_HEIGHT = 28`, chênh 2px, chỉ
+   * vô hại vì không chỗ nào dùng tới nó.
+   *
+   * Nền cột đồ thị — phải trùng `NODE_FILL` ở `geometry.ts`, vì tâm nút commit
+   * được tô bằng màu này để cắt đường lane chạy phía sau.
+   */
+  --graph-bg: #161b22;
+
+  /*
+   * Bề rộng cột nhãn nhánh/tag — PHẢI khớp `REF_COL_WIDTH` ở
+   * `src/lib/graph-render/geometry.ts`, vì canvas đồ thị dịch sang phải đúng
+   * con số đó để vẽ vào cột 2. Có test ghim hai phía.
+   */
+  --ref-col-width: 132px;
 }
 
 @media (prefers-color-scheme: light) {
@@ -494,7 +512,13 @@ button:disabled {
 .graph-canvas {
   position: sticky;
   top: 0;
-  left: 0;
+  /*
+   * Dịch sang phải qua cột nhãn (cột 1) để vẽ vào đúng cột đồ thị (cột 2).
+   * `10px` là `padding-left` của `.commit-row`, `10px` nữa là `gap` giữa cột 1
+   * và cột 2 — cùng hai con số khai trong `.commit-row`, giữ nguyên tên biến ở
+   * đó nếu đổi.
+   */
+  margin-left: calc(10px + var(--ref-col-width) + 10px);
   margin-bottom: -100%;
   z-index: 0;
   pointer-events: none;
@@ -549,15 +573,36 @@ button:disabled {
  */
 .commit-row {
   display: grid;
-  grid-template-columns: max-content minmax(0, max-content) minmax(120px, 2fr) minmax(0, 1fr) minmax(60px, max-content) minmax(50px, max-content);
+  /*
+   * Sáu cột, thứ tự theo ảnh tham chiếu: NHÃN · ĐỒ THỊ · THÔNG ĐIỆP · TÁC GIẢ ·
+   * THỜI GIAN · SHA.
+   *
+   * Cột 1 (nhãn) `minmax(0, max-content)`: sàn 0 nên nhường chỗ được hoàn toàn
+   * khi cửa sổ hẹp — khác `max-content` cứng của cột thời gian/sha từng làm cột
+   * thông điệp co về 0px ở checkpoint round 1 của plan 02-05.
+   * Cột 2 (đồ thị) `max-content`: bề rộng do inline style của
+   * `.commit-graph-gutter` đặt, lấy từ cùng `graphWidth(maxLane)` mà canvas
+   * dùng — một nguồn số liệu duy nhất, không viết cứng px ở CSS.
+   */
+  grid-template-columns: var(--ref-col-width) max-content minmax(120px, 2fr) minmax(0, 1fr) minmax(60px, max-content) minmax(50px, max-content);
   align-items: center;
   gap: 10px;
   padding: 0 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
   min-height: 0;
+}
+
+/*
+ * Hàng xen kẽ đậm/nhạt, như tham chiếu — giúp mắt lần theo một hàng ngang qua
+ * cột đồ thị sang cột thông điệp. Dùng `:nth-child(odd)` chứ không phải chỉ số
+ * hàng thật, nên dải màu có thể "nhảy" khi virtualizer dựng lại các hàng; điều
+ * đó chấp nhận được vì đây thuần trang trí, và bám theo chỉ số thật sẽ buộc
+ * truyền thêm một prop chỉ để tô nền.
+ */
+.commit-row:nth-child(odd) {
+  background: color-mix(in srgb, var(--bg-raised) 40%, transparent);
 }
 
 .commit-row:hover {
@@ -568,9 +613,75 @@ button:disabled {
   background: color-mix(in srgb, var(--accent) 18%, var(--bg));
 }
 
+/*
+ * Ô giữ chỗ cho cột đồ thị trong grid của hàng. Không vẽ gì — canvas vẽ đè lên
+ * đúng vùng này. Bề rộng đến từ inline style (`graphWidth(maxLane)`), cùng con
+ * số canvas dùng.
+ */
 .commit-graph-gutter {
   flex-shrink: 0;
 }
+
+/*
+ * Khung ngoài của vùng lịch sử: header cột cố định + vùng cuộn bên dưới.
+ * `min-height: 0` cần cho flex item chứa vùng cuộn, nếu không vùng cuộn sẽ
+ * giãn theo nội dung thay vì cuộn.
+ */
+.commit-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/*
+ * Header cột — nằm ngoài vùng cuộn nên không cuộn theo danh sách.
+ *
+ * Grid của header CỐ Ý không lặp lại toàn bộ sáu cột của `.commit-row`: chỉ ba
+ * nhãn đầu có ý nghĩa với người đọc, và ba cột cuối (tác giả/thời gian/sha) tự
+ * hiểu. Bề rộng hai cột đầu lấy từ cùng `graphWidth(maxLane)` nên header thẳng
+ * cột với nội dung.
+ */
+.commit-header {
+  display: grid;
+  grid-template-columns: var(--ref-col-width) max-content 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-inset);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.commit-header-ref,
+.commit-header-graph,
+.commit-header-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * Phần body commit, xám nhạt nối ngay sau subject trên cùng một dòng — như
+ * tham chiếu. Màu nhạt hơn subject để phân biệt hai mức thông tin mà không cần
+ * thêm dòng (hàng cao cố định `ROW_HEIGHT`, thêm dòng là vỡ đồ thị).
+ */
+.commit-body {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+/*
+ * Nền riêng cho vùng cột đồ thị, như tham chiếu — dải tối hơn phân định vùng đồ
+ * thị với vùng chữ. Vẽ trên chính canvas (xem `.graph-canvas`) thay vì bằng
+ * gradient trên khung cuộn: canvas đã biết đúng bề rộng cột, còn gradient sẽ
+ * phải nhận bề rộng qua một biến CSS nữa — thành nguồn số liệu thứ hai.
+ */
 
 .commit-subject {
   overflow: hidden;
@@ -620,10 +731,30 @@ button:disabled {
 .commit-ref-cell {
   display: flex;
   align-items: center;
+  /*
+   * Căn PHẢI: tham chiếu xếp nhãn sát cột đồ thị rồi nối sang nút bằng một
+   * đường kẻ ngang, nên nhãn dồn về phía phải của cột chứ không dồn về lề trái.
+   */
+  justify-content: flex-end;
   min-width: 0;
-  max-width: 220px;
   max-height: 18px;
   overflow: hidden;
+}
+
+/*
+ * Đường kẻ ngang nối nhóm nhãn sang nút commit, như tham chiếu. Vẽ bằng CSS
+ * (không phải canvas) vì nó thuộc cột nhãn, còn canvas chỉ phủ cột đồ thị.
+ *
+ * Chỉ hiện khi hàng THỰC SỰ có nhãn: `.commit-ref-cell:not(:empty)` — hàng
+ * không nhãn có ô rỗng (vẫn render để giữ số ô grid), vẽ đường cho nó sẽ thành
+ * những vạch lơ lửng không nối vào đâu.
+ */
+.commit-ref-cell:not(:empty)::after {
+  content: '';
+  flex-shrink: 0;
+  width: 10px;
+  height: 1px;
+  background: var(--border-strong);
 }
 
 .ref-badges {

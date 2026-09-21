@@ -9,7 +9,17 @@
  * trong `CommitList.tsx`).
  */
 
-import { colorFor, laneX, ROW_HEIGHT, NODE_RADIUS } from './geometry'
+import {
+  colorFor,
+  laneX,
+  ROW_HEIGHT,
+  NODE_RADIUS,
+  NODE_STROKE_WIDTH,
+  MERGE_NODE_RADIUS,
+  NODE_FILL,
+  SELECTION_RING,
+  EDGE_WIDTH,
+} from './geometry'
 import type { GraphRenderer, GraphRendererFactory, GraphRenderRow } from './types'
 import type { Edge } from '@/lib/ipc'
 
@@ -19,6 +29,7 @@ export interface DrawingContext2D {
   restore(): void
   scale(x: number, y: number): void
   clearRect(x: number, y: number, w: number, h: number): void
+  fillRect(x: number, y: number, w: number, h: number): void
   beginPath(): void
   moveTo(x: number, y: number): void
   lineTo(x: number, y: number): void
@@ -69,6 +80,9 @@ function drawEdge(ctx: DrawingContext2D, edge: Edge, yStart: number, yEnd: numbe
   const xEnd = laneX(edge.toLane)
 
   ctx.strokeStyle = colorFor(edge.color)
+  // Đường dày 2px: tham chiếu vẽ lane đủ đậm để phân biệt được màu ở tỉ lệ
+  // 100%. Đường 1px mặc định bị mảnh và nhoè khi nhiều lane cạnh nhau.
+  ctx.lineWidth = EDGE_WIDTH
   ctx.beginPath()
   ctx.moveTo(xStart, yStart)
 
@@ -95,6 +109,9 @@ function drawEdge(ctx: DrawingContext2D, edge: Edge, yStart: number, yEnd: numbe
   }
 
   ctx.stroke()
+  // Trả `lineWidth` về mặc định: context dùng chung cho cả lượt vẽ, để nguyên
+  // 2px sẽ làm mọi nét sau đó (viền nút, vòng chọn) dày theo ngoài ý muốn.
+  ctx.lineWidth = 1
 }
 
 /** Vẽ toàn bộ nội dung của một hàng: passthrough, outEdges, nút tròn, chỉ báo. */
@@ -127,36 +144,65 @@ function drawRow(ctx: DrawingContext2D, item: GraphRenderRow, selectedCommitId: 
     drawEdge(ctx, edge, yCenter, yBottom)
   }
 
-  // Nút tròn của chính hàng này.
+  // Nút của chính hàng này.
+  //
+  // Tham chiếu (`docs/screenshots/`) vẽ nút là **vòng tròn có viền dày**, tâm
+  // tô màu nền khung chứ không tô đặc màu lane: đường kẻ của lane đi xuyên phía
+  // sau nút, và tâm rỗng cắt đường đó đi nên nút "ngồi trên" đường thay vì bị
+  // đường xuyên qua. Chấm đặc 4px của bản trước làm nút gần như biến mất giữa
+  // các đường cùng màu.
   const nodeX = laneX(row.lane)
-  ctx.fillStyle = colorFor(row.color)
+  const laneColor = colorFor(row.color)
+  // Merge commit = có nhiều hơn một cạnh đi ra. Tham chiếu vẽ nút merge lớn hơn
+  // để mắt nhận ra điểm hợp nhánh khi lần theo lịch sử.
+  const isMerge = row.outEdges.length > 1
+  const radius = isMerge ? MERGE_NODE_RADIUS : NODE_RADIUS
+
+  // Khoét nền trước: tô tâm bằng màu nền khung để đường lane phía sau bị cắt.
   ctx.beginPath()
+  ctx.arc(nodeX, yCenter, radius, 0, Math.PI * 2)
+  ctx.fillStyle = NODE_FILL
+  ctx.fill()
+
+  // Rồi vẽ viền dày màu lane.
+  ctx.beginPath()
+  ctx.arc(nodeX, yCenter, radius, 0, Math.PI * 2)
+  ctx.strokeStyle = laneColor
+  ctx.lineWidth = NODE_STROKE_WIDTH
 
   if (row.terminates) {
-    // Hàng kết thúc (biên trang/shallow) — nét đứt quanh nút để phân biệt
-    // trực quan với nút commit bình thường, không phải chỉ khác màu.
-    ctx.setLineDash([2, 2])
-    ctx.arc(nodeX, yCenter, NODE_RADIUS, 0, Math.PI * 2)
-    ctx.strokeStyle = colorFor(row.color)
+    // Hàng kết thúc (biên trang/shallow) — viền nét đứt, phân biệt bằng hình
+    // dạng chứ không chỉ bằng màu.
+    ctx.setLineDash([3, 3])
     ctx.stroke()
     ctx.setLineDash([])
   } else {
-    ctx.arc(nodeX, yCenter, NODE_RADIUS, 0, Math.PI * 2)
+    ctx.stroke()
+  }
+
+  ctx.lineWidth = 1
+
+  // Merge có thêm một điểm đặc ở tâm — dấu hiệu thứ hai ngoài kích thước, để
+  // phân biệt được cả khi hai nút cạnh nhau cùng màu.
+  if (isMerge) {
+    ctx.beginPath()
+    ctx.arc(nodeX, yCenter, radius / 2.5, 0, Math.PI * 2)
+    ctx.fillStyle = laneColor
     ctx.fill()
   }
 
   if (row.commitId === selectedCommitId) {
     ctx.beginPath()
-    ctx.arc(nodeX, yCenter, NODE_RADIUS + 2, 0, Math.PI * 2)
-    ctx.strokeStyle = colorFor(row.color)
+    ctx.arc(nodeX, yCenter, radius + 3, 0, Math.PI * 2)
+    ctx.strokeStyle = SELECTION_RING
     ctx.lineWidth = 2
     ctx.stroke()
     ctx.lineWidth = 1
   }
 
   if (row.truncatedParents > 0) {
-    ctx.fillStyle = colorFor(row.color)
-    ctx.fillText(`+${row.truncatedParents}`, nodeX + NODE_RADIUS + 2, yCenter + 3)
+    ctx.fillStyle = laneColor
+    ctx.fillText(`+${row.truncatedParents}`, nodeX + radius + 3, yCenter + 3)
   }
 }
 
@@ -199,6 +245,14 @@ export const createCanvasRenderer: (
 
     draw(rows, selectedCommitId) {
       ctx.clearRect(0, 0, cssWidth, cssHeight)
+
+      // Nền riêng cho vùng đồ thị, như tham chiếu. Vẽ ở đây chứ không bằng CSS
+      // vì canvas đã biết đúng bề rộng cột (`cssWidth` = `graphWidth(maxLane)`);
+      // làm bằng gradient trên khung cuộn thì phải truyền bề rộng đó qua một
+      // biến CSS nữa, thành nguồn số liệu thứ hai có thể lệch.
+      ctx.fillStyle = NODE_FILL
+      ctx.fillRect(0, 0, cssWidth, cssHeight)
+
       for (const item of rows) {
         drawRow(ctx, item, selectedCommitId)
       }

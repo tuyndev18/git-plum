@@ -66,6 +66,7 @@ function stubCanvasContext() {
     restore: vi.fn(),
     scale: vi.fn(),
     clearRect: vi.fn(),
+    fillRect: vi.fn(),
     beginPath: vi.fn(),
     moveTo: vi.fn(),
     lineTo: vi.fn(),

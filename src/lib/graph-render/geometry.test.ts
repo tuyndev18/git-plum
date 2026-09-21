@@ -161,3 +161,50 @@ describe('hệ quy chiếu y của hàng đồ thị — phải nằm trong canv
     expect(yTuyetDoi).toBeGreaterThan(canvasHeight)
   })
 })
+
+/*
+ * `MAX_VISIBLE_LANES` tồn tại ở HAI nơi — `geometry.ts` (frontend) và
+ * `src-tauri/src/graph/types.rs` (backend) — và hai con số **phải bằng nhau**.
+ *
+ * Lệch nhau là lỗi im lặng, không crash, không cảnh báo: backend cấp lane tới
+ * 19 trong khi `laneX()` của frontend gập mọi lane ≥ 13 về cùng một cột, nên
+ * hai nhánh khác nhau vẽ đè lên nhau và người dùng thấy một đồ thị *trông hợp
+ * lý mà sai*. Không test nào khác bắt được, vì mỗi phía tự nó vẫn nhất quán.
+ *
+ * Test đọc thẳng nguồn Rust thay vì lặp lại con số ở đây — lặp lại thì chính
+ * test lại thành nơi thứ ba phải đồng bộ.
+ */
+describe('MAX_VISIBLE_LANES phải khớp giữa frontend và backend', () => {
+  it('con số ở geometry.ts bằng con số ở src-tauri/src/graph/types.rs', async () => {
+    const { readFileSync } = await import('node:fs')
+    const path = await import('node:path')
+
+    const rustPath = path.join(process.cwd(), 'src-tauri', 'src', 'graph', 'types.rs')
+    const rust = readFileSync(rustPath, 'utf8')
+
+    const match = rust.match(/pub const MAX_VISIBLE_LANES:\s*u16\s*=\s*(\d+);/)
+    const rustValue = match?.[1]
+    expect(rustValue, 'phải tìm thấy khai báo MAX_VISIBLE_LANES trong types.rs').toBeDefined()
+
+    expect(
+      Number(rustValue),
+      `Rust có MAX_VISIBLE_LANES = ${rustValue} nhưng geometry.ts có ${MAX_VISIBLE_LANES}. ` +
+        `Hai phía lệch nhau làm backend cấp lane mà frontend gập đè lên nhau — ` +
+        `sửa cả hai cùng lúc, kèm phép tính trong doc comment.`,
+    ).toBe(MAX_VISIBLE_LANES)
+  })
+
+  it('cap suy ra đúng từ LANE_WIDTH và GRAPH_PADDING_LEFT hiện tại', () => {
+    // Ghim lại chính phép tính trong doc comment, để đổi LANE_WIDTH mà quên
+    // đổi cap thì test đỏ ngay chứ không phải phát hiện bằng mắt.
+    const COT_DO_THI = 1440 * 0.52 * 0.4
+    const suyRa = Math.floor((COT_DO_THI - GRAPH_PADDING_LEFT) / LANE_WIDTH)
+
+    expect(
+      MAX_VISIBLE_LANES,
+      `với LANE_WIDTH=${LANE_WIDTH}px và GRAPH_PADDING_LEFT=${GRAPH_PADDING_LEFT}px thì ` +
+        `cột đồ thị ${Math.round(COT_DO_THI)}px chứa được ${suyRa} lane, ` +
+        `nhưng MAX_VISIBLE_LANES = ${MAX_VISIBLE_LANES}`,
+    ).toBe(suyRa)
+  })
+})

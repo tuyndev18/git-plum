@@ -13,25 +13,98 @@ import type { GraphRow } from '@/lib/ipc'
 /** Chiều cao cố định của một hàng commit, tính bằng px. */
 export const ROW_HEIGHT = 28
 
-/** Bề rộng mỗi lane, tính bằng px — chốt cùng phép tính ở `docs/04-phase2-degraded-graph.md`. */
-export const LANE_WIDTH = 14
+/**
+ * Bề rộng mỗi lane, tính bằng px.
+ *
+ * Đo từ ảnh tham chiếu (`docs/screenshots/`): nút commit ở lane 0 và nhánh con
+ * ở lane 1 cách nhau khoảng 22px. Con số 14px trước đây quá chật — nút chồng
+ * gần nhau và đường rẽ gần như trùng hướng đường dọc bên cạnh.
+ *
+ * Đổi số này **đổi cả cap lane**: xem `MAX_VISIBLE_LANES` bên dưới và
+ * `docs/04-phase2-degraded-graph.md` mục 2.1.
+ */
+export const LANE_WIDTH = 22
 
 /** Lề trái của cột đồ thị trước lane 0. */
-export const GRAPH_PADDING_LEFT = 8
-
-/** Bán kính nút tròn đánh dấu một commit. */
-export const NODE_RADIUS = 4
+export const GRAPH_PADDING_LEFT = 12
 
 /**
- * Số lane tối đa được **cấp mới**, chốt ở `docs/04-phase2-degraded-graph.md`
- * mục 2.1 bằng phép tính hiển thị (cửa sổ 1440px × 52% × 40% cột đồ thị).
+ * Bán kính nút commit.
  *
- * Đây là hằng số ràng buộc *hiển thị* của frontend, khớp với `MAX_VISIBLE_LANES`
- * ở `src-tauri/src/graph/types.rs`. Backend dùng nó để **không cấp** lane cha
- * vượt cap; frontend dùng nó để **gập** lane hàng (có thể vượt cap, xem
- * `docs/04-phase2-degraded-graph.md` mục 3) vào cột cuối khi vẽ.
+ * Tham chiếu vẽ nút là vòng tròn có **viền dày** đường kính ~16px, không phải
+ * chấm đặc nhỏ. Bán kính 7px + viền 2.5px cho đường kính ngoài ~17px, khớp
+ * tham chiếu và đủ lớn để phân biệt commit thường với merge.
  */
-export const MAX_VISIBLE_LANES = 20
+export const NODE_RADIUS = 7
+
+/** Độ dày viền nút commit. */
+export const NODE_STROKE_WIDTH = 2.5
+
+/**
+ * Bán kính nút của merge commit — lớn hơn nút thường một chút để merge nổi bật
+ * khi lần theo lịch sử, đúng cách tham chiếu phân biệt hai loại.
+ */
+export const MERGE_NODE_RADIUS = 8
+
+/**
+ * Màu tô tâm nút commit — phải trùng **nền của cột đồ thị**, không phải màu
+ * lane.
+ *
+ * Tâm nút được tô nền trước rồi mới vẽ viền, nên đường lane chạy phía sau bị
+ * cắt đúng trong lòng nút. Đó là cách tham chiếu làm nút "ngồi trên" đường thay
+ * vì bị đường xuyên qua giữa. Nếu đổi nền `.graph-canvas` trong `app.css` thì
+ * phải đổi cả con số này, nếu không lòng nút sẽ hiện thành một đốm khác màu.
+ */
+export const NODE_FILL = '#161b22'
+
+/** Màu vòng tròn đánh dấu hàng đang được chọn — trung tính, không theo màu lane. */
+export const SELECTION_RING = '#e6edf3'
+
+/**
+ * Độ dày đường lane. Tham chiếu vẽ lane đủ đậm để phân biệt màu ở tỉ lệ 100%;
+ * đường 1px mặc định bị mảnh và nhoè khi nhiều lane cạnh nhau.
+ */
+export const EDGE_WIDTH = 2
+
+/**
+ * Bề rộng cột nhãn nhánh/tag, px — **cố định**, không theo nội dung.
+ *
+ * Tham chiếu (`docs/screenshots/`) có cột `BRANCH / TAG` rộng cố định ở ngoài
+ * cùng bên trái, nhãn dài bị cắt bằng ellipsis chứ không nới cột.
+ *
+ * Vì sao cố định chứ không `max-content`: cột đồ thị nằm ngay sau nó, và canvas
+ * phải biết dịch sang phải bao nhiêu px để vẽ đúng chỗ. Cột co theo nội dung
+ * nghĩa là canvas phải đo DOM mỗi lần nhãn đổi — thêm một nguồn số liệu có thể
+ * lệch, đúng lớp lỗi đã gây ra hai vòng checkpoint thất bại. Cố định thì cả
+ * CSS và canvas đọc cùng một hằng số này.
+ *
+ * PHẢI khớp `--ref-col-width` trong `app.css`; có test ghim hai phía.
+ */
+export const REF_COL_WIDTH = 132
+
+/**
+ * Số lane tối đa được **cấp mới**, chốt bằng phép tính hiển thị — xem
+ * `docs/04-phase2-degraded-graph.md` mục 2.1.
+ *
+ * ```text
+ *   cửa sổ mặc định            1440 px
+ *   × vùng giữa                × 52%     AppLayout Panel id="main"
+ *   × ngân sách cột đồ thị     × 40%     60% còn lại cho thông điệp commit
+ *   = cột đồ thị              ≈ 300 px
+ *   − GRAPH_PADDING_LEFT       −  12 px
+ *   ÷ LANE_WIDTH               ÷  22 px
+ *   = 13,1                    →  13 lane
+ * ```
+ *
+ * Giảm từ 20 xuống 13 khi `LANE_WIDTH` tăng 14→22px cho khớp ảnh tham chiếu.
+ * Đây là đánh đổi có chủ ý: lane thoáng hơn, đọc dễ hơn, nhưng số nhánh vẽ
+ * được đồng thời ít hơn — phần vượt cap hiện bằng chỉ báo `+N` (HIST-03).
+ *
+ * **PHẢI khớp `MAX_VISIBLE_LANES` ở `src-tauri/src/graph/types.rs`.** Lệch hai
+ * phía là lỗi im lặng: backend cấp lane 19 mà frontend chỉ vẽ tới 13 thì hai
+ * nhánh khác nhau bị vẽ đè lên cùng một cột. Có test hai phía ghim con số này.
+ */
+export const MAX_VISIBLE_LANES = 13
 
 /**
  * Bảng màu lane, tự thiết kế — không sao chép GitKraken. Đủ tương phản trên

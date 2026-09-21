@@ -48,6 +48,8 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+import { REF_COL_WIDTH } from '@/lib/graph-render/geometry'
+
 const cssPath = path.join(process.cwd(), 'src', 'styles', 'app.css')
 const css = readFileSync(cssPath, 'utf8')
 
@@ -184,15 +186,33 @@ describe('nhãn ref phải có cột grid riêng, không dùng chung cột với
     ).toBe(6)
   })
 
-  it('cột nhãn ref có sàn 0 để nhường chỗ được khi cửa sổ hẹp', () => {
+  /*
+   * Cột nhãn từng là `minmax(0, max-content)` — co theo nội dung. Giờ là bề
+   * rộng CỐ ĐỊNH `var(--ref-col-width)`, vì canvas đồ thị phải biết dịch sang
+   * phải bao nhiêu px để vẽ vào cột 2: cột co theo nội dung buộc canvas đo DOM
+   * mỗi lần nhãn đổi, thành nguồn số liệu thứ hai có thể lệch — đúng lớp lỗi đã
+   * gây hai vòng checkpoint thất bại. Nhãn dài giờ bị cắt ellipsis, như tham
+   * chiếu, chứ không nới cột.
+   */
+  it('cột nhãn ref dùng bề rộng cố định --ref-col-width, không co theo nội dung', () => {
+    const block = extractCommitRowBlock(css)
+    const gridLine = block.split('\n').find((line) => line.includes('grid-template-columns'))
+
+    expect(
+      gridLine,
+      'cột 1 phải là var(--ref-col-width) — canvas dịch theo đúng con số đó',
+    ).toContain('var(--ref-col-width)')
+  })
+
+  it('.commit-ref-cell co được bên trong cột cố định để nhãn dài bị cắt, không tràn', () => {
     const start = css.indexOf('.commit-ref-cell {')
     expect(start, 'phải tìm thấy khối .commit-ref-cell — ô grid của cột nhãn').toBeGreaterThan(-1)
     const block = css.slice(start, css.indexOf('}', start))
 
-    // max-width cứng: nhóm nhãn không bao giờ chiếm quá phần chia của nó,
-    // nên cột message luôn giữ phần lớn không gian ở cửa sổ rộng.
-    expect(block, '.commit-ref-cell phải có max-width cứng').toContain('max-width')
-    expect(block, '.commit-ref-cell phải có min-width: 0 để co được').toContain('min-width: 0')
+    expect(block, '.commit-ref-cell phải có min-width: 0 để nhãn dài cắt được').toContain(
+      'min-width: 0',
+    )
+    expect(block, '.commit-ref-cell phải có overflow: hidden').toContain('overflow: hidden')
   })
 })
 
@@ -224,5 +244,40 @@ describe('CommitList.tsx — RefBadges không được nằm trong .commit-subje
       `<RefBadges phải nằm giữa .commit-ref-cell (${refCellIdx}) và .commit-subject (${subjectIdx}) ` +
         `nhưng đang ở ${badgeIdx} — nếu nó nằm sau .commit-subject thì badge lại ăn vào cột chữ message`,
     ).toBe(true)
+  })
+})
+
+/*
+ * `REF_COL_WIDTH` tồn tại ở hai nơi — `geometry.ts` và biến `--ref-col-width`
+ * trong `app.css` — và phải bằng nhau.
+ *
+ * Canvas đồ thị dịch sang phải đúng `--ref-col-width` để vẽ vào cột 2. Lệch hai
+ * phía thì đồ thị vẽ đè lên cột nhãn hoặc bỏ trống một dải — lỗi im lặng, mỗi
+ * phía tự nó vẫn nhất quán.
+ */
+describe('REF_COL_WIDTH phải khớp giữa geometry.ts và app.css', () => {
+  it('--ref-col-width trong CSS bằng REF_COL_WIDTH trong geometry.ts', () => {
+    const match = css.match(/--ref-col-width:\s*(\d+)px/)
+    const cssValue = match?.[1]
+    expect(cssValue, 'phải tìm thấy --ref-col-width trong app.css').toBeDefined()
+
+    expect(
+      Number(cssValue),
+      `CSS có --ref-col-width: ${cssValue}px nhưng geometry.ts có REF_COL_WIDTH = ${REF_COL_WIDTH}. ` +
+        `Canvas dịch theo con số CSS, còn hình học tính theo con số TS — lệch nhau thì ` +
+        `đồ thị vẽ đè lên cột nhãn.`,
+    ).toBe(REF_COL_WIDTH)
+  })
+
+  it('canvas dịch sang phải qua cột nhãn, không nằm sát lề', () => {
+    const start = css.indexOf('.graph-canvas {')
+    expect(start, 'phải tìm thấy khối .graph-canvas').toBeGreaterThan(-1)
+    const block = css.slice(start, css.indexOf('}', start))
+
+    expect(
+      block,
+      '.graph-canvas phải có margin-left tính theo --ref-col-width — thiếu nó thì ' +
+        'đồ thị vẽ đè lên cột nhãn ở cột 1',
+    ).toContain('--ref-col-width')
   })
 })

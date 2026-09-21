@@ -33,10 +33,20 @@ pub const LANE_COLORS: u8 = 7;
 ///   = vùng giữa                        ≈ 749 px
 ///   × ngân sách cột đồ thị             × 40%     (60% còn lại cho thông điệp commit)
 ///   = cột đồ thị                       ≈ 300 px
-///   − lề trái GRAPH_PADDING_LEFT       −   8 px
-///   ÷ LANE_WIDTH                       ÷  14 px  (chốt ở plan 02-05)
-///   = 20,9                             → 20 lane
+///   − lề trái GRAPH_PADDING_LEFT       −  12 px
+///   ÷ LANE_WIDTH                       ÷  22 px  (đo từ ảnh tham chiếu)
+///   = 13,1                             → 13 lane
 /// ```
+///
+/// **Đã giảm 20 → 13** khi `LANE_WIDTH` tăng 14 → 22px cho khớp
+/// `docs/screenshots/`: lane 14px quá chật, nút commit sát nhau và đường rẽ gần
+/// như trùng hướng đường dọc bên cạnh. Đánh đổi có chủ ý — thoáng hơn, đọc dễ
+/// hơn, nhưng vẽ được ít nhánh đồng thời hơn; phần vượt cap hiện bằng chỉ báo
+/// `+N` qua [`GraphRow::truncated_parents`].
+///
+/// **PHẢI khớp `MAX_VISIBLE_LANES` ở `src/lib/graph-render/geometry.ts`.** Lệch
+/// hai phía là lỗi im lặng: backend cấp lane 19 mà frontend chỉ vẽ tới 13 thì
+/// hai nhánh khác nhau bị vẽ đè lên cùng một cột.
 ///
 /// **Cách chốt SAI mà đã tránh:** lấy số lane lớn nhất đo được trên repo mẫu `wide`
 /// (25 lane đồng thời) rồi đặt giới hạn cao hơn nó. Lập luận đó vòng tròn — nó bảo đảm
@@ -54,7 +64,7 @@ pub const LANE_COLORS: u8 = 7;
 /// một lane thật, dù lane đó vượt con số này. Bất biến `rows.len() == commits.len()` là
 /// HIST-04 ở tầng dữ liệu và không được phụ thuộc vào một hằng số *hiển thị*. Việc gập
 /// lane vượt giới hạn vào cột cuối là của frontend (plan 02-05).
-pub const MAX_VISIBLE_LANES: u16 = 20;
+pub const MAX_VISIBLE_LANES: u16 = 13;
 
 /// Một đường nối giữa hai lane trên một dòng.
 ///

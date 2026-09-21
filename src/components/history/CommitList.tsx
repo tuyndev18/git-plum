@@ -154,9 +154,28 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
     return () => observer.disconnect()
   }, [])
 
+  const graphColWidth = graphWidth(maxLane)
+
   return (
-    <div ref={scrollRef} className="commit-scroll" data-testid="commit-scroll">
+    <div className="commit-pane">
       {/*
+        Header cột nằm NGOÀI vùng cuộn nên nó không cuộn theo danh sách, đúng
+        như ảnh tham chiếu (`docs/screenshots/`).
+
+        Bề rộng hai cột đầu lấy từ cùng `graphColWidth` mà canvas dùng, nên
+        header luôn thẳng cột với nội dung — không có con số px nào viết cứng
+        lặp lại ở đây.
+      */}
+      <div className="commit-header" aria-hidden="true">
+        <span className="commit-header-ref">Nhánh / Tag</span>
+        <span className="commit-header-graph" style={{ width: graphColWidth }}>
+          Đồ thị
+        </span>
+        <span className="commit-header-subject">Thông điệp commit</span>
+      </div>
+
+      <div ref={scrollRef} className="commit-scroll" data-testid="commit-scroll">
+        {/*
         Canvas nằm NGOÀI div nội dung và `position: sticky; top: 0` để nó dính
         theo vùng nhìn thấy thay vì cuộn đi cùng danh sách.
 
@@ -195,27 +214,28 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
             >
               {commit ? (
                 <>
-                  <span className="commit-graph-gutter" style={{ width: graphWidth(maxLane) }} />
                   {/*
-                    Nhãn ref có CỘT GRID RIÊNG, không nằm trong
-                    `.commit-subject` — sửa nguyên nhân B của checkpoint
-                    round 1 (badge ăn hết không gian chữ message; đo thật:
-                    nhóm 4 badge chiếm 258px trong khi cột subject chỉ còn
-                    144px ở cửa sổ 900px, chữ message hiển thị 0%). Xem khối
-                    comment `.commit-row` trong `app.css`.
+                    Thứ tự cột theo ảnh tham chiếu: NHÃN trước, ĐỒ THỊ sau, rồi
+                    thông điệp. Bản trước đặt đồ thị trước nhãn.
 
-                    Ô bọc `.commit-ref-cell` LUÔN được render, kể cả khi
-                    không có ref nào: `RefBadges` trả `null` theo đúng đặc tả
-                    ("không có ref -> không render gì, không chiếm chiều
-                    cao"), và nếu để nó tự làm ô grid thì hàng không nhãn sẽ
-                    THIẾU một ô — mọi ô sau đó dồn sang trái một cột và lệch
-                    cột so với hàng có nhãn. Ô rỗng có bề rộng 0 (cột là
-                    `minmax(0, max-content)`) nên không tốn chỗ, chỉ giữ
+                    Ô bọc `.commit-ref-cell` LUÔN được render, kể cả khi không
+                    có ref nào: `RefBadges` trả `null` theo đúng đặc tả ("không
+                    có ref -> không render gì, không chiếm chiều cao"), và nếu
+                    để nó tự làm ô grid thì hàng không nhãn sẽ THIẾU một ô —
+                    mọi ô sau đó dồn sang trái một cột và lệch cột so với hàng
+                    có nhãn. Ô rỗng có bề rộng 0 nên không tốn chỗ, chỉ giữ
                     đúng số lượng ô grid cho mọi hàng.
+
+                    Nhãn có cột riêng, không nằm trong `.commit-subject` — sửa
+                    nguyên nhân B của checkpoint round 1 (badge ăn hết không
+                    gian chữ message; đo thật: nhóm 4 badge chiếm 258px trong
+                    khi cột subject chỉ còn 144px ở cửa sổ 900px, chữ message
+                    hiển thị 0%).
                   */}
                   <span className="commit-ref-cell">
                     <RefBadges refs={refsByCommit?.get(commit.id) ?? []} />
                   </span>
+                  <span className="commit-graph-gutter" style={{ width: graphColWidth }} />
                   <span className="commit-subject" title={commit.subject}>
                     {commit.subject}
                     {commit.hasInvalidUtf8 && (
@@ -223,6 +243,19 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
                         {' '}
                         ⚠
                       </span>
+                    )}
+                    {/*
+                      Phần body xám nhạt nối ngay sau subject trên CÙNG một
+                      dòng, như tham chiếu. `body` đã có sẵn từ `LOG_FORMAT`
+                      (`%b`, wave 2) nhưng trước đây không dùng ở tầng hiển thị.
+
+                      Gộp dòng: body của git xuống dòng thật, mà hàng chỉ cao
+                      ROW_HEIGHT cố định nên phải rút về một dòng — nếu không,
+                      chiều cao hàng vỡ và đồ thị lệch (đúng lớp lỗi của
+                      checkpoint round 1).
+                    */}
+                    {commit.body.trim() !== '' && (
+                      <span className="commit-body"> {commit.body.replace(/\s+/g, ' ').trim()}</span>
                     )}
                   </span>
                   <span className="commit-author">{commit.authorName}</span>
@@ -235,6 +268,7 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
             </div>
           )
         })}
+        </div>
       </div>
     </div>
   )
