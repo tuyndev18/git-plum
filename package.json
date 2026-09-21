@@ -1,0 +1,39 @@
+{
+  "name": "git-plum",
+  "version": "0.1.0",
+  "description": "Ứng dụng desktop mã nguồn mở quản lý repository Git",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-dialog": "2.7.3",
+    "@tauri-apps/plugin-store": "2.4.5",
+    "clsx": "2.1.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-resizable-panels": "4.13.1",
+    "zustand": "5.0.15"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.5",
+    "@testing-library/react": "16.3.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "happy-dom": "20.14.5",
+    "typescript": "6.0.3",
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
+  }
+}

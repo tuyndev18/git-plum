@@ -1,0 +1,342 @@
+/*
+ * Giao diện nền tảng cho Phase 1.
+ *
+ * Bảng màu và kiểu chữ là của riêng git-plum — học bố cục từ các công cụ cùng
+ * loại, nhưng không sao chép phần nhìn của chúng.
+ */
+
+:root {
+  --bg: #16161a;
+  --bg-raised: #1e1e24;
+  --bg-inset: #121215;
+  --border: #2c2c35;
+  --border-strong: #3a3a46;
+
+  --text: #e4e4ea;
+  --text-dim: #9a9aa8;
+  --text-faint: #6a6a78;
+
+  --accent: #9d7cd8;
+  --accent-dim: #6f5a99;
+  --danger: #e06c75;
+  --success: #86b384;
+
+  --font-ui:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: 'Cascadia Code', 'JetBrains Mono', Consolas, 'Courier New', monospace;
+
+  --row-height: 26px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --bg: #fbfbfd;
+    --bg-raised: #ffffff;
+    --bg-inset: #f2f2f5;
+    --border: #e0e0e6;
+    --border-strong: #c8c8d2;
+
+    --text: #1c1c22;
+    --text-dim: #5a5a68;
+    --text-faint: #8a8a98;
+
+    --accent: #6b46a8;
+    --accent-dim: #8f6fc4;
+    --danger: #c0392b;
+    --success: #4a7c47;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* --- Thanh công cụ ------------------------------------------------------ */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 12px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand {
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.repo-name {
+  font-weight: 500;
+}
+
+.branch {
+  padding: 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+button {
+  padding: 4px 12px;
+  background: var(--bg-inset);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* --- Thông báo lỗi ------------------------------------------------------ */
+
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg-raised));
+  border-bottom: 1px solid var(--danger);
+  flex-shrink: 0;
+}
+
+.error-banner pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* --- Vùng nội dung ------------------------------------------------------ */
+
+.pane {
+  height: 100%;
+  overflow: auto;
+  padding: 12px;
+}
+
+.sidebar,
+.detail {
+  background: var(--bg-inset);
+}
+
+.main {
+  background: var(--bg);
+}
+
+.pane h2 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.placeholder {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  height: 100%;
+  color: var(--text-dim);
+}
+
+.empty-state h2 {
+  font-size: 14px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-dim);
+}
+
+.repo-summary dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0 0 16px;
+}
+
+.repo-summary dt {
+  color: var(--text-faint);
+}
+
+.repo-summary dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+/* --- Thanh kéo ---------------------------------------------------------- */
+
+.resize-handle-v,
+.resize-handle-h {
+  background: var(--border);
+  transition: background 120ms;
+}
+
+.resize-handle-v {
+  width: 1px;
+}
+
+.resize-handle-h {
+  height: 1px;
+}
+
+.resize-handle-v:hover,
+.resize-handle-h:hover,
+.resize-handle-v[data-resize-handle-active],
+.resize-handle-h[data-resize-handle-active] {
+  background: var(--accent);
+}
+
+/* --- Nhật ký lệnh ------------------------------------------------------- */
+
+.command-log {
+  background: var(--bg-inset);
+  border-top: 1px solid var(--border);
+}
+
+.command-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.command-log-header h2 {
+  margin: 0;
+}
+
+.command-log-header div {
+  display: flex;
+  gap: 6px;
+}
+
+.command-log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.command-log-table th {
+  text-align: left;
+  padding: 4px 8px;
+  color: var(--text-faint);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+}
+
+.command-log-table td {
+  padding: 3px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  vertical-align: top;
+}
+
+.command-log-table code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.command-log-table tr.failed .cmd code {
+  color: var(--danger);
+}
+
+.cmd-error {
+  margin-top: 2px;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.exit,
+.duration {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+/* --- Thanh trạng thái --------------------------------------------------- */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.statusbar .spacer {
+  flex: 1;
+}
+
+/* --- Khung bố cục ------------------------------------------------------- */
+
+.body {
+  flex: 1;
+  min-height: 0;
+}
+
+.layout,
+.pane-group {
+  height: 100%;
+}

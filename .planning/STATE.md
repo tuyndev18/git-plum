@@ -62,7 +62,19 @@
 
 ### Vướng mắc
 
-- **Rust chưa được cài trên máy phát triển.** rustup và MSVC Build Tools đều thiếu; WebView2 đã có sẵn. Đây là vướng mắc duy nhất đang hoạt động và là việc đầu tiên của Phase 1.
+- **Thiếu workload C++ trong Visual Studio.** Tình trạng máy phát triển tính đến 2026-09-21:
+  - ✅ rustc 1.98.1, cargo 1.98.1, toolchain `stable-x86_64-pc-windows-msvc` — đã cài đúng
+  - ✅ WebView2 153.0.4234.48 — có sẵn theo Windows 11
+  - ✅ Visual Studio Community 2022 — đã cài
+  - ❌ **Workload "Desktop development with C++" chưa được thêm vào bản VS Community đó**, nên không có `link.exe`. Thiếu nó thì `cargo build` vỡ ở bước liên kết.
+
+  Cách xử lý: thêm workload vào bản VS đã có, không cài Build Tools riêng.
+  ```powershell
+  & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe" modify `
+    --installPath "C:\Program Files\Microsoft Visual Studio\2022\Community" `
+    --add Microsoft.VisualStudio.Workload.NativeDesktop --includeRecommended --quiet --norestart
+  ```
+  Xác minh: `cargo build` trong một crate bất kỳ chạy tới đích.
 
 ### Cổng dogfood đang chờ
 

@@ -1,0 +1,56 @@
+[package]
+name = "git-plum"
+version = "0.1.0"
+description = "Ứng dụng desktop mã nguồn mở quản lý repository Git"
+authors = ["git-plum contributors"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.82"
+
+[lib]
+name = "git_plum_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.6", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-store = "2"
+
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+
+# tokio::process cho phép đọc stdout của git theo luồng, thay vì nạp cả
+# Output 50MB vào bộ nhớ.
+tokio = { version = "1.53.1", features = ["process", "io-util", "rt", "sync", "time", "macros"] }
+
+# Kiểu lỗi có tên. Lưu ý: tauri command đòi kiểu lỗi phải impl Serialize,
+# thiserror chỉ cho Display — phần Serialize viết tay trong error.rs.
+thiserror = "2.0.20"
+
+# Đầu ra của git là BYTE, không bảo đảm UTF-8 (tên tệp trên Linux, thông điệp
+# commit mã hoá cũ). Phân tích Vec<u8> bằng bstr để tránh String::from_utf8
+# gây hỏng dữ liệu âm thầm trên repo thật.
+bstr = "1.13.1"
+memchr = "2.8.3"
+
+parking_lot = "0.12.5"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[features]
+# Tính năng mặc định của Tauri; `cargo test` chạy được mà không cần webview.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

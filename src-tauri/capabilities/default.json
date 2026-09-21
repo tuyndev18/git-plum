@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Quyền tối thiểu cho cửa sổ chính. Tauri v2 mặc định không tin webview, nên mọi quyền phải khai báo rõ ở đây. Cấp quyền hẹp nhất có thể — quyền thừa không gây lỗi biên dịch, chỉ nới rộng bề mặt tấn công.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-title",
+
+    "dialog:allow-open",
+
+    "store:default"
+  ]
+}

@@ -1,0 +1,25 @@
+# Phụ thuộc
+node_modules/
+
+# Kết quả dựng
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# Môi trường
+.env
+.env.local
+
+# Hệ điều hành
+.DS_Store
+Thumbs.db
+
+# Trình soạn thảo
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# Icon cho mobile — chưa dùng tới
+src-tauri/icons/android/
+src-tauri/icons/ios/

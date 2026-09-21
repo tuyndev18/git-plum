@@ -1,0 +1,129 @@
+# REL-04 — dựng và kiểm thử trên cả ba nền tảng ngay từ Phase 1.
+#
+# Bật sớm để lỗi riêng của Linux và macOS lộ ra khi còn rẻ. Hai cái bẫy phổ biến
+# nhất đã tránh sẵn ở đây:
+#   * Dùng `libwebkit2gtk-4.1-dev`, KHÔNG phải 4.0 — Tauri v2 cần 4.1.
+#     Đây là nguyên nhân hỏng CI Linux hay gặp nhất khi chuyển từ v1 sang v2.
+#   * Ghim `ubuntu-22.04` thay vì `ubuntu-latest`, để bản nâng cấp runner của
+#     GitHub không làm vỡ build vào một sáng nào đó.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  frontend:
+    name: Giao diện — kiểm kiểu và kiểm thử
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  rust:
+    name: Rust — ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cài phụ thuộc hệ thống (Linux)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            build-essential \
+            curl \
+            wget \
+            file
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Kiểm định dạng
+        run: cargo fmt --all --check
+        working-directory: src-tauri
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: src-tauri
+
+      - name: Kiểm thử
+        run: cargo test --all-features
+        working-directory: src-tauri
+
+  bundle:
+    name: Đóng gói — ${{ matrix.os }}
+    # Chỉ chạy trên main, vì đóng gói chậm hơn nhiều so với kiểm thử.
+    if: github.ref == 'refs/heads/main'
+    needs: [frontend, rust]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cài phụ thuộc hệ thống (Linux)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Dựng gói cài đặt
+        run: npm run tauri:build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: git-plum-${{ matrix.os }}
+          path: |
+            src-tauri/target/release/bundle/
+          retention-days: 7
