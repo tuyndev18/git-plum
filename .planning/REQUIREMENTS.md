@@ -204,12 +204,12 @@ Phase nào phủ requirement nào. Bảng này do bước lập lộ trình đi�
 | HIST-09 | Phase 2 | Pending |
 | HIST-10 | Phase 2 | Pending |
 | HIST-11 | Phase 2 | Complete |
-| DIFF-01 | Phase 3 | Pending |
+| DIFF-01 | Phase 3 | Pending — backend xong ở 03-02 (`get_file_diff` trả hunk đã phân tích); còn giao diện + tô màu cú pháp ở 03-04 |
 | DIFF-02 | Phase 3 | Pending |
 | DIFF-03 | Phase 3 | Pending |
 | DIFF-04 | Phase 3 | Pending |
 | DIFF-05 | Phase 3 | Pending |
-| DIFF-06 | Phase 3 | Pending |
+| DIFF-06 | Phase 3 | Pending — backend xong ở 03-02 (bốn dạng `DiffKind`, ngưỡng 5 MB chặn **trước** `git diff`, kiểm bằng `CommandLog`); còn phần hiển thị thông báo ở 03-04 |
 | WORK-01 | Phase 4 | Pending |
 | WORK-02 | Phase 4 | Pending |
 | WORK-08 | Phase 4 | Pending |

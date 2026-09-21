@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-09-21T21:40:00.000Z"
+last_updated: "2026-09-22T00:00:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
@@ -18,7 +18,7 @@ progress:
 
 # Project State: git-plum
 
-**Last updated:** 2026-09-21
+**Last updated:** 2026-09-22
 
 ---
 
@@ -26,13 +26,24 @@ progress:
 
 **Core Value:** Đọc và hiểu lịch sử của một repository phải tức thì — đồ thị commit mở ra trong dưới một giây và cuộn mượt kể cả trên repo hàng chục nghìn commit.
 
-**Current focus:** Phase 2 — Lịch sử và đồ thị nhánh (Core Value)
+**Current focus:** Phase 3 — Xem khác biệt (wave 2 xong; Phase 2 còn hai checkpoint nợ)
 
 **Mode:** mvp (Vertical MVP) · **Granularity:** standard · **Parallelization:** enabled
 
 ---
 
 ## Current Position
+
+### Phase 3 — Xem khác biệt (đang chạy)
+
+| | |
+|---|---|
+| **Wave 1 (03-01)** | ✅ Mã xong. Spike đo A/B dựng xong; **checkpoint #3 CHƯA CHẠY** — chủ dự án chưa đo, nên quyết định A/B vẫn chưa có. Tìm và sửa một lỗi Phase 1: `GIT_EXTERNAL_DIFF=""` làm **mọi** lệnh git sinh bản vá thất bại trong im lặng (`f5c4c17`, đo thêm ở `43183d4`). |
+| **Wave 2 (03-02)** | ✅ Xong, `autonomous` nên không phụ thuộc checkpoint #3. Backend diff đầy đủ: hợp đồng dữ liệu 5 dạng, `parse_patch` viết tay, `DiffCache` LRU 200 mục, `get_file_diff` với cổng DIFF-06 chạy **trước** `git diff`. **216 test Rust** (mốc 163) + **233 test frontend** (mốc 226); `clippy`/`typecheck`/`tauri:build` đều xanh. **9/9 mutation đã chạy**, trong đó **ba cổng vô dụng phải sửa rồi chạy lại**. Repo mẫu `target/fixtures/diff-cases` 26 commit, gồm ba fixture mà wave 3 phụ thuộc. |
+| **Phát hiện đo được** | 🔴 **Plan 03-02 sai một chỗ:** `git diff --name-status` **mang pathspec** làm git báo `A` thay vì `R077` cho tệp đổi tên, vì pathspec lọc mất đường dẫn cũ **trước khi** phép phát hiện đổi tên chạy. Kéo theo bản vá in **toàn bộ tệp là dòng thêm** thay vì một hunk sửa một dòng. Đã sửa và ghim bằng ba test. |
+| **Tiếp theo** | Wave 3 (03-03, diff mức từ) — không chặn bởi checkpoint #3. Wave 4 (03-04, giao diện) **chặn** bởi checkpoint #3. |
+
+### Phase 2 — nợ cũ
 
 | | |
 |---|---|
@@ -80,6 +91,8 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 2 P04 | 85min | 3 tasks | 14 files |
 | Phase 2 P05 | ~110min (Task 1-3) + ~90min (checkpoint round 1: điều tra + sửa) | 4/4 tasks | 16 files |
 | Phase 2 P06 | ~95min (Task 1-3) + ~45min (round 1 fix A: chiều cao) + ~40min (round 1 fix B: cột grid riêng cho nhãn) + ~25min (round 1 fix C: cạnh đồ thị) — chờ vòng 2 | 3/4 tasks | 18 files |
+| Phase 3 P01 | ~50min | 2/3 tasks (Task 3 là checkpoint chờ người kiểm) | 13 files |
+| Phase 3 P02 | ~85min | 3/3 tasks | 15 files |
 
 ---
 
@@ -96,6 +109,11 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 - **Không cam kết tổng thời gian.** Chuỗi phase là kế hoạch, thời lượng là đầu ra.
 - **PLAT-02 (plan 01-01)**: `GIT_CONFIG_PARAMETERS` ghim đủ `log.showSignature`, `diff.noprefix`, `format.coverLetter` qua hằng `PINNED_GIT_CONFIG` trong `src-tauri/src/git/exec.rs`.
 - **🔴 Trình diff ngoài: dùng cờ `--no-ext-diff`, KHÔNG biến môi trường rỗng** (sửa ở plan 03-01, commit `f5c4c17`; đính chính quyết định của 01-01). `GIT_EXTERNAL_DIFF=""` **không** vô hiệu hoá trình diff ngoài — git spawn chương trình tên rỗng và chết với `error: cannot spawn : No such file or directory`, làm **mọi lệnh git sinh bản vá thoát 128 với stdout rỗng, im lặng**. Ghim `diff.external=` rỗng qua config có cùng lỗi (đã đo). Phase 2 không phát hiện vì chỉ dùng `--name-status`, lệnh không gọi trình diff. Nay `env_remove("GIT_EXTERNAL_DIFF")` cộng chèn `--no-ext-diff` tập trung trong `GitCommand::run()` cho `diff`/`show`/`log`/`diff-tree` (cả `log` và `show` vì hai lệnh đó in được bản vá). Cờ phải đứng **sau** lệnh con. Bài học: một ràng buộc "đã ghim rồi" mà chưa có test đọc ngược kết quả **từ tiến trình con** thì chưa được ghim — đọc mã thì ý định và lỗi trông giống nhau.
+- **🔴 `git diff --name-status` KHÔNG được mang pathspec khi cần phát hiện đổi tên** (đo ở plan 03-02, commit `a52a018`). Git ghép **tập** tệp bị xoá với **tập** tệp được thêm để nhận ra đổi tên; một pathspec lọc đường dẫn cũ ra **trước khi** phép ghép chạy, nên git báo `A` thay vì `R077`. Cùng lý do, `git diff --unified=3 -- <tên mới>` in `new file mode` với **toàn bộ tệp là dòng thêm** thay vì một hunk sửa vài dòng — người dùng bấm vào tệp đổi tên sẽ thấy cả tệp sáng xanh. Cách đúng: `--name-status` chạy **không** pathspec rồi tự lọc bản ghi; lệnh sinh bản vá truyền **cả hai** đường dẫn. Bài học cùng họ với `%x1f` của 02-04: một cờ trông vô hại (`-- <path>`) đổi ngữ nghĩa của một cờ khác (`--find-renames`) mà không báo lỗi gì.
+- **Ngưỡng DIFF-06 là 5 MB mỗi phía** (`MAX_DIFF_BLOB_BYTES`), dùng `max(cũ, mới)` để tệp lớn **bị xoá** cũng bị chặn. Ngưỡng của **trình xem**, không phải của máy: 5 MB ≈ 100 nghìn dòng, ngoài mọi ngân sách của checkpoint #3; cũng là mốc GitHub từ chối hiện diff. Con số 200 MB trong ROADMAP là **ví dụ tiêu chí**, không phải ngưỡng.
+- **Nhận biết con trỏ Git LFS bằng NỘI DUNG blob, không `git check-attr`** (câu 3 CONTEXT.md, đo lại ở 03-02). `check-attr -z filter` trả `unspecified` cho một con trỏ LFS **thật** khi repo không có `.gitattributes` — nó trả lời "repo có **cấu hình** lfs cho path này không", không trả lời "blob này **có phải** con trỏ không". Chỉ đọc blob khi `< 1 KB` (con trỏ luôn ~130 byte) nên cổng gần như miễn phí.
+- **Cache diff khoá `(repo_id, sha, path)` dạng struct, không bao giờ vô hiệu hoá theo thời gian.** Diff của commit lịch sử là **bất biến**. Nếu sau này thêm `-w` (bỏ qua khoảng trắng khi **tính** diff) thì cờ đó **phải** vào khoá vì nó đổi dữ liệu; chế độ hợp nhất/hai cột và hiện ký tự khoảng trắng thì **không** — chúng chỉ đổi cách vẽ.
+- **`#[serde(rename_all)]` ở cấp enum KHÔNG đổi tên trường bên trong biến thể** (đo ở 03-02, commit `5d51f65`) — nó chỉ đổi tên biến thể. Mỗi biến thể mang dữ liệu phải lặp lại thuộc tính đó, nếu không JSON ra `old_size` trong khi TS đọc `oldSize`, và **không bên nào lỗi biên dịch**.
 - **`--cleanup=whitespace` bàn giao cho Phase 4** qua `docs/02-phase4-commit-notes.md`: nó là tham số dòng lệnh của `git commit`, không đặt được trong lớp ghim môi trường, và Phase 1 chưa có lệnh commit nào.
 - **Hạ tầng kiểm thử giao diện** (plan 01-02): cấu hình vitest sống trong khối `test` của `vite.config.ts`, không tách `vitest.config.ts` riêng — một nguồn sự thật cho `resolve.alias`. Giả lập IPC ở ranh giới module `@/lib/ipc`, không vá `invoke` toàn cục. Test logic store gọi thẳng `useRepoStore.getState()`, không render component.
 - **Danh sách repository gần đây** (plan 01-03, PLAT-07): lưu qua `tauri-plugin-store` vào `recent-repos.json`, giới hạn `MAX_RECENT = 10`. Logic thuần tuý (`mergeRecent`, `sanitizeRecent`, `normalizeRepoPath`) tách khỏi vỏ bọc Tauri để kiểm thử được trực tiếp. `normalizeRepoPath` sao chép chính xác `state::repo_id_for` bên Rust — đổi `\` thành `/`, cắt `/` ở cuối, **không** đổi chữ thường — để phép khử trùng lặp phía giao diện không bất đồng với `RepoId` phía backend.
