@@ -85,7 +85,14 @@ describe('trì hoãn 250ms', () => {
 
     expect(searchCommits).not.toHaveBeenCalled()
 
-    await act(() => vi.advanceTimersByTimeAsync(250))
+    // Ngay dưới ngưỡng trì hoãn — PHẢI vẫn chưa gọi. Đây là ca bắt được mutation
+    // "trì hoãn 0ms thay vì 250ms": test chỉ kiểm "gọi sau khi advance(250)"
+    // không phân biệt được trì hoãn 0ms với 250ms, vì advance(250) cũng chạy
+    // qua mốc 0ms. Kiểm mốc 249ms trước rồi mới advance nốt 1ms bắt đúng lỗi đó.
+    await act(() => vi.advanceTimersByTimeAsync(249))
+    expect(searchCommits).not.toHaveBeenCalled()
+
+    await act(() => vi.advanceTimersByTimeAsync(1))
 
     expect(searchCommits).toHaveBeenCalledWith(REPO_ID, 'tu khoa')
   })
