@@ -17,7 +17,7 @@ provides:
   - "src/components/history/RefBadges.tsx — HIST-06, prop-driven (no store subscription per row)"
   - "src/components/RefSidebar.tsx — HIST-07, three groups with counts, detached HEAD line"
   - "src/components/history/CommitSearch.tsx — HIST-10, 250ms debounce, scrollToIndex via CommitList ref"
-  - "CommitList.tsx — forwardRef exposes scrollToIndex, RefBadges rendered inline in .commit-subject"
+  - "CommitList.tsx — forwardRef exposes scrollToIndex; RefBadges in its own .commit-ref-cell grid column (checkpoint round 1 fix B)"
   - "App.tsx — selectedCommitId upgraded from useState to selectionStore; RefSidebar/CommitDetail/CommitSearch wired in"
 affects:
   - "02-07 (checkpoint #1 performance): CommitSearch's indexById Map and refsStore.byCommit index are both O(1) lookups already validated at 3 refs; need re-validation at 100k-commit / thousands-of-refs scale"
@@ -51,6 +51,9 @@ key-files:
     - "src/App.test.tsx — +2 test (placeholders replaced, selection reaches CommitDetail)"
     - "src/styles/app.css — .commit-detail*, .file-list*, .ref-badge*, .ref-sidebar*, .commit-search*, .main-history-body blocks; checkpoint round 1 fix A: overflow/min-height containment on .commit-row/.ref-badges/.ref-badge; fix B: 6-column grid with a dedicated .commit-ref-cell badge column"
     - "src/styles/app.css.test.ts — +6 test total (3 CSS-string guards for fix A row-height containment; 3 STRUCTURAL guards for fix B: exact column count, badge-column 0 floor, RefBadges position in JSX outside .commit-subject)"
+    - "src/lib/graph-render/canvasRenderer.ts — checkpoint round 1 fix C: outEdges now stop at the row's own bottom edge instead of y + 1.5 * ROW_HEIGHT, so no row paints into its neighbour's cell"
+    - "src/lib/graph-render/canvasRenderer.test.ts — +3 test asserting Y-axis containment (the pre-existing outEdges tests only ever asserted X coordinates, which is why the 1.5-row overflow was invisible to all 179 earlier tests)"
+    - "docs/05-ui-reference-gap.md — NEW: gap between the current UI and docs/screenshots/, split by owning phase, after the user compared the app against the reference and chose to rebuild the layout as its own phase"
 
 decisions:
   - "selectionStore.selectedByRepo[repoId] upgraded from App.tsx's plan-02-05 useState — required because CommitDetail and RefSidebar both need to read/write selection and neither is a child of the other in AppLayout's three-pane structure"
@@ -63,11 +66,12 @@ decisions:
   - "[Checkpoint round 1 — fix B] The new badge column uses minmax(0, max-content), NOT hard max-content — the 0 floor lets it yield space entirely at narrow widths, which is precisely why adding a column here does not repeat 02-05's column-collapse bug (that was caused by hard max-content date/sha columns that never shrink)."
   - "[Checkpoint round 1 — fix B] .commit-ref-cell always renders even with zero refs, because RefBadges returns null per its <behavior> spec — without the always-present wrapper, unlabelled rows would have one fewer grid cell and every later cell would shift one column left, misaligning against labelled rows."
   - "[Checkpoint round 1 — fix B] .ref-badge has min-width: 48px rather than 0 — measured at a 900px window, a 0 floor shrank badges to unreadable single characters (m., o., o.). Showing fewer legible badges and folding the rest into +N (GitKraken's behaviour) beats showing many unreadable ones."
+  - "[Checkpoint round 1 — fix C, graph edges] canvasRenderer's outEdges drew from the row centre to y + 1.5 * ROW_HEIGHT — half a row past its own cell, painting over the next row's cell at a different lane, which is why the user called the graph 'very hard to read and broken'. Each row now draws strictly within [y, y + ROW_HEIGHT]: outEdges go centre-to-bottom-edge and the next row's passthrough covers the top half, so the halves meet at the shared edge and stay continuous. Found by reading drawRow, not by a test — the two existing outEdges tests asserted only X coordinates, so none of the 179 tests read a Y coordinate at all. Three Y-containment tests added, all verified red against the old coordinate."
 
 requirements-completed: []
 
-duration: "~95min (Task 1-3 automated) + ~45min (checkpoint round 1 fix A: row-height containment) + ~40min (checkpoint round 1 fix B: reproduced badge/message space competition with real Segoe UI, moved badges to their own grid column) — Task 4 checkpoint round 2 NOT YET RUN"
-completed: "2026-09-21 (Task 1-3 + both checkpoint round 1 fixes; awaiting round 2 human re-verification)"
+duration: "~95min (Task 1-3 automated) + ~45min (round 1 fix A: row-height containment) + ~40min (round 1 fix B: reproduced badge/message space competition with real Segoe UI, moved badges to their own grid column) + ~25min (round 1 fix C: graph edges overdrawing the next row) — Task 4 checkpoint round 2 NOT YET RUN"
+completed: "2026-09-21 (Task 1-3 + all three checkpoint round 1 fixes; awaiting round 2 human re-verification)"
 ---
 
 # Phase 2 Plan 06: Commit detail + file tree + ref sidebar + search — Summary
@@ -78,9 +82,9 @@ từ WebView2 trên Windows, không phải suy đoán). Đã sửa và chờ vò
 
 Tất cả mã tự động hoá được đã xong: `selectionStore`, `refsStore`, `uiStore`,
 `fileTree.ts`, `CommitDetail`, `FileList`, `RefBadges`, `RefSidebar`,
-`CommitSearch` đều đã cài, nối vào `App.tsx`, và có 72 test mới (**179 tổng**,
+`CommitSearch` đều đã cài, nối vào `App.tsx`, và có 75 test mới (**182 tổng**,
 từ nền 107 tại lúc đóng plan 02-05 — 66 test Task 1-3 + 3 test hồi quy fix A
-+ 3 test hồi quy cấu trúc fix B). `npm run typecheck`, `npm test`, `npm run
++ 3 test hồi quy cấu trúc fix B + 3 test containment trục Y fix C). `npm run typecheck`, `npm test`, `npm run
 build`, `npx tauri build --debug --no-bundle`, và `cargo test` đều xanh,
 **không hồi quy**.
 
@@ -88,7 +92,7 @@ Checkpoint round 1 bị từ chối vì ba lỗi bố cục CSS ở bước 6 c�
 — đúng loại lỗi mà `npm test` (chạy trên happy-dom) không bắt được, giống hệt
 bài học của checkpoint round 1 plan 02-05.
 
-**Ba lỗi đó có HAI nguyên nhân độc lập, cả hai đã sửa:**
+**Ba lỗi người dùng báo có HAI nguyên nhân độc lập, cộng thêm một nguyên nhân thứ BA phát hiện sau khi sửa hai cái đầu — cả ba đã sửa:**
 - **Nguyên nhân A** (containment chiều cao CSS Grid) — tìm ở vòng điều tra 1,
   giải thích lỗi 1 (hàng cao hơn) và lỗi 2 (đồ thị lệch tâm hàng).
 - **🔴 Nguyên nhân B** (nhãn ref và chữ message cạnh tranh CÙNG một cột grid)
@@ -97,6 +101,11 @@ bài học của checkpoint round 1 plan 02-05.
   thấy, và **đã tái hiện được bằng số đo** (nhóm 4 badge chiếm 258px trong khi
   cột subject chỉ còn 144px → chữ message hiển thị **0%**). Sửa bằng quyết
   định kiến trúc: nhãn có **cột grid riêng**, khớp tham chiếu GitKraken.
+- **🔴 Nguyên nhân C** (cạnh đồ thị vẽ tràn sang hàng kế tiếp) — người dùng báo
+  tiếp sau khi A và B đã sửa: đồ thị "rất khó đọc và bị vỡ". `outEdges` vẽ tới
+  `y + 1.5 * ROW_HEIGHT`, tức nửa hàng vượt quá ô của chính nó, đè vào ô hàng
+  kế tiếp ở lane khác. Sửa: mỗi hàng vẽ strictly trong `[y, y + ROW_HEIGHT]`.
+  Không test nào trong 179 test cũ bắt được vì **không test nào đọc toạ độ Y**.
 
 Vòng điều tra 1 cho **âm tính giả** vì đo trong Chromium không có Segoe UI và
 ở full viewport thay vì vùng `main` 52% thật — chi tiết ở mục dưới. Chờ người
@@ -343,6 +352,46 @@ tranh không gian, và happy-dom cũng không (nó không tính grid track sizin
 | 4 | `CommitList.tsx`: đưa `RefBadges` trở lại **bên trong** `.commit-subject` (đúng lỗi gốc B) | **1 test đỏ** | `RefBadges nằm trong .commit-ref-cell, không nằm trong .commit-subject` |
 | 5 | `app.css`: bỏ cột nhãn khỏi `grid-template-columns` (về 5 cột) | **1 test đỏ** | `.commit-row có ĐÚNG 6 cột` |
 
+## 🔴 Nguyên nhân C — cạnh đồ thị vẽ tràn sang hàng kế tiếp (`60a0caa`)
+
+Sau khi sửa A và B, người dùng báo tiếp: đồ thị "rất khó đọc và bị vỡ". Đây
+là nguyên nhân **thứ ba**, độc lập với A và B, tìm ra bằng cách đọc `drawRow`
+trong `canvasRenderer.ts`.
+
+**Lỗi:** `outEdges` vẽ từ tâm hàng tới `y + 1.5 * ROW_HEIGHT` — tức **nửa
+hàng vượt quá ô của chính nó**, đè thẳng vào ô của hàng kế tiếp, ở lane khác.
+Mọi hàng có rẽ nhánh vì thế vẽ một đường xuyên qua hàng bên cạnh, trong khi
+hàng đó cũng tự vẽ đường của mình vào cùng chỗ. Với virtualizer chỉ dựng các
+hàng đang thấy, đường tràn còn có thể chạy xuống một hàng **chưa được dựng**,
+nên nó không khớp với gì cả.
+
+**Sửa:** mỗi hàng vẽ **strictly** trong `[y, y + ROW_HEIGHT]`. `outEdges` đi
+từ tâm nút tới **mép dưới** của chính hàng đó; nửa trên của hàng kế tiếp do
+`passthrough` (hoặc `outEdges`) của hàng đó vẽ. Hai nửa gặp nhau ở mép chung
+nên đường vẫn liền mạch mà không chồng lấn.
+
+```diff
+-  const yNext = y + ROW_HEIGHT + ROW_HEIGHT / 2
++  const yBottom = y + ROW_HEIGHT
+   for (const edge of row.outEdges) {
+-    drawEdge(ctx, edge, yCenter, yNext)
++    drawEdge(ctx, edge, yCenter, yBottom)
+   }
+```
+
+**Vì sao KHÔNG test nào trong 179 test bắt được:** hai test `outEdges` hiện
+có chỉ khẳng định **toạ độ X** (`moveArgs[0]` vs `lineArgs[0]`) và việc
+`bezierCurveTo` được gọi. **Không một test nào đọc toạ độ Y**, nên đường tràn
+1.5 hàng hoàn toàn vô hình với toàn bộ bộ test. Đã thêm **3 test** khẳng định
+containment theo chiều dọc (cạnh dọc, cạnh bezier, và `outEdges` bắt đầu ở
+tâm trong khi `passthrough` bắt đầu ở mép trên) — **cả ba đã kiểm mutation đỏ**
+với toạ độ cũ. Tổng test: **182**.
+
+**Bài học riêng của nguyên nhân C:** test hình học mà chỉ kiểm một trục là
+test một nửa. Bộ test canvas cũ kiểm rất kỹ trục X (lane nào, màu nào) nhưng
+bỏ trắng trục Y — đúng trục mà `ROW_HEIGHT`/`rowY` và ràng buộc thẳng hàng
+HIST-04 sống trên đó.
+
 ### Bài học
 
 **Đo đúng thứ trong môi trường sai vẫn cho kết luận sai.** Vòng 1 đo chiều
@@ -367,7 +416,7 @@ một chuỗi CSS nào. Vì thế fix B cần test kiểm cấu trúc (đếm c�
 
 ```
 npm run typecheck                        → exit 0
-npm test                                  → 179 passed (20 test files), 0 failed
+npm test                                  → 182 passed (20 test files), 0 failed
 npm run build                             → success, dist/ 317.16 kB JS / 11.94 kB CSS
 npx tauri build --debug --no-bundle       → Built application at target\debug\git-plum.exe (rebuilt after BOTH checkpoint round 1 fixes)
 cd src-tauri && cargo test                → 149 passed, 1 ignored (7 suites, 2.57s) — no regression
@@ -378,7 +427,7 @@ grep -rln 'useVirtualizer(' src/ | wc -l  → 1 (src/components/history/CommitLi
 Test count arithmetic: baseline at close of 02-05 was **107**. This plan's
 Task 1-3 added 66 tests (173 total) — see per-file breakdown below. Checkpoint
 round 1 added 3 regression tests for fix A (176) and 3 structural regression
-tests for fix B (**179 total**). The plan estimated "48 ca" total across the three tasks'
+tests for fix B (179), and 3 Y-axis containment tests for fix C (**182 total**). The plan estimated "48 ca" total across the three tasks'
 `<behavior>` blocks; actual delivered coverage is higher because several
 behaviors were split into multiple focused assertions or parameterized
 (`it.each`) for the six status labels in `FileList`.
@@ -525,7 +574,11 @@ chạy và báo lại bằng ảnh chụp, và vòng 2 cũng vậy. Bản dựng
 sàng tại `src-tauri\target\debug\git-plum.exe` (build lại SAU KHI sửa ba
 lỗi CSS ở checkpoint round 1, khớp 100% với mã đã commit ở `HEAD` hiện tại).
 
-**Đã sửa HAI nguyên nhân từ vòng 1. Cần xác nhận lại đặc biệt:**
+**Đã sửa BA nguyên nhân từ vòng 1. Cần xác nhận lại đặc biệt:**
+- **Bước 2 (thẳng hàng + đọc được đồ thị)** — nguyên nhân C đã sửa: cạnh đồ
+  thị không còn vẽ tràn sang ô của hàng kế tiếp. Nhìn kỹ vùng có **rẽ nhánh**
+  (merge/branch): đường nối giờ phải liền mạch, không chồng chéo, không có
+  đoạn "lơ lửng" cắt ngang hàng bên cạnh.
 - **Bước 5** (nhãn đúng hàng, local khác remote) — nhãn giờ ở **cột riêng**
   bên trái cột thông điệp, giống bố cục GitKraken. Kiểm cả việc **chữ thông
   điệp có hiện đầy đủ trên hàng CÓ nhãn** hay không — đây là lỗi chính của
