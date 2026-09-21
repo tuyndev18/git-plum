@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-09-21T12:25:00.000Z"
+last_updated: "2026-09-21T05:45:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
-  percent: 50
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State: git-plum
@@ -33,9 +33,9 @@ progress:
 | | |
 |---|---|
 | **Phase** | 1 — Nền tảng và lớp bọc git |
-| **Plan** | 2/4 hoàn thành (01-01, 01-02) |
+| **Plan** | 3/4 hoàn thành (01-01, 01-02, 01-03) |
 | **Status** | Đang thực thi Phase 1 |
-| **Progress** | Phase 0/8 hoàn thành · Plan 2/4 của Phase 1 |
+| **Progress** | Phase 0/8 hoàn thành · Plan 3/4 của Phase 1 |
 
 ```
 [........] 0/8 phases
@@ -48,13 +48,14 @@ progress:
 | Metric | Value |
 |---|---|
 | Phases completed | 0 / 8 |
-| Plans completed | 2 |
-| v1 requirements delivered | 3 / 59 |
+| Plans completed | 3 |
+| v1 requirements delivered | 4 / 59 |
 
 | Plan | Thời lượng | Tasks | Files |
 |---|---|---|---|
 | Phase 1 P01 | 18min | 2 tasks | 2 files |
 | Phase 1 P02 | 9min | 3 tasks | 6 files |
+| Phase 1 P03 | 14min | 3 tasks | 6 files |
 
 ---
 
@@ -72,6 +73,9 @@ progress:
 - **PLAT-02 (plan 01-01)**: `GIT_CONFIG_PARAMETERS` ghim đủ `log.showSignature`, `diff.noprefix`, `format.coverLetter` qua hằng `PINNED_GIT_CONFIG` trong `src-tauri/src/git/exec.rs`. `diff.external` ghim riêng bằng `GIT_EXTERNAL_DIFF=""` vì biến môi trường thắng cấu hình.
 - **`--cleanup=whitespace` bàn giao cho Phase 4** qua `docs/02-phase4-commit-notes.md`: nó là tham số dòng lệnh của `git commit`, không đặt được trong lớp ghim môi trường, và Phase 1 chưa có lệnh commit nào.
 - **Hạ tầng kiểm thử giao diện** (plan 01-02): cấu hình vitest sống trong khối `test` của `vite.config.ts`, không tách `vitest.config.ts` riêng — một nguồn sự thật cho `resolve.alias`. Giả lập IPC ở ranh giới module `@/lib/ipc`, không vá `invoke` toàn cục. Test logic store gọi thẳng `useRepoStore.getState()`, không render component.
+- **Danh sách repository gần đây** (plan 01-03, PLAT-07): lưu qua `tauri-plugin-store` vào `recent-repos.json`, giới hạn `MAX_RECENT = 10`. Logic thuần tuý (`mergeRecent`, `sanitizeRecent`, `normalizeRepoPath`) tách khỏi vỏ bọc Tauri để kiểm thử được trực tiếp. `normalizeRepoPath` sao chép chính xác `state::repo_id_for` bên Rust — đổi `\` thành `/`, cắt `/` ở cuối, **không** đổi chữ thường — để phép khử trùng lặp phía giao diện không bất đồng với `RepoId` phía backend.
+- **Danh sách gần đây là tiện ích, không phải dữ liệu quan trọng**: mọi lời gọi store bọc `try/catch` và trả mảng rỗng khi hỏng. `rememberRepo` thất bại **không được** làm hỏng `openRepository` — người dùng đã mở được repo rồi.
+- **Hai thao tác có tham số đi ngoài sổ đăng ký PLAT-04** (`onOpen`/`onForget` truyền bằng prop): `Command.run` có chữ ký `() => void | Promise<void>`, không nhận tham số. Mở rộng sổ đăng ký cho lệnh có tham số để dành cho v2 lúc làm bảng lệnh gõ nhanh. `repo.open` và `repo.close` vẫn đi qua sổ đăng ký như cũ.
 - Chi tiết đầy đủ các quyết định kỹ thuật: xem `.planning/PROJECT.md` mục Key Decisions và `.planning/research/SUMMARY.md` mục 3.
 
 ### Việc cần làm
@@ -122,7 +126,9 @@ progress:
 
 ## Session Continuity
 
-**Việc tiếp theo:** thực thi các plan còn lại của Phase 1 (01-03, 01-04). Đã xong: 01-01 (PLAT-02), 01-02.
+**Việc tiếp theo:** thực thi plan còn lại của Phase 1 (01-04). Đã xong: 01-01 (PLAT-02), 01-02 (hạ tầng test giao diện), 01-03 (PLAT-07 — danh sách repository gần đây).
+
+**Còn lại của Phase 1 sau 01-03:** G3 (PLAT-09 chưa kiểm chứng kích thước vùng qua các lần chạy), G6 (locale không phải tiếng Anh), G7 (cửa sổ console ở bản release), và việc kiểm chứng thật PLAT-07 — mở lại ứng dụng và xác nhận danh sách gần đây sống sót. Ba thứ cuối chỉ kiểm được bằng cách chạy bản dựng thật, không kiểm được bằng test tự động.
 
 **Nếu mất ngữ cảnh, đọc theo thứ tự:**
 

@@ -29,7 +29,7 @@ Lớp nền mà mọi thứ khác dựng lên. Bốn mục **PLAT-02, PLAT-03, P
 - [x] **PLAT-05**: Trạng thái trong ứng dụng được lưu theo khoá định danh repository, cho phép
       thêm nhiều repository mở cùng lúc về sau mà không phải viết lại
 - [ ] **PLAT-06**: Người dùng mở được một repository bằng hộp thoại chọn thư mục
-- [ ] **PLAT-07**: Người dùng mở lại được repository đã dùng gần đây từ một danh sách
+- [x] **PLAT-07**: Người dùng mở lại được repository đã dùng gần đây từ một danh sách
 - [ ] **PLAT-08**: Người dùng nhìn thấy đúng những lệnh git mà ứng dụng đã chạy, kèm mã thoát
       và thời gian chạy
 - [ ] **PLAT-09**: Người dùng kéo được ranh giới giữa ba vùng giao diện, và kích thước đó
@@ -188,7 +188,7 @@ Phase nào phủ requirement nào. Bảng này do bước lập lộ trình đi�
 | PLAT-04 | Phase 1 | Complete |
 | PLAT-05 | Phase 1 | Complete |
 | PLAT-06 | Phase 1 | Pending |
-| PLAT-07 | Phase 1 | Pending |
+| PLAT-07 | Phase 1 | Complete |
 | PLAT-08 | Phase 1 | Pending |
 | PLAT-09 | Phase 1 | Pending |
 | PLAT-10 | Phase 1 | Pending |
