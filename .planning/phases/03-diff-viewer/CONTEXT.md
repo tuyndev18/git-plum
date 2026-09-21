@@ -4,6 +4,15 @@
 **Goal (ROADMAP):** Người dùng đọc được chính xác một commit đã thay đổi những gì, ở mức
 từng dòng.
 
+> **Đính chính 2026-09-21:** bản đầu của tài liệu này viết cờ git là
+> `--word-diff-porcelain` ở ba chỗ. **Cờ đó không tồn tại** — nó thoát 129 và in usage.
+> Chính tả đúng là **`--word-diff=porcelain`** (đã sửa cả ba chỗ). Planner bắt được khi
+> chạy git thật thay vì đọc tài liệu; tôi đã kiểm chứng độc lập cả hai dạng.
+>
+> Cùng lớp lỗi với `%x1f` của plan 02-04, nhưng **dễ phát hiện hơn**: lỗi này ồn (exit
+> khác 0, in usage), còn `%x1f` thoát 0 với stdout trông hợp lý và làm thanh bên rỗng
+> hoàn toàn trong im lặng.
+
 ---
 
 ## 1. Phạm vi đã chốt với chủ dự án
@@ -26,7 +35,7 @@ phần chữ thay đổi**. Ví dụ chủ dự án đưa: dòng `if (typeof cel
 `=== "object"`, chỉ `==` → `===` được tô đậm, phần còn lại của dòng để nguyên.
 
 Đây **không** nằm trong DIFF-01..06 và `@codemirror/merge` **không cho sẵn** — cần
-`git diff --word-diff` (hoặc `--word-diff-porcelain`) hoặc tự tính ở tầng hiển thị. Xem
+`git diff --word-diff` (hoặc `--word-diff=porcelain`) hoặc tự tính ở tầng hiển thị. Xem
 mục 4.
 
 ### Ngoài phạm vi — đã cân nhắc và bỏ
@@ -110,7 +119,7 @@ tự sinh) ở profile **release**, cho cả hai đường nếu cần. Ngưỡn
 xem số** — planner phải đặt con số cụ thể vào plan, không để "đủ nhanh" chung chung.
 
 **Lưu ý word-level diff giao với quyết định này.** Nếu chọn đường B (tự vẽ hunk từ
-`git diff`), thì word-level diff **cũng phải lấy từ git** (`--word-diff-porcelain`) cho
+`git diff`), thì word-level diff **cũng phải lấy từ git** (`--word-diff=porcelain`) cho
 nhất quán một nguồn. Nếu chọn đường A, `@codemirror/merge` có thể tự cho word-level —
 cần kiểm, không giả định.
 
@@ -136,7 +145,7 @@ không bắt được.
 
 ## 6. Câu hỏi để planner tự trả lời (không chặn)
 
-1. **Nguồn word-level diff**: `git diff --word-diff-porcelain` hay tự tính ở JS? Ràng buộc:
+1. **Nguồn word-level diff**: `git diff --word-diff=porcelain` hay tự tính ở JS? Ràng buộc:
    nếu tự tính thì lại rơi vào đúng cái bẫy "CM tự tính diff" mà checkpoint #3 lo.
 2. **Ngưỡng kích thước tệp** cho DIFF-06 là bao nhiêu? ROADMAP nêu "tệp 200MB" làm ví dụ
    tiêu chí nhưng không chốt ngưỡng. Cần một con số và lý do.
