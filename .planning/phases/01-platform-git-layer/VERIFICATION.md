@@ -123,6 +123,26 @@ Ba điều đáng nhớ từ phase này, vì chúng đều là **giả định b
 
 1. **`diff.external` không hề thiếu.** CONTEXT.md ban đầu ghi là thiếu; thực ra nó đã được
    ghim bằng `GIT_EXTERNAL_DIFF=""` từ commit đầu tiên — biến môi trường, mạnh hơn config.
+
+   > 🔴 **ĐÍNH CHÍNH 2026-09-22 (tìm thấy ở plan 03-01).** Điều trên đúng về *vị trí* nhưng
+   > **sai về cơ chế**, và bản thân nó là một lỗi. `GIT_EXTERNAL_DIFF=""` **không** vô hiệu
+   > hoá trình diff ngoài: git đem chuỗi rỗng đi spawn như tên chương trình và chết với
+   > `error: cannot spawn : No such file or directory` / `fatal: external diff died`.
+   >
+   > Hệ quả: **mọi lệnh git sinh bản vá thoát 128 với stdout rỗng, im lặng** — không lỗi
+   > biên dịch, không test nào của Phase 1 hay Phase 2 đỏ. Phase 2 sống sót vì nó chỉ dùng
+   > `--name-status`, lệnh không gọi tới trình diff. Lỗi chỉ lộ ở Phase 3, nơi đọc bản vá là
+   > toàn bộ mục đích — gồm cả `--word-diff=porcelain` mà plan 03-03 dựa vào.
+   >
+   > Ghim `diff.external=` rỗng qua config có **cùng** lỗi (đã đo). Cơ chế đúng là cờ
+   > `--no-ext-diff` của chính git, thắng cả config lẫn biến môi trường. Đã sửa ở `f5c4c17`:
+   > `env_remove("GIT_EXTERNAL_DIFF")` cộng chèn `--no-ext-diff` tập trung trong
+   > `GitCommand::run()` cho `diff`/`show`/`log`/`diff-tree`.
+   >
+   > **Bài học đúng của mục này hoá ra ngược lại lời nó viết:** một ràng buộc "đã ghim rồi"
+   > mà chưa có test đọc ngược kết quả từ tiến trình con thì chưa được ghim. Mục 1 gốc kết
+   > luận từ việc *đọc mã*, không từ việc *chạy git* — và đọc mã thì cả ý định lẫn lỗi đều
+   > trông như nhau.
 2. **Máy phát triển không phải Windows tiếng Việt.** Sáu nguồn độc lập cho `en-US`. Giả định
    này làm cả một khoảng cách (G6) được lên kế hoạch sai.
 3. **`npm test` chưa từng chạy.** `package.json` khai báo `"test": "vitest run"` nhưng không

@@ -95,6 +95,13 @@ GREEN đã sạch với `clippy -D warnings`.
   `GIT_EXTERNAL_DIFF=""` tại `exec.rs`, mà biến môi trường thắng cấu hình nên cách đó
   mạnh hơn. Thay vào đó bổ sung bình luận ở cả hai chỗ để lần soát sau không kết luận
   nhầm là bỏ sót.
+
+  > 🔴 **ĐÍNH CHÍNH 2026-09-22 (plan 03-01, commit `f5c4c17`).** Quyết định này **sai**.
+  > `GIT_EXTERNAL_DIFF=""` không vô hiệu hoá trình diff ngoài — git spawn chương trình tên
+  > rỗng và chết (`error: cannot spawn : No such file or directory`). Mọi lệnh git sinh bản
+  > vá thoát 128 với stdout **rỗng, im lặng**. Ghim `diff.external=` rỗng qua config cũng
+  > cùng lỗi. Cơ chế đúng: cờ `--no-ext-diff`, thắng cả config lẫn env, chèn tập trung
+  > trong `GitCommand::run()`. Chi tiết và bài học ở `VERIFICATION.md` mục 6.1.
 - Test 4 so khớp tên khoá dạng chữ thường (`log.showsignature`, `format.coverletter`).
   Xem mục Issues Encountered.
 - Giữ nguyên `SSH_ASKPASS`, `GIT_PAGER`, `PAGER` theo Claude's Discretion trong CONTEXT.md.
