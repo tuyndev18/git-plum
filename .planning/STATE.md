@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-09-21T09:15:00.000Z"
+last_updated: "2026-09-21T09:55:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 11
-  completed_plans: 7
-  percent: 64
+  completed_plans: 8
+  percent: 73
 ---
 
 # Project State: git-plum
@@ -33,9 +33,9 @@ progress:
 | | |
 |---|---|
 | **Phase** | 2 — Lịch sử và đồ thị nhánh |
-| **Plan** | 3 / 7 xong (02-03 — thuật toán gán lane) |
-| **Status** | Wave 3 của Phase 2 xong; `assign` đo được 57ms trên 100k commit (ngân sách ~240ms) |
-| **Progress** | Phase 1/8 · Phase 2 plan 3/7 |
+| **Plan** | 4 / 7 xong (02-04 — parser ref, cache theo RepoId, bốn command lịch sử) |
+| **Status** | Wave 4 của Phase 2 xong; bề mặt backend đủ. Đường nóng **793,9ms / 1000ms** ở release trên 100k commit; phần cache + IPC của 02-04 chỉ thêm **0,9ms** trong ngân sách ~168ms |
+| **Progress** | Phase 1/8 · Phase 2 plan 4/7 |
 
 ```
 [#.......] 1/8 phases
@@ -62,7 +62,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Metric | Value |
 |---|---|
 | Phases completed | 1 / 8 (có nợ) |
-| Plans completed | 7 |
+| Plans completed | 8 |
 | v1 requirements delivered | 7 / 59 đã kiểm chứng · 2 nữa có mã nhưng chưa kiểm thật (PLAT-07, PLAT-09) · PLAT-01 và REL-04 đạt ở mức yếu hơn ROADMAP |
 
 | Plan | Thời lượng | Tasks | Files |
@@ -73,6 +73,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 2 P01 | 50min | 3 tasks | 9 files |
 | Phase 2 P02 | 35min | 2 tasks | 8 files |
 | Phase 2 P03 | 65min | 3 tasks | 14 files |
+| Phase 2 P04 | 85min | 3 tasks | 14 files |
 
 ---
 
@@ -109,6 +110,19 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 - **Ngân sách Core Value đã đo đủ ba khâu** (plan 02-03): `git log` 693ms + `parse_log` 82ms + `assign` **57ms** = **832ms** trên repo thật 100 007 commit, dưới mốc một giây, còn dư ~168ms. `assign` chỉ dùng 24% ngân sách 240ms của nó. **git chiếm 83% đường nóng** — nếu checkpoint #1 trượt thì chỗ phải sửa là bộ nạp (`Channel`/phân trang), không phải thuật toán lane.
 - **Benchmark nhúng nguồn dữ liệu vào tên ca đo** (plan 02-03): `parse_log/repo-that/100000` vs `parse_log/tong-hop/100000`. Không có nhãn đó thì số tổng hợp bị đọc nhầm thành số của checkpoint #1 — và đã suýt xảy ra thật: `make-perf-repo.sh` ghi ra thư mục con `perf-100k/` chứ không biến `fixtures-perf/` thành repo, nên bản đầu của benchmark im lặng rơi về dữ liệu tổng hợp dù repo 100k nằm ngay đó.
 - **Job `bench` riêng, không thêm bước vào job `rust`** (plan 02-03): job `rust` chạy ma trận ba nền tảng, một bước trơn sẽ chạy benchmark ba lần mỗi push cho ba con số không so được với nhau. Không đặt ngưỡng thất bại tự động: runner CI dùng chung tài nguyên và nhiễu tới hàng chục phần trăm, ngưỡng cứng chỉ sinh báo động giả rồi bị bỏ qua — tệ hơn là không có cổng nào.
+- **🔴 `git for-each-ref` dùng escape `%1f`, KHÔNG `%x1f`** (plan 02-04, đính chính CONTEXT.md, plan 02-04 và `docs/01-research-competitors.md` mục 5.2 — cả ba sai): `%x1f` là escape của `git log` pretty-format. `for-each-ref` dùng ngôn ngữ `--format` của ref, nơi escape byte thô là `%<hai chữ số hex>`. Đo trên git 2.54: `git log --format='%H%x1f%P'` cho byte `037`; `for-each-ref --format='%(refname)%x1f...'` in ra **văn bản** `%x1f`. Hỏng trong im lặng ở mức tệ nhất — lệnh thoát 0, stderr rỗng, stdout có dữ liệu trông hợp lý, chỉ là không có dấu phân tách nên bộ phân tích bỏ **mọi** dòng và thanh bên rỗng hoàn toàn. **Cả 19 test đơn vị vẫn xanh** vì chúng tự chèn `0x1f`; chỉ test tích hợp chạy git thật bắt được.
+- **`%(objectname)` của tag CÓ CHÚ THÍCH không phải mã commit** (plan 02-04): nó là mã của *đối tượng tag* (`git cat-file -t` trả `tag`), và mã đó không xuất hiện ở hàng nào trong `git log` — nhãn tag không neo được vào dòng nào và biến mất khỏi đồ thị. Phải thêm `%(*objectname)` (mã đã giải tham chiếu, rỗng với ref khác) và lấy nó khi khác rỗng. Không repo mẫu nào có tag nên test tự dựng repo tạm.
+- **Gán lane chạy trên TOÀN BỘ lịch sử; phân trang chỉ là slice lúc trả về** (plan 02-04, theo ARCHITECTURE.md): lane của hàng 5000 là kết quả của mọi hàng 0..4999, nên `assign` trên một lát cắt cho đồ thị **trông hợp lý mà sai** — mọi đường nối bắt đầu lại từ lane 0, và trang **đầu** luôn đúng nên lỗi gần như không thấy trên repo nhỏ. `get_commit_page` vì vậy nạp `git log --all` một lần, tính lane cho hết, cache, rồi mọi trang sau là slice. Phân trang tiết kiệm **payload IPC**, không tiết kiệm bộ nhớ.
+- **`MAX_CACHED_HISTORIES = 2`, suy từ ~67MB mỗi lịch sử 100k so với hạn RAM 150MB** (plan 02-04): 2 × 67MB = 134MB đã sát hạn; 3 × 67MB vượt hạn trước khi cộng baseline Tauri/WebView2 80–150MB. Loại bỏ **ưu tiên repo không phải repo đang hoạt động** — loại ngẫu nhiên có thể ném đúng repo người dùng đang xem và buộc nạp lại gần một giây. **Không** dùng crate `lru`: chỉ hai phần tử và quy tắc loại bỏ phụ thuộc *repo nào đang hiển thị*, thứ nằm ngoài cache và `lru` không diễn đạt được. `lru` vẫn dành cho cache **diff** của Phase 3 (khoá theo SHA, hàng nghìn phần tử). Chưa đo RSS thật — việc của checkpoint 02-07.
+- **`close_repo` phải gọi `cache.invalidate`** (plan 02-04): không làm thì một lịch sử ~67MB nằm lại trong RAM cho repo người dùng đã đóng. `invalidate` xoá **cả** lịch sử **và** refs — ref trỏ vào mã commit, nên refs còn sống cạnh lịch sử đã bỏ cho nhãn trỏ vào hàng không tồn tại.
+- **`get_commit_detail`: commit gốc so với cây rỗng `4b825dc6…`, merge so với `parents[0]`** (plan 02-04): commit gốc không có `<commit>^` nên `git diff <gốc>^ <gốc>` thất bại với `unknown revision` — một cài đặt chỉ nối `^` lỗi ở đúng commit đầu tiên của **mọi** repo. Dùng `git diff` cho cả hai (chỉ đổi vế trái) chứ **không** `git show`: `git show` mặc định không in gì cho merge, nên sẽ có hai hành vi tuỳ commit là gốc hay merge, và hai đường phân tích đầu ra.
+- **`R`/`C` của `git diff --name-status -z` chiếm HAI đường dẫn** (plan 02-04, đo thật: `R100\0cu.txt\0moi.txt\0`): đọc như bản ghi một đường dẫn làm **mọi** bản ghi sau nó lệch một nấc — đường dẫn mới bị đọc thành trạng thái. Hỏng cả danh sách, không chỉ một dòng. `FileChange.status` vì vậy là `String` chứ không `char`: git luôn in điểm tương đồng (`R100`, `C75`) khi có `--find-renames`.
+- **`HISTORY_TIMEOUT = 120s` riêng cho `git log --all`** (plan 02-04, T-02-14): `DEFAULT_TIMEOUT` 30s quá ngắn (repo 100k đã mất ~690ms khi bộ nhớ đệm ấm; repo hàng triệu commit trên đĩa nguội vượt 30s dễ dàng). **Không** mượn `NETWORK_TIMEOUT` dù cũng 120s: đây là lệnh cục bộ, và dùng chung hằng số nghĩa là ai chỉnh hạn giờ mạng sẽ vô tình đổi hành vi nạp lịch sử.
+- **Command lịch sử nhận `repo_id` tường minh, KHÔNG `active_repo()`** (plan 02-04, PLAT-05 + T-02-12): `active_repo()` là lối tắt Phase 1, sai ngay khi có hai repo mở. `get_repo` cũng là cổng an toàn — chỉ trả repo **đã mở** qua `open_repository`, nên `repo_id` bịa cho `UnknownRepository` chứ không mở được thư mục tuỳ ý. Lời gọi `active_repo()` duy nhất còn lại chỉ nói cho cache biết repo nào không được loại bỏ.
+- **Ba trục tìm kiếm lọc trong bộ nhớ, một trục hỏi git** (plan 02-04, HIST-10, ARCHITECTURE.md Anti-Pattern 4): thông điệp/tác giả/mã commit lọc trên lịch sử đã cache vì chạy git mỗi lần gõ một ký tự là chống chỉ định. Trục đường dẫn tệp buộc phải hỏi git (cache không giữ danh sách tệp), và lệnh đó **luôn** có `--` trước pathspec (T-02-11) để từ khoá trùng tên nhánh không bị hiểu thành revision.
+- **Cổng `grep -c '<tên>' lib.rs` ≥ 1 là cổng VÔ DỤNG cho việc đăng ký command** (plan 02-04, đã kiểm bằng đột biến): thay dòng đăng ký thật bằng `// TODO: dang ky get_commit_page` thì cổng trả **1 và xanh** trong khi `invoke` sẽ thất bại lúc chạy. Cổng đúng là **test** tách khối `generate_handler![...]`, bỏ dòng chú thích, rồi đòi `commands::<tên>,`. Cùng hạng lỗi với cổng `parents[1]` của 02-03 và `grep -v '^#'` của CI. Một test tự dựng lệnh git cũng **không** chứng minh được mã sản phẩm dùng cờ đó — xoá `.arg("--")` khỏi `search_commits` mà test `--` vẫn xanh, nên cổng thật phải đọc thân hàm.
+- **🔴 Đo hiệu năng PHẢI ở profile `--release`** (plan 02-04): cùng test, cùng repo 100 007 commit — debug cho `parse_log` **455ms** / `assign` **220ms** / đường nóng **1366ms** (tức *vượt* mốc một giây); release cho **67ms** / **59ms** / **793,9ms**. Chậm gần **7 lần** ở `parse_log`. Bảng benchmark của wave 3 đo bằng `criterion` vốn luôn dựng release, nên chỉ số release là chỉ số so sánh được. Đọc số debug rồi kết luận "trượt Core Value" hay "cache quá đắt" đều sai.
+- **Không dùng `perl -0p` hay `head -N` để sửa tệp có tiếng Việt** (plan 02-04): một lần chèn test bằng `perl -0pe` biến toàn bộ tệp thành mojibake (`MÃ£ cÃ¢y rá»ng`) **và vẫn thoát 0**; `head -N` cũng làm hỏng một tệp khác. Dùng công cụ Edit hoặc heredoc `cat >>`.
 - **Hai thao tác có tham số đi ngoài sổ đăng ký PLAT-04** (`onOpen`/`onForget` truyền bằng prop): `Command.run` có chữ ký `() => void | Promise<void>`, không nhận tham số. Mở rộng sổ đăng ký cho lệnh có tham số để dành cho v2 lúc làm bảng lệnh gõ nhanh. `repo.open` và `repo.close` vẫn đi qua sổ đăng ký như cũ.
 - Chi tiết đầy đủ các quyết định kỹ thuật: xem `.planning/PROJECT.md` mục Key Decisions và `.planning/research/SUMMARY.md` mục 3.
 
