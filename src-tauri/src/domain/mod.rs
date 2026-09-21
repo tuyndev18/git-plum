@@ -8,7 +8,9 @@
 //! đúng những tên đó.
 
 pub mod commit;
+pub mod diff;
 pub mod refs;
 
 pub use commit::Commit;
+pub use diff::{DiffKind, DiffLine, FileDiff, Hunk, LineKind};
 pub use refs::{Ref, RefKind};

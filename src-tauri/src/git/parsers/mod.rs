@@ -12,4 +12,5 @@
 //!   lại — xem `LogParseResult::skipped_records`.
 
 pub mod log;
+pub mod patch;
 pub mod refs;
