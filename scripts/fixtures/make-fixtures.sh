@@ -85,7 +85,24 @@ next_stamp() {
 init_repo() {
   local name="$1"
   local path="$DEST/$name"
-  rm -rf "$path"
+
+  # Xoá và KIỂM đã xoá được thật. Trên Windows, OneDrive, trình diệt virus hoặc một
+  # tiến trình còn mở tệp đều làm `rm -rf` thất bại một phần — nó in cảnh báo rồi trả
+  # về mã 0. Không kiểm thì script chạy tiếp trên thư mục còn sót và vỡ ở tận nơi
+  # khác với thông điệp vô nghĩa: `fatal: cannot lock ref 'HEAD'`.
+  rm -rf "$path" 2>/dev/null || true
+  if [ -e "$path" ]; then
+    sleep 1
+    rm -rf "$path" 2>/dev/null || true
+  fi
+  if [ -e "$path" ]; then
+    echo "LỖI: không xoá được '$path' — có tiến trình đang giữ tệp trong đó." >&2
+    echo "      Trên Windows thường là OneDrive đang đồng bộ, trình diệt virus, hoặc" >&2
+    echo "      một cửa sổ Explorer/terminal đang mở thư mục đó." >&2
+    echo "      Đóng chúng rồi chạy lại. Chạy tiếp trên thư mục còn sót sẽ sinh repo hỏng." >&2
+    exit 1
+  fi
+
   mkdir -p "$path"
   git init --initial-branch=main --quiet "$path"
   # core.autocrlf=false: giữ blob giống nhau giữa Windows và Linux.
