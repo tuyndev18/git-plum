@@ -5,12 +5,16 @@ import { describeError, ipc } from '@/lib/ipc'
 import { clearCommands, registerCommands, runCommand } from '@/lib/commands'
 import { forgetRepo } from '@/lib/recentRepos'
 import { useActiveRepo, useRepoStore } from '@/stores/repoStore'
+import { useHistoryStore } from '@/stores/historyStore'
 import { AppLayout } from '@/components/AppLayout'
 import { CommandLogPanel } from '@/components/CommandLogPanel'
 import { RecentRepoList } from '@/components/RecentRepoList'
+import { CommitList } from '@/components/history/CommitList'
 
 export function App() {
   const activeRepo = useActiveRepo()
+  const activeRepoId = useRepoStore((s) => s.activeRepoId)
+  const historyError = useHistoryStore((s) => (activeRepoId ? s.byRepo[activeRepoId]?.error : null))
   const isOpening = useRepoStore((s) => s.isOpening)
   const openRepository = useRepoStore((s) => s.openRepository)
   const closeRepository = useRepoStore((s) => s.closeRepository)
@@ -20,6 +24,12 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [logVisible, setLogVisible] = useState(true)
   const [logRefreshKey, setLogRefreshKey] = useState(0)
+  // Trạng thái chọn commit ở dạng useState cho plan này. Plan 02-06 cần vùng
+  // chi tiết đọc cùng id, và ARCHITECTURE.md Pattern 3 khuyên một
+  // selectionStore riêng ("giữ CHỈ id, không giữ dữ liệu commit") — ghi rõ ở
+  // SUMMARY để plan 02-06 biết phải nâng cấp lên store nếu cần chia sẻ giữa
+  // nhiều component không phải con của App.
+  const [selectedCommitId, setSelectedCommitId] = useState<string | null>(null)
 
   // Mọi thao tác đi qua sổ đăng ký lệnh (PLAT-04), không gắn thẳng vào onClick.
   useEffect(() => {
@@ -49,8 +59,12 @@ export function App() {
         enabled: () => useRepoStore.getState().activeRepoId !== null,
         run: async () => {
           const id = useRepoStore.getState().activeRepoId
-          if (id) await closeRepository(id)
+          if (id) {
+            await closeRepository(id)
+            useHistoryStore.getState().reset(id)
+          }
           setError(null)
+          setSelectedCommitId(null)
         },
       },
       {
@@ -60,9 +74,37 @@ export function App() {
         keybinding: 'Ctrl+`',
         run: () => setLogVisible((v) => !v),
       },
+      {
+        id: 'history.refresh',
+        title: 'Nạp lại lịch sử',
+        category: 'history',
+        enabled: () => useRepoStore.getState().activeRepoId !== null,
+        run: async () => {
+          const id = useRepoStore.getState().activeRepoId
+          if (id) await useHistoryStore.getState().loadFirstPage(id)
+        },
+      },
+      {
+        id: 'history.scrollToTop',
+        title: 'Cuộn lên đỉnh lịch sử',
+        category: 'history',
+        enabled: () => useRepoStore.getState().activeRepoId !== null,
+        run: () => {
+          document.querySelector('[data-testid="commit-scroll"]')?.scrollTo({ top: 0 })
+        },
+      },
     ])
     return () => clearCommands()
   }, [openRepository, closeRepository])
+
+  // Nạp trang đầu của lịch sử khi repository đang hoạt động đổi (mở repo mới,
+  // hoặc chuyển sang repo khác nếu v2 hỗ trợ nhiều tab). Quy tắc MVP của phase
+  // này: mở repository là thấy lịch sử thật ngay, không có bước "sẽ nối sau".
+  useEffect(() => {
+    if (activeRepoId) {
+      void useHistoryStore.getState().loadFirstPage(activeRepoId)
+    }
+  }, [activeRepoId])
 
   useEffect(() => {
     ipc
@@ -143,10 +185,20 @@ export function App() {
         </div>
       </header>
 
-      {error && (
+      {(error ?? historyError) && (
         <div className="error-banner" role="alert">
-          <pre>{error}</pre>
-          <button onClick={() => setError(null)}>Đóng</button>
+          <pre>{error ?? historyError}</pre>
+          <button
+            onClick={() => {
+              setError(null)
+              // Lỗi lịch sử vẫn còn trong historyStore sau khi đóng banner —
+              // đây là cùng cơ chế "nuốt lỗi, giữ trong slice" mà
+              // `ensureRange` đã dùng, không thêm cơ chế lỗi mới. Nạp lại
+              // (`history.refresh`) là cách xoá nó, không phải nút Đóng này.
+            }}
+          >
+            Đóng
+          </button>
         </div>
       )}
 
@@ -155,24 +207,17 @@ export function App() {
           sidebar={
             <aside className="pane sidebar">
               <h2>Nhánh</h2>
-              <p className="placeholder">Phase 2 sẽ điền phần này.</p>
+              <p className="placeholder">Plan 02-06 sẽ điền phần này.</p>
             </aside>
           }
           main={
-            <main className="pane main">
+            <main className={`pane main${activeRepo ? ' main-history' : ''}`}>
               {activeRepo ? (
-                <div className="repo-summary">
-                  <h2>{activeRepo.info.name}</h2>
-                  <dl>
-                    <dt>Đường dẫn</dt>
-                    <dd>{activeRepo.info.path}</dd>
-                    <dt>Nhánh hiện tại</dt>
-                    <dd>{activeRepo.currentBranch ?? '(chưa có commit nào)'}</dd>
-                  </dl>
-                  <p className="placeholder">
-                    Đồ thị commit và danh sách lịch sử thuộc Phase 2.
-                  </p>
-                </div>
+                <CommitList
+                  repoId={activeRepo.info.id}
+                  selectedCommitId={selectedCommitId}
+                  onSelect={setSelectedCommitId}
+                />
               ) : (
                 <div className="empty-state">
                   <h2>Chưa mở repository nào</h2>
@@ -189,7 +234,7 @@ export function App() {
           detail={
             <aside className="pane detail">
               <h2>Chi tiết</h2>
-              <p className="placeholder">Phase 2 sẽ điền phần này.</p>
+              <p className="placeholder">Plan 02-06 sẽ điền phần này.</p>
             </aside>
           }
           bottom={logVisible ? <CommandLogPanel refreshKey={logRefreshKey} /> : undefined}

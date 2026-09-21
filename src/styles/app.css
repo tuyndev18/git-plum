@@ -172,6 +172,13 @@ button:disabled {
   background: var(--bg);
 }
 
+/* CommitList quản lý vùng cuộn của chính nó (.commit-scroll) — bỏ padding
+   và overflow của .pane chung để không lồng hai vùng cuộn vào nhau. */
+.main-history {
+  padding: 0;
+  overflow: hidden;
+}
+
 .pane h2 {
   margin: 0 0 10px;
   font-size: 11px;
