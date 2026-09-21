@@ -8,6 +8,7 @@
 
 import { create } from 'zustand'
 import { ipc, type RepoInfo } from '@/lib/ipc'
+import { loadRecentRepos, rememberRepo, type RecentRepo } from '@/lib/recentRepos'
 
 /** Dữ liệu gắn với một repository cụ thể. */
 interface RepoSlice {
@@ -24,18 +25,30 @@ interface RepoState {
   activeRepoId: string | null
   /** Đang có thao tác mở repository chạy dở. */
   isOpening: boolean
+  /**
+   * Danh sách repository gần đây (PLAT-07), mới nhất trước.
+   *
+   * Nằm trong store thay vì để component tự gọi `loadRecentRepos()`: như vậy
+   * giao diện chỉ đọc một mảng đồng bộ, không phải tự quản lý vòng đời bất đồng
+   * bộ, và mỗi lần mở repository thành công là một lần danh sách tự cập nhật.
+   */
+  recent: RecentRepo[]
 
   openRepository: (path: string) => Promise<void>
   closeRepository: (id: string) => Promise<void>
   setActiveRepo: (id: string | null) => void
   refreshBranch: (id: string) => Promise<void>
   setError: (id: string, error: string | null) => void
+  /** Nạp danh sách gần đây từ đĩa. Gọi một lần lúc ứng dụng khởi động. */
+  loadRecent: () => Promise<void>
+  setRecent: (recent: RecentRepo[]) => void
 }
 
 export const useRepoStore = create<RepoState>((set, get) => ({
   byRepo: {},
   activeRepoId: null,
   isOpening: false,
+  recent: [],
 
   openRepository: async (path) => {
     set({ isOpening: true })
@@ -50,6 +63,22 @@ export const useRepoStore = create<RepoState>((set, get) => ({
         isOpening: false,
       }))
       await get().refreshBranch(info.id)
+
+      // Ghi nhớ repository cho danh sách gần đây (PLAT-07).
+      //
+      // Thứ tự ưu tiên ở đây là tuyệt đối: người dùng đã mở được repository
+      // rồi. Mất một mục trong danh sách gần đây là chuyện nhỏ và tự khỏi ở lần
+      // mở sau; ném lỗi lên banner sau một thao tác đã thành công mới là chuyện
+      // to. Vì thế lời gọi này được bọc riêng và lỗi của nó bị nuốt tại đây,
+      // ngoài việc bản thân `rememberRepo` cũng đã tự bọc `try/catch` — hai lớp
+      // là có chủ ý, vì lớp trong nằm ở tệp khác và có thể bị sửa mất.
+      try {
+        const recent = await rememberRepo({ path: info.path, name: info.name })
+        // Danh sách rỗng nghĩa là ghi thất bại; đừng xoá sạch cái đang hiển thị.
+        if (recent.length > 0) set({ recent })
+      } catch (e) {
+        console.warn('[repoStore] không ghi nhớ được repository gần đây:', e)
+      }
     } catch (e) {
       set({ isOpening: false })
       throw e
@@ -96,6 +125,13 @@ export const useRepoStore = create<RepoState>((set, get) => ({
       if (!slice) return s
       return { byRepo: { ...s.byRepo, [id]: { ...slice, error } } }
     }),
+
+  loadRecent: async () => {
+    // `loadRecentRepos` đã tự nuốt lỗi và trả mảng rỗng, nên không cần bọc thêm.
+    set({ recent: await loadRecentRepos() })
+  },
+
+  setRecent: (recent) => set({ recent }),
 }))
 
 /** Repository đang hiển thị, hoặc `null`. */

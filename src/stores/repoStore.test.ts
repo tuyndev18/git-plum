@@ -10,6 +10,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ipc, type RepoInfo } from '@/lib/ipc'
+import { loadRecentRepos, rememberRepo } from '@/lib/recentRepos'
 import { useRepoStore } from '@/stores/repoStore'
 
 // Chặn ở ranh giới module `@/lib/ipc` chứ không vá `invoke` toàn cục: đó chính
@@ -23,9 +24,20 @@ vi.mock('@/lib/ipc', () => ({
   },
 }))
 
+// `@/lib/recentRepos` cũng bị chặn ở ranh giới module: nó nhập
+// `@tauri-apps/plugin-store` ở cấp module, thứ không chạy ngoài webview Tauri.
+// Test riêng cho chính nó nằm ở `src/lib/recentRepos.test.ts`.
+vi.mock('@/lib/recentRepos', () => ({
+  loadRecentRepos: vi.fn().mockResolvedValue([]),
+  rememberRepo: vi.fn().mockResolvedValue([]),
+  forgetRepo: vi.fn().mockResolvedValue([]),
+}))
+
 const moRepository = vi.mocked(ipc.openRepository)
 const dongRepository = vi.mocked(ipc.closeRepository)
 const nhanhHienTai = vi.mocked(ipc.currentBranch)
+const ghiNho = vi.mocked(rememberRepo)
+const napGanDay = vi.mocked(loadRecentRepos)
 
 function repoInfo(id: string): RepoInfo {
   return { id, path: `C:/kho/${id}`, name: id }
@@ -51,7 +63,12 @@ async function mo(id: string, nhanh = 'main'): Promise<void> {
 // Store zustand là singleton ở phạm vi module — không reset thì test rò rỉ.
 beforeEach(() => {
   vi.clearAllMocks()
-  useRepoStore.setState({ byRepo: {}, activeRepoId: null, isOpening: false })
+  // `clearAllMocks` xoá cả giá trị trả về đã đặt trong factory của `vi.mock`,
+  // nên phải dựng lại mặc định ở đây. Thiếu bước này thì `rememberRepo` trả
+  // `undefined` và `openRepository` vỡ ở chỗ đọc `.length`.
+  napGanDay.mockResolvedValue([])
+  ghiNho.mockResolvedValue([])
+  useRepoStore.setState({ byRepo: {}, activeRepoId: null, isOpening: false, recent: [] })
 })
 
 describe('mở repository', () => {
@@ -158,6 +175,84 @@ describe('làm mới nhánh', () => {
     await useRepoStore.getState().refreshBranch('khong-ton-tai')
 
     expect(useRepoStore.getState().byRepo).toEqual({})
+  })
+})
+
+describe('danh sách repository gần đây', () => {
+  it('ghi nhớ repository đúng một lần sau mỗi lần mở thành công', async () => {
+    // PLAT-07: nửa sau của tiêu chí thành công số 1 — lần mở sau repository
+    // phải xuất hiện trong danh sách gần đây.
+    await mo('alpha')
+
+    expect(ghiNho).toHaveBeenCalledTimes(1)
+    expect(ghiNho).toHaveBeenCalledWith({ path: 'C:/kho/alpha', name: 'alpha' })
+  })
+
+  it('không ghi nhớ khi việc mở repository thất bại', async () => {
+    // Ràng buộc: một thư mục không phải repository không được lọt vào danh
+    // sách gần đây, nếu không người dùng bấm lại nó và lại nhận đúng lỗi cũ.
+    moRepository.mockRejectedValueOnce(new Error('không phải repository'))
+
+    await expect(useRepoStore.getState().openRepository('C:/rac')).rejects.toThrow()
+
+    expect(ghiNho).not.toHaveBeenCalled()
+  })
+
+  it('hoàn tất việc mở repository bình thường khi rememberRepo ném lỗi', async () => {
+    // Ràng buộc quan trọng nhất của PLAT-07. Danh sách gần đây là tiện ích:
+    // người dùng đã mở được repository rồi, sự cố của một tiện ích không được
+    // biến thành lỗi hiển thị cho một thao tác đã thành công.
+    ghiNho.mockRejectedValueOnce(new Error('đĩa đầy'))
+    moRepository.mockResolvedValueOnce(repoInfo('alpha'))
+    nhanhHienTai.mockResolvedValueOnce('main')
+
+    await expect(
+      useRepoStore.getState().openRepository('C:/kho/alpha'),
+    ).resolves.toBeUndefined()
+
+    expect(laySlice('alpha').info.name).toBe('alpha')
+    expect(useRepoStore.getState().activeRepoId).toBe('alpha')
+    expect(useRepoStore.getState().isOpening).toBe(false)
+  })
+
+  it('cập nhật recent bằng danh sách mà rememberRepo trả về', async () => {
+    ghiNho.mockResolvedValueOnce([
+      { path: 'C:/kho/alpha', name: 'alpha', openedAtMs: 123 },
+    ])
+    moRepository.mockResolvedValueOnce(repoInfo('alpha'))
+    nhanhHienTai.mockResolvedValueOnce('main')
+
+    await useRepoStore.getState().openRepository('C:/kho/alpha')
+
+    expect(useRepoStore.getState().recent.map((m) => m.path)).toEqual(['C:/kho/alpha'])
+  })
+
+  it('giữ nguyên danh sách đang hiển thị khi rememberRepo trả mảng rỗng', async () => {
+    // Mảng rỗng là tín hiệu ghi thất bại (vỏ bọc nuốt lỗi và trả `[]`). Xoá
+    // sạch danh sách đang hiển thị vì một lần ghi hỏng là mất dữ liệu người
+    // dùng nhìn thấy, tệ hơn hẳn việc để nó hơi cũ một nhịp.
+    useRepoStore.setState({
+      recent: [{ path: 'C:/kho/cu', name: 'cu', openedAtMs: 1 }],
+    })
+    ghiNho.mockResolvedValueOnce([])
+
+    await mo('alpha')
+
+    expect(useRepoStore.getState().recent.map((m) => m.path)).toEqual(['C:/kho/cu'])
+  })
+
+  it('loadRecent đưa đúng danh sách đọc được vào recent', async () => {
+    napGanDay.mockResolvedValueOnce([
+      { path: 'C:/kho/a', name: 'a', openedAtMs: 2 },
+      { path: 'C:/kho/b', name: 'b', openedAtMs: 1 },
+    ])
+
+    await useRepoStore.getState().loadRecent()
+
+    expect(useRepoStore.getState().recent.map((m) => m.path)).toEqual([
+      'C:/kho/a',
+      'C:/kho/b',
+    ])
   })
 })
 
