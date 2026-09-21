@@ -1242,3 +1242,89 @@ button:disabled {
   font-size: 11px;
   color: var(--danger);
 }
+
+/* --- Spike đo diff (plan 03-01, checkpoint #3) -------------------------
+   Tạm thời. Xoá cùng lúc với SpikeHarness khi Task 3 chốt xong đường A/B. */
+
+.spike-harness {
+  border-top: 2px dashed #8a6d3b;
+  padding: 8px 12px;
+  font-size: 12px;
+  overflow: auto;
+  max-height: 60vh;
+  flex: 0 0 auto;
+}
+
+.spike-inputs {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.spike-inputs label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spike-inputs input {
+  min-width: 220px;
+}
+
+.spike-results table {
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+
+.spike-results th,
+.spike-results td {
+  border: 1px solid #555;
+  padding: 2px 8px;
+  text-align: right;
+}
+
+.spike-results td:first-child {
+  text-align: left;
+}
+
+.spike-meta {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0 12px;
+  margin: 0;
+}
+
+.spike-meta dt {
+  font-weight: 600;
+}
+
+.spike-meta dd {
+  margin: 0;
+}
+
+.spike-copy,
+.spike-word-html {
+  user-select: all;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: #222;
+  padding: 6px;
+}
+
+/* Chiều cao thật, bắt buộc: một vùng cao 0px làm CodeMirror chỉ vẽ một dòng và
+   phép đo mất hết ý nghĩa — nó sẽ đo việc vẽ một dòng, không phải cả tệp. */
+.spike-stage {
+  height: 400px;
+  overflow: auto;
+  border: 1px solid #444;
+  margin-top: 8px;
+}
+
+.spike-added {
+  background: rgba(40, 140, 60, 0.28);
+}
+
+.spike-removed {
+  background: rgba(170, 50, 50, 0.28);
+}
