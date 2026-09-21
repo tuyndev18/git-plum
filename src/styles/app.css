@@ -491,6 +491,24 @@ button:disabled {
  * đặt sàn cứng: subject luôn có tối thiểu 120px để hiện vài chục ký tự đầu,
  * dù phải giẫm lên `.commit-author`/`.commit-time` (giờ co được, xem dưới).
  */
+/*
+ * Checkpoint round 1 REJECTED (plan 02-06, đo bằng ảnh chụp thật của người
+ * dùng): hàng có nhiều badge ref cao hơn hàng thường, kéo theo chấm đồ thị
+ * (canvas, vẽ theo ROW_HEIGHT cố định từ geometry.ts) lệch khỏi tâm hàng.
+ * `overflow: hidden` + `min-height: 0` là bắt buộc ở CHÍNH `.commit-row`:
+ * đây là container CSS Grid, và grid item mặc định có `min-height: auto`
+ * (không phải `0`) — nghĩa là nội dung con (`.ref-badges` với nhiều badge)
+ * có thể ép TRACK của grid cao lên vượt `height: 28px` đặt qua inline style
+ * của virtualizer, bất kể `.commit-subject` bên trong có `overflow: hidden`
+ * hay không. `overflow: hidden` trên `.commit-subject` chỉ cắt được NỘI DUNG
+ * của chính nó theo chiều ngang (text-overflow: ellipsis) — nó không ngăn
+ * được grid TRACK cha giãn theo chiều dọc nếu track đó không tự giới hạn.
+ * Không tái hiện được lỗi này trong Chromium/Playwright headless (font thay
+ * thế Segoe UI có thể đo khác WebView2 thật trên Windows), nhưng sửa theo
+ * hướng containment cứng này loại bỏ toàn bộ lớp lỗi bất kể nguyên nhân đo
+ * chữ chính xác là gì — `overflow: hidden` trên container Grid luôn buộc
+ * track height tôn trọng `height` đã đặt, không phụ thuộc phông chữ.
+ */
 .commit-row {
   display: grid;
   grid-template-columns: max-content minmax(120px, 2fr) minmax(0, 1fr) minmax(60px, max-content) minmax(50px, max-content);
@@ -500,6 +518,8 @@ button:disabled {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
   cursor: pointer;
   white-space: nowrap;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .commit-row:hover {
@@ -518,6 +538,9 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .commit-encoding-flag {
@@ -540,20 +563,26 @@ button:disabled {
  */
 .ref-badges {
   display: inline-flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
   margin-right: 6px;
   vertical-align: middle;
+  max-height: 18px;
+  overflow: hidden;
 }
 
 .ref-badge {
   display: inline-block;
+  flex-shrink: 0;
   padding: 0 5px;
   border-radius: 3px;
   font-size: 10px;
   font-weight: 600;
   line-height: 16px;
+  max-height: 16px;
   white-space: nowrap;
+  overflow: hidden;
 }
 
 .ref-badge--local {

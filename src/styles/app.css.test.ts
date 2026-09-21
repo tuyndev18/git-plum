@@ -86,3 +86,67 @@ describe('.commit-row grid-template-columns', () => {
     expect(block).not.toContain('minmax(0, 2fr)')
   })
 })
+
+/**
+ * Test hồi quy checkpoint round 1 CỦA PLAN 02-06 — hàng có nhiều badge ref
+ * (HIST-06) KHÔNG BAO GIỜ được cao hơn hàng không có badge.
+ *
+ * Bối cảnh: người dùng chạy app thật, chụp ảnh xác nhận hàng đầu tiên (có 4
+ * badge: `master HEAD`, `origin/HEAD`, `origin/master`, `+1`) cao hơn rõ rệt
+ * so với các hàng khác — kéo theo chấm đồ thị (canvas, vẽ theo `ROW_HEIGHT`
+ * cố định từ `geometry.ts`) lệch khỏi tâm hàng đó, vì DOM row cao hơn nhưng
+ * canvas vẫn vẽ ở toạ độ `rowY(index) = index * ROW_HEIGHT` cũ.
+ *
+ * Nguyên nhân gốc suy luận từ CSS: `.commit-row` là container CSS Grid, và
+ * grid item mặc định có `min-height: auto` — không phải `0`. Điều đó nghĩa
+ * là nội dung con (`.ref-badges` với nhiều badge, đặc biệt khi phông chữ hệ
+ * thống thật — Segoe UI trên Windows — đo dòng cao hơn phông thay thế của
+ * môi trường test headless) có thể ép TRACK grid cao lên vượt `height: 28px`
+ * mà virtualizer đặt qua inline style, bất kể `.commit-subject` bên trong có
+ * `overflow: hidden` hay không — `overflow: hidden` trên một phần tử con chỉ
+ * cắt được NỘI DUNG của chính nó, không ngăn track cha của CSS Grid giãn nếu
+ * track đó không tự giới hạn bằng `overflow: hidden` + `min-height: 0`.
+ *
+ * Không tái hiện được bằng số đo Playwright/Chromium headless trong phiên
+ * điều tra này (phông thay thế cho Segoe UI có thể đo khác WebView2 thật) —
+ * ghi rõ để trung thực, không giả vờ đã tái hiện được. Cách sửa (containment
+ * cứng: `overflow: hidden` + `min-height: 0` trên `.commit-row`, giới hạn
+ * `max-height` trên `.ref-badges`/`.ref-badge`) loại bỏ toàn bộ LỚP lỗi này
+ * về mặt cấu trúc bất kể nguyên nhân đo chữ chính xác trên WebView2 là gì:
+ * containment trên container Grid luôn buộc track tôn trọng `height` đã đặt.
+ *
+ * Test này (như `.commit-row grid-template-columns` ở trên) là lưới an toàn
+ * cấp hai — đọc thẳng nguồn CSS, không đo layout đã tính ra. Không thay thế
+ * việc đo bằng trình duyệt thật (lý tưởng nhất là WebView2 thật, không phải
+ * Chromium độc lập) khi có nghi ngờ hồi quy tương tự.
+ */
+describe('.commit-row containment — badge không được phá chiều cao hàng cố định', () => {
+  it('.commit-row có overflow: hidden VÀ min-height: 0 (chặn grid track tự giãn)', () => {
+    const block = extractCommitRowBlock(css)
+    expect(block, '.commit-row phải có overflow: hidden').toContain('overflow: hidden')
+    expect(block, '.commit-row phải có min-height: 0').toContain('min-height: 0')
+  })
+
+  it('.ref-badges có max-height và overflow: hidden — không được giãn theo nội dung', () => {
+    const start = css.indexOf('.ref-badges {')
+    expect(start, 'phải tìm thấy khối .ref-badges trong app.css').toBeGreaterThan(-1)
+    const end = css.indexOf('}', start)
+    const block = css.slice(start, end)
+
+    expect(block).toContain('max-height')
+    expect(block).toContain('overflow: hidden')
+    // flex-wrap: nowrap tường minh — không dựa vào giá trị mặc định của
+    // trình duyệt, để không ai vô tình bật wrap khi thêm thuộc tính khác.
+    expect(block).toContain('flex-wrap: nowrap')
+  })
+
+  it('.ref-badge có max-height khớp line-height — không cho một badge tự cao hơn các badge khác', () => {
+    const start = css.indexOf('.ref-badge {')
+    expect(start, 'phải tìm thấy khối .ref-badge trong app.css').toBeGreaterThan(-1)
+    const end = css.indexOf('}', start)
+    const block = css.slice(start, end)
+
+    expect(block).toContain('max-height')
+    expect(block).toContain('overflow: hidden')
+  })
+})
