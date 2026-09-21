@@ -575,4 +575,75 @@ mod tests {
         assert_eq!(EMPTY_TREE, "4b825dc642cb6eb9a060e54bf8d69288fbee4904");
         assert_eq!(EMPTY_TREE.len(), 40);
     }
+
+    /// **Hợp đồng IPC:** tên khoá JSON của `CommitPage` và `FileChange` là thứ
+    /// `src/lib/ipc.ts` đọc. Đổi tên trường bên Rust mà quên bên TypeScript làm giao
+    /// diện nhận `undefined` — không lỗi biên dịch ở cả hai phía, chỉ là màn hình
+    /// trống. Ghim bằng test, đúng tiền lệ plan 02-02 đã lập cho `Commit`.
+    #[test]
+    fn payload_serialize_dung_ten_khoa_camel_case() {
+        let page = CommitPage {
+            commits: Vec::new(),
+            graph_rows: Vec::new(),
+            total: 7,
+            skipped_records: 0,
+        };
+        let json = serde_json::to_value(&page).unwrap();
+        assert_eq!(json["total"], 7);
+        assert!(json.get("graphRows").is_some(), "phải là graphRows");
+        assert!(
+            json.get("skippedRecords").is_some(),
+            "phải là skippedRecords"
+        );
+        assert!(json.get("graph_rows").is_none(), "không được là graph_rows");
+        assert!(json.get("skipped_records").is_none());
+
+        let fc = FileChange {
+            status: "R100".into(),
+            path: "moi.txt".into(),
+            old_path: Some("cu.txt".into()),
+        };
+        let json = serde_json::to_value(&fc).unwrap();
+        assert_eq!(json["status"], "R100");
+        assert_eq!(json["path"], "moi.txt");
+        assert_eq!(json["oldPath"], "cu.txt");
+        assert!(json.get("old_path").is_none(), "không được là old_path");
+
+        // `old_path` là `None` phải cho `null`, để TypeScript dùng `string | null`.
+        let fc = FileChange {
+            status: "M".into(),
+            path: "f.txt".into(),
+            old_path: None,
+        };
+        assert!(serde_json::to_value(&fc).unwrap()["oldPath"].is_null());
+    }
+
+    /// `CommitDetail` mang cờ `truncated`, `files` là mảng, và `Commit` lồng bên trong
+    /// vẫn giữ camelCase của riêng nó.
+    #[test]
+    fn commit_detail_serialize_dung_hinh_dang() {
+        let detail = CommitDetail {
+            commit: Commit {
+                id: "a".repeat(40),
+                parents: Vec::new(),
+                author_name: "A".into(),
+                author_email: "a@b.c".into(),
+                author_time: 1,
+                committer_name: "A".into(),
+                committer_email: "a@b.c".into(),
+                committer_time: 1,
+                subject: "s".into(),
+                body: String::new(),
+                has_invalid_utf8: false,
+            },
+            files: Vec::new(),
+            truncated: true,
+        };
+        let json = serde_json::to_value(&detail).unwrap();
+        assert!(json["commit"].is_object());
+        assert!(json["files"].is_array());
+        assert_eq!(json["truncated"], true);
+        assert!(json["commit"].get("authorName").is_some());
+        assert!(json["commit"].get("hasInvalidUtf8").is_some());
+    }
 }
