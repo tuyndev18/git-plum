@@ -137,14 +137,11 @@ impl DiffCache {
     /// Đây là điểm phân biệt LRU với FIFO: một mục cũ nhưng vẫn được đọc phải sống
     /// lâu hơn một mục mới hơn mà không ai đọc.
     pub fn get_diff(&self, key: &DiffKey) -> Option<Arc<FileDiff>> {
-        // RED: chua cai dat.
-        let _ = key;
-        None
+        self.inner.lock().get(key).cloned()
     }
 
     pub fn put_diff(&self, key: DiffKey, diff: Arc<FileDiff>) {
-        // RED: chua cai dat.
-        let _ = (key, diff);
+        self.inner.lock().put(key, diff);
     }
 
     /// Giải phóng mọi mục của một repo — gọi từ `AppState::close_repo`.
@@ -413,16 +410,37 @@ mod tests {
     /// Giá trị của hằng chặn trên, đọc thẳng. Không dùng `grep -c`: hằng số xuất hiện
     /// ở khai báo, ở chú thích giải thích con số, và ở test — đếm số lần khớp không
     /// nói được điều gì.
+    ///
+    /// Bản đầu của test này còn có một `assert!(MAX_CACHED_DIFFS > MAX_CACHED_HISTORIES)`.
+    /// Clippy bắt nó là `assertions_on_constants`: **cả hai vế là hằng số nên phép so
+    /// được tính lúc biên dịch** và assertion không quan sát được gì lúc chạy. Đó đúng
+    /// là một "cổng tự vô hiệu hoá" theo nghĩa của bài học Phase 2, chỉ ở dạng Rust
+    /// chứ không phải grep. Đã bỏ; quan hệ giữa hai con số nằm trong tài liệu của
+    /// [`MAX_CACHED_DIFFS`], nơi nó thật sự được đọc.
     #[test]
     fn chan_tren_dung_hai_tram() {
         assert_eq!(
             MAX_CACHED_DIFFS, 200,
             "ràng buộc ROADMAP: cache diff theo LRU ~200 mục"
         );
-        assert!(
-            MAX_CACHED_DIFFS > super::super::MAX_CACHED_HISTORIES,
-            "cache diff giữ nhiều mục hơn cache lịch sử vì mỗi mục nhỏ hơn hai bậc \
-             độ lớn — hai con số này KHÔNG được đồng bộ với nhau"
+    }
+
+    /// Chặn trên phải là thứ cache **thật sự** tôn trọng, không chỉ một con số trong
+    /// tệp nguồn.
+    ///
+    /// Đọc nó qua hành vi: nhồi gấp đôi chặn trên rồi đếm. Một cài đặt truyền nhầm
+    /// một hằng khác vào `LruCache::new` sẽ qua được test đọc giá trị ở trên nhưng
+    /// không qua được test này.
+    #[test]
+    fn cache_ton_trong_dung_gia_tri_hang_chan_tren() {
+        let c = DiffCache::new();
+        for i in 0..(MAX_CACHED_DIFFS * 2) {
+            c.put_diff(DiffKey::new("r", format!("s{i}"), "f"), diff("f"));
+        }
+        assert_eq!(
+            c.len(),
+            MAX_CACHED_DIFFS,
+            "sức chứa thật của cache phải bằng đúng MAX_CACHED_DIFFS"
         );
     }
 }

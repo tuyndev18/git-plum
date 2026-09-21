@@ -132,6 +132,85 @@ pub fn require_fixture(name: &str) -> Option<PathBuf> {
     }
 }
 
+// --- Repo mẫu cho trình xem diff (Phase 3) ---------------------------------
+
+/// Lệnh sinh repo mẫu diff. In ra trong thông báo bỏ qua test.
+pub const DIFF_FIXTURES_COMMAND: &str = "bash scripts/fixtures/make-diff-fixtures.sh";
+
+/// Thư mục con chứa repo mẫu diff, dưới [`fixture_root`].
+pub const DIFF_FIXTURES_DIR: &str = "diff-cases";
+
+/// Repo mẫu diff cộng bảng SHA của nó.
+///
+/// Khác bộ fixture của Phase 2 (chín repo, mỗi repo một hình dạng đồ thị): ở đây là
+/// **một** repo mang nhiều hình dạng **tệp**, vì thứ được kiểm là cách đọc bản vá của
+/// một tệp chứ không phải hình học lịch sử.
+pub struct DiffFixture {
+    pub repo: PathBuf,
+    /// Nhãn → SHA, đọc từ `shas.txt` mà script in ra.
+    shas: std::collections::HashMap<String, String>,
+}
+
+impl DiffFixture {
+    /// SHA của commit mang nhãn `nhan`.
+    ///
+    /// Panic khi nhãn không có: nhãn là hằng viết trong test, nên thiếu nhãn là lỗi
+    /// lập trình chứ không phải thiếu fixture (thiếu fixture đã được
+    /// [`require_diff_fixture`] xử lý trước đó). Thông điệp liệt kê nhãn có sẵn để
+    /// người sửa không phải mở script ra tra.
+    pub fn sha(&self, nhan: &str) -> &str {
+        self.shas.get(nhan).map(String::as_str).unwrap_or_else(|| {
+            let mut co: Vec<&str> = self.shas.keys().map(String::as_str).collect();
+            co.sort_unstable();
+            panic!(
+                "không có nhãn commit '{nhan}' trong repo mẫu diff.\n  \
+                 Nhãn có sẵn: {}\n  \
+                 Sinh lại bằng: {DIFF_FIXTURES_COMMAND}",
+                co.join(", ")
+            )
+        })
+    }
+}
+
+/// Lấy repo mẫu diff, hoặc `None` **kèm lời nhắc ra stderr** nếu thiếu.
+///
+/// Cùng hợp đồng với [`require_fixture`] và cùng lý do: người mới clone repo về chạy
+/// `cargo test` phải thấy xanh kèm lời nhắc, không thấy một bức tường đỏ. Fixture
+/// **đã từng bị dọn mất một lần** (ghi trong 02-07-SUMMARY), nên đường đi "thiếu
+/// fixture" là đường đi có thật, không phải phòng xa.
+///
+/// Kiểm **cả ba** thứ: thư mục repo, `.git` bên trong, và `shas.txt`. Một thư mục còn
+/// sót từ lần chạy script thất bại có hai thứ đầu mà không có thứ ba, và test dựa vào
+/// nó sẽ đỏ vì một lý do hoàn toàn không liên quan.
+pub fn require_diff_fixture() -> Option<DiffFixture> {
+    let goc = fixture_root().join(DIFF_FIXTURES_DIR);
+    let repo = goc.join("repo");
+    let bang = goc.join("shas.txt");
+
+    if !repo.is_dir() || !repo.join(".git").exists() || !bang.is_file() {
+        eprintln!(
+            "BỎ QUA TEST: thiếu repo mẫu diff (tìm ở {}).\n  \
+             Sinh lại bằng: {}\n  \
+             Hoặc trỏ tới thư mục khác bằng biến môi trường {}.",
+            goc.display(),
+            DIFF_FIXTURES_COMMAND,
+            FIXTURES_ENV,
+        );
+        return None;
+    }
+
+    let noi_dung = std::fs::read_to_string(&bang).ok()?;
+    let shas = noi_dung
+        .lines()
+        .filter_map(|l| {
+            let mut it = l.split_whitespace();
+            Some((it.next()?.to_owned(), it.next()?.to_owned()))
+        })
+        .collect();
+
+    Some(DiffFixture { repo, shas })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
