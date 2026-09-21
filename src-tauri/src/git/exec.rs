@@ -104,8 +104,10 @@ impl GitCommand {
     pub async fn run(self) -> Result<GitOutput> {
         let mut cmd = Command::new("git");
 
+        let args = them_no_ext_diff(self.args);
+
         cmd.current_dir(&self.repo_path);
-        cmd.args(&self.args);
+        cmd.args(&args);
 
         apply_env_hardening(&mut cmd);
 
@@ -128,7 +130,7 @@ impl GitCommand {
         }
 
         let mut child = cmd.spawn().map_err(|e| GitError::SpawnFailed {
-            args: self.args.clone(),
+            args: args.clone(),
             reason: e.to_string(),
         })?;
 
@@ -146,11 +148,11 @@ impl GitCommand {
         let output = tokio::time::timeout(self.timeout, child.wait_with_output())
             .await
             .map_err(|_| GitError::Timeout {
-                args: self.args.clone(),
+                args: args.clone(),
                 seconds: self.timeout.as_secs(),
             })?
             .map_err(|e| GitError::SpawnFailed {
-                args: self.args.clone(),
+                args: args.clone(),
                 reason: e.to_string(),
             })?;
 
@@ -160,6 +162,56 @@ impl GitCommand {
             status: output.status.code().unwrap_or(-1),
         })
     }
+}
+
+/// Các lệnh con của git có gọi tới trình khác biệt, tức cần `--no-ext-diff`.
+///
+/// `log` và `show` nằm trong danh sách vì cả hai **in được bản vá** (`git log -p`,
+/// `git show` mặc định in diff của commit). Thiếu chúng thì lỗi quay lại y nguyên ở
+/// một đường khác.
+const LENH_CO_DIFF: [&str; 4] = ["diff", "show", "log", "diff-tree"];
+
+/// Chèn `--no-ext-diff` vào lệnh git khi lệnh đó có thể gọi trình khác biệt ngoài.
+///
+/// # Vì sao chèn ở tầng này, không để người gọi tự thêm
+///
+/// Người gọi **sẽ quên**. Đây đúng là lỗi đã xảy ra: `GIT_EXTERNAL_DIFF=""` được đặt
+/// với ý vô hiệu hoá trình diff ngoài, nhưng git lại đem chuỗi rỗng đi spawn và mọi
+/// lệnh diff sinh bản vá thoát 128 với stdout **rỗng** — im lặng, không lỗi biên dịch,
+/// và Phase 2 không phát hiện vì nó chỉ dùng `--name-status` (không gọi trình diff).
+/// Đặt ở đây thì không lệnh nào lọt.
+///
+/// Cờ phải đứng **sau** lệnh con: `git -c a=b diff --no-ext-diff` đúng, còn
+/// `git --no-ext-diff -c a=b diff` thì git không nhận. Nên hàm này bỏ qua các cặp
+/// `-c key=value` dẫn đầu để tìm đúng vị trí lệnh con.
+///
+/// Không chèn hai lần nếu người gọi đã tự thêm.
+fn them_no_ext_diff(args: Vec<String>) -> Vec<String> {
+    if args.iter().any(|a| a == "--no-ext-diff") {
+        return args;
+    }
+
+    // Bỏ qua các tuỳ chọn toàn cục dẫn đầu để tìm lệnh con. `-c` mang giá trị ở
+    // tham số kế tiếp nên phải nhảy hai bước.
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-c" => i += 2,
+            a if a.starts_with('-') => i += 1,
+            _ => break,
+        }
+    }
+
+    let Some(lenh) = args.get(i) else {
+        return args;
+    };
+    if !LENH_CO_DIFF.contains(&lenh.as_str()) {
+        return args;
+    }
+
+    let mut ra = args;
+    ra.insert(i + 1, "--no-ext-diff".to_owned());
+    ra
 }
 
 /// Các khoá cấu hình git bị ghim cho mọi tiến trình con, dạng của
@@ -202,9 +254,10 @@ fn apply_env_hardening(cmd: &mut Command) {
 
     // --- Loại bỏ ảnh hưởng từ cấu hình bên ngoài --------------------------
     // Xem tài liệu của `PINNED_GIT_CONFIG` ở trên để biết từng khoá chống lỗi gì.
-    // Khoá thứ tư mà ROADMAP đòi — `diff.external` — KHÔNG nằm trong chuỗi này:
-    // nó được ghim mạnh hơn bằng biến `GIT_EXTERNAL_DIFF=""` bên dưới, vì biến môi
-    // trường thắng cấu hình. Không phải bỏ sót.
+    // Khoá thứ tư mà ROADMAP đòi — `diff.external` — KHÔNG nằm trong chuỗi này, và
+    // cũng KHÔNG ghim được bằng `diff.external=` rỗng: git sẽ đi spawn chương trình
+    // tên rỗng rồi chết (đã đo, xem `them_no_ext_diff`). Nó được ghim bằng cờ
+    // `--no-ext-diff`, thứ thắng cả cấu hình lẫn biến môi trường. Không phải bỏ sót.
     cmd.env("GIT_CONFIG_PARAMETERS", PINNED_GIT_CONFIG);
 
     // TODO(Phase 4): ràng buộc `--cleanup=whitespace` của PLAT-02 không đặt được ở
@@ -222,10 +275,32 @@ fn apply_env_hardening(cmd: &mut Command) {
     cmd.env_remove("GIT_COMMITTER_DATE");
 
     // Trình khác biệt bên ngoài sẽ thay thế đầu ra chuẩn của `git diff`.
-    // Đây chính là cách ghim khoá `diff.external` mà ROADMAP đòi: đặt biến này rỗng
-    // vô hiệu hoá `diff.external` của người dùng, và biến môi trường thắng cấu hình
-    // nên cách này mạnh hơn việc thêm một cặp vào `PINNED_GIT_CONFIG`.
-    cmd.env("GIT_EXTERNAL_DIFF", "");
+    //
+    // # Vì sao `env_remove` chứ KHÔNG `env("GIT_EXTERNAL_DIFF", "")`
+    //
+    // Bản đầu đặt biến này thành chuỗi **rỗng**, tưởng rằng rỗng nghĩa là "không có
+    // trình nào". Git không hiểu thế: nó nhận biến đã-được-đặt rồi đi **spawn đúng
+    // chương trình tên rỗng**, và thất bại:
+    //
+    // ```text
+    // error: cannot spawn : No such file or directory
+    // fatal: external diff died, stopping at file.txt
+    // ```
+    //
+    // Hậu quả: **mọi** lệnh diff có sinh nội dung bản vá thoát 128 với stdout rỗng.
+    // Đã đo trên git 2.54.0.windows.1 với `--unified=3` và `--word-diff=porcelain`.
+    // Phase 2 không gặp vì nó chỉ dùng `--name-status`, vốn không gọi tới trình diff
+    // nên không spawn gì — lỗi ngủ yên tới lúc Phase 3 cần bản vá thật.
+    //
+    // Đặt `diff.external=` rỗng trong `PINNED_GIT_CONFIG` có **cùng lỗi** (đã đo).
+    // Cách đúng là `--no-ext-diff`, cờ của chính git cho việc này: nó thắng **cả**
+    // `diff.external` trong cấu hình **và** `GIT_EXTERNAL_DIFF` trong môi trường
+    // (đã đo cả ba tổ hợp). Cờ đó được thêm ở `run()` cho mọi lệnh `diff`.
+    //
+    // Ở đây chỉ cần **xoá** biến của người dùng khỏi môi trường tiến trình con, để
+    // một `GIT_EXTERNAL_DIFF` có sẵn trong shell không rò vào những lệnh không mang
+    // cờ trên.
+    cmd.env_remove("GIT_EXTERNAL_DIFF");
 
     // Trình phân trang chặn tiến trình chờ người dùng bấm phím.
     cmd.env("GIT_PAGER", "cat");
@@ -343,5 +418,186 @@ mod tests {
                 "thiếu {key} trong đầu ra:\n{listing}"
             );
         }
+    }
+    // --- Trình khác biệt ngoài: hồi quy của một lỗi im lặng -----------------
+
+    /// Dựng một repo có hai commit trên một tệp, qua đúng lớp `GitCommand` thật.
+    ///
+    /// Trả `(TempDir, đường dẫn)`. Giữ `TempDir` sống ở người gọi.
+    async fn repo_co_mot_thay_doi(ten: &str, cu: &str, moi: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+
+        for args in [
+            vec!["init", "--initial-branch=main"],
+            vec!["config", "user.email", "t@e.com"],
+            vec!["config", "user.name", "T"],
+        ] {
+            GitCommand::new(p).args(args).run().await.unwrap();
+        }
+
+        std::fs::write(p.join(ten), cu).unwrap();
+        GitCommand::new(p).args(["add", ten]).run().await.unwrap();
+        GitCommand::new(p)
+            .args(["commit", "-m", "one"])
+            .run()
+            .await
+            .unwrap();
+
+        std::fs::write(p.join(ten), moi).unwrap();
+        GitCommand::new(p).args(["add", ten]).run().await.unwrap();
+        GitCommand::new(p)
+            .args(["commit", "-m", "two"])
+            .run()
+            .await
+            .unwrap();
+
+        dir
+    }
+
+    /// **Lỗi thật, tìm thấy ở plan 03-01.** `GIT_EXTERNAL_DIFF=""` làm git đi spawn
+    /// chương trình tên rỗng, nên **mọi** lệnh diff sinh bản vá thoát 128 với stdout
+    /// rỗng:
+    ///
+    /// ```text
+    /// error: cannot spawn : No such file or directory
+    /// fatal: external diff died, stopping at file.txt
+    /// ```
+    ///
+    /// Đây là test lẽ ra phải tồn tại từ Phase 1. Phase 2 không gặp lỗi vì nó chỉ
+    /// dùng `--name-status`, vốn **không** gọi tới trình diff — nên một test chỉ
+    /// kiểm `--name-status` vẫn xanh trong khi cả đường bản vá đã vỡ.
+    #[tokio::test]
+    async fn diff_sinh_ban_va_thuc_su_co_noi_dung() {
+        let dir = repo_co_mot_thay_doi("a.txt", "mot\nhai\n", "mot\nhai da sua\n").await;
+
+        let out = GitCommand::new(dir.path())
+            .args(["diff", "--unified=3", "HEAD~1", "HEAD", "--", "a.txt"])
+            .run()
+            .await
+            .unwrap();
+
+        assert!(
+            out.is_success(),
+            "git diff phải thành công, nhận exit {} stderr {:?}",
+            out.status,
+            out.stderr_lossy()
+        );
+        let patch = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            patch.contains("@@"),
+            "bản vá phải có đầu hunk, nhận được: {patch:?}"
+        );
+        assert!(patch.contains("+hai da sua"), "bản vá phải có dòng thêm");
+    }
+
+    /// `--word-diff=porcelain` là đường mà plan 03-03 dựa vào cho diff mức từ. Nó
+    /// cũng gọi trình diff nên vỡ theo cùng lỗi trên; ghim riêng vì 03-03 sẽ hỏng vì
+    /// một lý do rất khó truy nếu cờ này thoát 128 với stdout rỗng.
+    ///
+    /// Ghim thêm **chính tả**: `--word-diff-porcelain` (gạch ngang, không dấu bằng)
+    /// **không tồn tại** — nó thoát khác 0 và in usage. Ba chỗ trong CONTEXT.md từng
+    /// viết sai tên này.
+    ///
+    /// Ca đo là đúng ca chủ dự án đưa: `==` → `===`.
+    #[tokio::test]
+    async fn word_diff_porcelain_chay_duoc_va_dung_chinh_ta() {
+        let dir = repo_co_mot_thay_doi(
+            "b.js",
+            "if (typeof cellData == \"object\") {\n",
+            "if (typeof cellData === \"object\") {\n",
+        )
+        .await;
+
+        let dung = GitCommand::new(dir.path())
+            .args([
+                "diff",
+                "--word-diff=porcelain",
+                "HEAD~1",
+                "HEAD",
+                "--",
+                "b.js",
+            ])
+            .run()
+            .await
+            .unwrap();
+        assert!(
+            dung.is_success(),
+            "--word-diff=porcelain phải chạy được, nhận exit {} stderr {:?}",
+            dung.status,
+            dung.stderr_lossy()
+        );
+
+        let ra = String::from_utf8_lossy(&dung.stdout);
+        assert!(ra.contains("@@"), "phải có đầu hunk, nhận: {ra:?}");
+        assert!(
+            ra.lines().any(|l| l == "-=="),
+            "mỗi từ chiếm một dòng riêng kèm tiền tố; phải có dòng `-==`. Nhận: {ra:?}"
+        );
+        assert!(
+            ra.lines().any(|l| l == "+==="),
+            "phải có dòng `+===`. Nhận: {ra:?}"
+        );
+
+        let sai = GitCommand::new(dir.path())
+            .args(["diff", "--word-diff-porcelain", "HEAD~1", "HEAD"])
+            .run()
+            .await
+            .unwrap();
+        assert!(
+            !sai.is_success(),
+            "`--word-diff-porcelain` KHÔNG tồn tại. Nếu lệnh này thành công thì git đã \
+             đổi hành vi và plan 03-03 phải đọc lại giả định của nó"
+        );
+    }
+
+    /// Cờ phải đứng **sau** lệnh con, và không được chèn vào lệnh không liên quan.
+    #[test]
+    fn chen_no_ext_diff_dung_vi_tri() {
+        assert_eq!(
+            them_no_ext_diff(vec!["diff".into(), "--unified=3".into()]),
+            vec!["diff", "--no-ext-diff", "--unified=3"]
+        );
+
+        // Sau cặp `-c key=value` dẫn đầu, không phải trước: git không nhận
+        // `--no-ext-diff` đứng trước lệnh con.
+        assert_eq!(
+            them_no_ext_diff(vec![
+                "-c".into(),
+                "core.quotepath=false".into(),
+                "diff".into(),
+                "--name-status".into(),
+            ]),
+            vec![
+                "-c",
+                "core.quotepath=false",
+                "diff",
+                "--no-ext-diff",
+                "--name-status"
+            ]
+        );
+
+        // `show` và `log` cũng in được bản vá.
+        assert!(them_no_ext_diff(vec!["show".into(), "HEAD".into()])
+            .contains(&"--no-ext-diff".to_owned()));
+        assert!(
+            them_no_ext_diff(vec!["log".into(), "-p".into()]).contains(&"--no-ext-diff".to_owned())
+        );
+
+        // Lệnh không liên quan để nguyên — thêm cờ lạ vào `rev-parse` làm nó thất bại.
+        assert_eq!(
+            them_no_ext_diff(vec!["rev-parse".into(), "HEAD".into()]),
+            vec!["rev-parse", "HEAD"]
+        );
+        assert_eq!(
+            them_no_ext_diff(vec!["--version".into()]),
+            vec!["--version"]
+        );
+
+        // Không chèn hai lần.
+        assert_eq!(
+            them_no_ext_diff(vec!["diff".into(), "--no-ext-diff".into()]),
+            vec!["diff", "--no-ext-diff"]
+        );
     }
 }
