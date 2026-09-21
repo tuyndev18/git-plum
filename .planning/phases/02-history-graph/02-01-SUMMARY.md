@@ -45,7 +45,7 @@ metrics:
   duration: "~50 phút"
   completed: "2026-09-21"
   tasks: 3
-  commits: 3
+  commits: 5
   cargo_test: "27 đỗ (23 → 27)"
   npm_test: "57 đỗ (không đổi)"
 ---
@@ -226,6 +226,23 @@ Plan yêu cầu thêm `target/fixtures/`. Nhưng `make-perf-repo.sh` ghi vào
 - **T-02-03** — `make-perf-repo.sh` tách riêng khỏi `make-fixtures.sh`, README ghi rõ dung
   lượng và cảnh báo không chạy trong CI mặc định.
 
+### `[Rule 1 - Bug]` `rm -rf` thất bại một phần nhưng vẫn trả mã 0 (commit `65a32bd`)
+
+**Phát hiện ở:** lần dựng lại fixture từ đầu sau khi đã commit. `rm -rf` in
+*"Device or resource busy"* cho `target/fixtures/octopus` (OneDrive đang đồng bộ thư mục)
+nhưng **vẫn thoát mã 0**. Script chạy tiếp trên thư mục còn sót, và repo `submodule` báo
+**37 commit** kèm *"submodule add thất bại"* thay vì 2 commit thật — một kết quả trông
+như lỗi mã nhưng thực ra là trạng thái thừa.
+
+**Sửa:** `init_repo` kiểm thư mục đã xoá được thật, thử lại một lần sau khi chờ, và dừng
+hẳn kèm thông báo nêu thủ phạm thường gặp (OneDrive, trình diệt virus, cửa sổ Explorer
+đang mở) nếu vẫn còn. Dựng fixture đè lên thư mục xoá dở sinh ra repo có hình dạng **không
+khớp tên của nó** — tệ hơn là không dựng.
+
+**Ghi chú môi trường:** trên máy này OneDrive giữ handle thư mục trong lúc đồng bộ, nên
+lần chạy ngay sau `rm -rf` có thể gặp lỗi tạm thời. Chạy lại là được. Đây là đặc tính của
+máy, không phải của script.
+
 ### `[Rule 1 - Bug]` HIST-03 và HIST-11 giữ nguyên `Pending`, không đánh dấu `Complete`
 
 Frontmatter của plan ghi `requirements: [HIST-03, HIST-11]`, và
@@ -271,3 +288,4 @@ Commit đã tạo (đều có trong `git log`):
 - `734b809` feat(02-01): add nine fixture repos for lane algorithm testing
 - `977fabc` feat(02-01): add 100k-commit perf repo generator with real branch shape
 - `5465a23` feat(02-01): add fixture helper module and lane-testing dev-dependencies
+- `65a32bd` fix(02-01): fail loudly when a fixture directory cannot be removed
