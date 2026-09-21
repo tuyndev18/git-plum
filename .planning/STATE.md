@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-09-21T08:16:18.000Z"
+last_updated: "2026-09-21T09:15:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 11
-  completed_plans: 6
-  percent: 55
+  completed_plans: 7
+  percent: 64
 ---
 
 # Project State: git-plum
@@ -33,9 +33,9 @@ progress:
 | | |
 |---|---|
 | **Phase** | 2 — Lịch sử và đồ thị nhánh |
-| **Plan** | 2 / 7 xong (02-02 — hợp đồng dữ liệu và bộ phân tích `git log`) |
-| **Status** | Wave 2 của Phase 2 xong; wave 3 (thuật toán gán lane) sẵn sàng chạy |
-| **Progress** | Phase 1/8 · Phase 2 plan 2/7 |
+| **Plan** | 3 / 7 xong (02-03 — thuật toán gán lane) |
+| **Status** | Wave 3 của Phase 2 xong; `assign` đo được 57ms trên 100k commit (ngân sách ~240ms) |
+| **Progress** | Phase 1/8 · Phase 2 plan 3/7 |
 
 ```
 [#.......] 1/8 phases
@@ -62,7 +62,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Metric | Value |
 |---|---|
 | Phases completed | 1 / 8 (có nợ) |
-| Plans completed | 6 |
+| Plans completed | 7 |
 | v1 requirements delivered | 7 / 59 đã kiểm chứng · 2 nữa có mã nhưng chưa kiểm thật (PLAT-07, PLAT-09) · PLAT-01 và REL-04 đạt ở mức yếu hơn ROADMAP |
 
 | Plan | Thời lượng | Tasks | Files |
@@ -72,6 +72,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 1 P03 | 14min | 3 tasks | 6 files |
 | Phase 2 P01 | 50min | 3 tasks | 9 files |
 | Phase 2 P02 | 35min | 2 tasks | 8 files |
+| Phase 2 P03 | 65min | 3 tasks | 14 files |
 
 ---
 
@@ -102,6 +103,12 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 - **Phần thừa sau dấu `\x1f` thứ chín nằm lại trong `%b`** (plan 02-02, T-02-05): người tạo commit có thể cố ý chèn `\x1f` vào thông điệp; điều đó không được sinh ra bản ghi giả. Vòng lặp `break` khi đủ chín dấu thay vì tách hết rồi nối lại — cùng kết quả byte, không cấp phát.
 - **`bstr` không dùng trong `parse_log`** (plan 02-02): tách theo hai byte là việc của `memchr`, giải mã lossy là việc của `std`. Crate vẫn giữ trong `Cargo.toml` cho plan 02-04/02-05, nơi `for-each-ref` và `diff --name-status -z` có thể cần thao tác chuỗi byte thật sự.
 - **Ngân sách hiệu năng Core Value, đo thật ở 100k commit** (plan 02-02): `git log` mười trường 693ms / 18,9MB + `parse_log` 63ms = **758ms**. Còn khoảng **240ms** cho gán lane trước khi chạm mốc một giây của tiêu chí 1.
+- **`MAX_VISIBLE_LANES = 20`, chốt bằng lập luận HIỂN THỊ chứ không bằng số đo fixture** (plan 02-03, đóng `<open_questions>` số 2 của CONTEXT.md): `(1440 × 52% × 40% − 8) ÷ 14 = 20,9 → 20`. Chốt từ số lane lớn nhất của repo mẫu `wide` là **vòng tròn** — mọi giá trị ≥ số đo bảo đảm cap không bao giờ chạm, nên `truncated_parents` luôn bằng 0 và cả nhánh vẽ suy giảm ship ra mà chưa chạy lần nào. Ở mức 20 thì `wide` (25 lane) và repo hiệu năng (21 lane) **đều** chạm cap. Phép tính đầy đủ ở `docs/04-phase2-degraded-graph.md`.
+- **Giới hạn hiển thị KHÔNG áp cho lane của hàng — hai hàm cấp lane, hai chữ ký** (plan 02-03): `allocate_row_lane -> u16` (không cap) tách hẳn `allocate_parent_lane -> Option<u16>` (có cap). Gộp làm một hàm trả `Option` là nguyên nhân gốc của lỗi **mất commit**: bước 1 gặp `None` thì `unwrap()` panic, `continue` đánh rơi hàng, gán lane ngoài giới hạn phá assertion. Đo bằng đột biến: gộp lại làm **mất 20 trong 80 hàng** trong khi **16/17 test vẫn xanh**. `rows.len() == commits.len()` là HIST-04 ở tầng dữ liệu và không được phụ thuộc hằng số hiển thị; việc gập lane vượt cap là của frontend (plan 02-05).
+- **Fixture `shallow` KHÔNG kiểm được `terminates` — git ghép biên nông** (plan 02-03, đính chính CONTEXT.md và summary 02-02): đối tượng commit trên đĩa có `parent 7dae333f…`, nhưng `git log --format=%P` trả **rỗng** vì git graft biên bản sao nông. Từ dữ liệu `assign` nhận được, biên nông không phân biệt được với gốc thật, nên `terminates == false` là câu trả lời **đúng** — `assign` không được bịa cha mà git đã che. Phát hiện bản sao nông phải đọc `.git/shallow`, là việc của tầng repository. Ca `terminates` thật trong sản phẩm là **phân trang** (`--max-count`), nơi hàng cuối trang khai báo cha chưa nạp — và đó là ca HIST-01 gặp mỗi lần cuộn.
+- **Ngân sách Core Value đã đo đủ ba khâu** (plan 02-03): `git log` 693ms + `parse_log` 82ms + `assign` **57ms** = **832ms** trên repo thật 100 007 commit, dưới mốc một giây, còn dư ~168ms. `assign` chỉ dùng 24% ngân sách 240ms của nó. **git chiếm 83% đường nóng** — nếu checkpoint #1 trượt thì chỗ phải sửa là bộ nạp (`Channel`/phân trang), không phải thuật toán lane.
+- **Benchmark nhúng nguồn dữ liệu vào tên ca đo** (plan 02-03): `parse_log/repo-that/100000` vs `parse_log/tong-hop/100000`. Không có nhãn đó thì số tổng hợp bị đọc nhầm thành số của checkpoint #1 — và đã suýt xảy ra thật: `make-perf-repo.sh` ghi ra thư mục con `perf-100k/` chứ không biến `fixtures-perf/` thành repo, nên bản đầu của benchmark im lặng rơi về dữ liệu tổng hợp dù repo 100k nằm ngay đó.
+- **Job `bench` riêng, không thêm bước vào job `rust`** (plan 02-03): job `rust` chạy ma trận ba nền tảng, một bước trơn sẽ chạy benchmark ba lần mỗi push cho ba con số không so được với nhau. Không đặt ngưỡng thất bại tự động: runner CI dùng chung tài nguyên và nhiễu tới hàng chục phần trăm, ngưỡng cứng chỉ sinh báo động giả rồi bị bỏ qua — tệ hơn là không có cổng nào.
 - **Hai thao tác có tham số đi ngoài sổ đăng ký PLAT-04** (`onOpen`/`onForget` truyền bằng prop): `Command.run` có chữ ký `() => void | Promise<void>`, không nhận tham số. Mở rộng sổ đăng ký cho lệnh có tham số để dành cho v2 lúc làm bảng lệnh gõ nhanh. `repo.open` và `repo.close` vẫn đi qua sổ đăng ký như cũ.
 - Chi tiết đầy đủ các quyết định kỹ thuật: xem `.planning/PROJECT.md` mục Key Decisions và `.planning/research/SUMMARY.md` mục 3.
 
