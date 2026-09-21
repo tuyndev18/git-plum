@@ -1,0 +1,102 @@
+# Project State: git-plum
+
+**Last updated:** 2026-09-21
+
+---
+
+## Project Reference
+
+**Core Value:** Đọc và hiểu lịch sử của một repository phải tức thì — đồ thị commit mở ra trong dưới một giây và cuộn mượt kể cả trên repo hàng chục nghìn commit.
+
+**Current focus:** Phase 1 — Nền tảng và lớp bọc git
+
+**Mode:** mvp (Vertical MVP) · **Granularity:** standard · **Parallelization:** enabled
+
+---
+
+## Current Position
+
+| | |
+|---|---|
+| **Phase** | 1 — Nền tảng và lớp bọc git |
+| **Plan** | Chưa lập (chạy `/gsd-plan-phase 1`) |
+| **Status** | Roadmap đã xong, chờ lập kế hoạch phase |
+| **Progress** | Phase 0/8 hoàn thành |
+
+```
+[........] 0/8 phases
+```
+
+---
+
+## Performance Metrics
+
+| Metric | Value |
+|---|---|
+| Phases completed | 0 / 8 |
+| Plans completed | 0 |
+| v1 requirements delivered | 0 / 59 |
+
+---
+
+## Accumulated Context
+
+### Quyết định đã chốt
+
+- **Tauri v2 + React + TypeScript + Rust, gọi thẳng `git` CLI.** Không dùng libgit2/gitoxide.
+- **Bốn mục "làm ngay hoặc không bao giờ" nằm trọn trong Phase 1**: PLAT-02 (ghim biến môi trường), PLAT-03 (xếp hàng ghi theo repo), PLAT-04 (sổ lệnh trung tâm), PLAT-05 (trạng thái khoá theo repo id).
+- **Nhóm WORK tách làm hai phase** (4 và 5). Nghiên cứu nâng độ khó staging theo khối lên HIGH; tách ra để vòng lặp commit cơ bản dùng được sớm.
+- **BRANCH-05 nằm cùng phase với merge/rebase** vì dùng chung máy trạng thái đang-dở.
+- **AI (Phase 7) là nhánh lá** — không có gì phụ thuộc vào nó, được phép cắt, và là ứng viên chạy song song với Phase 6.
+- **REL bị xé đôi**: REL-04 (CI ba nền tảng) vào Phase 1; REL-01/02/03 vào Phase 8.
+- **Không cam kết tổng thời gian.** Chuỗi phase là kế hoạch, thời lượng là đầu ra.
+- Chi tiết đầy đủ các quyết định kỹ thuật: xem `.planning/PROJECT.md` mục Key Decisions và `.planning/research/SUMMARY.md` mục 3.
+
+### Việc cần làm
+
+- [ ] **Phase 1, việc đầu tiên**: dựng toolchain Rust. VS Build Tools 2022 (workload Desktop development with C++) **trước**, rồi rustup stable-msvc. Xác minh bằng `cargo build` chạy thành công. Không có bước này thì không kiểm chứng được gì khác.
+- [ ] **Phase 2, chuẩn bị trước khi viết thuật toán lane**: dựng bộ repo mẫu (octopus 4 cha, hai gốc không liên quan, nhánh mồ côi, 20+ lane đồng thời, tên tệp không UTF-8 + thông điệp emoji, bản sao nông).
+- [ ] **Phase 2**: sao chép sẵn một repo 50k–100k commit (Linux kernel hoặc Chromium) để đo hiệu năng.
+- [ ] **Phase 6, trước khi chốt phạm vi**: chạy spike có giới hạn thời gian cho trình giải quyết xung đột trên CodeMirror 6.
+- [ ] **Câu hỏi còn mở, quyết khi tới nơi**: nhiều repo mở theo thẻ (v1 hay v2 — kiến trúc đã sẵn sàng nhờ PLAT-05) · blame ở phase đánh bóng v1 hay v1.x (quyết ở cuối Phase 3, theo lịch thực tế) · giá trị thật của AI (xác thực với người dùng beta trước khi đầu tư quá 3–5 ngày công).
+
+### Vướng mắc
+
+- **Rust chưa được cài trên máy phát triển.** rustup và MSVC Build Tools đều thiếu; WebView2 đã có sẵn. Đây là vướng mắc duy nhất đang hoạt động và là việc đầu tiên của Phase 1.
+
+### Cổng dogfood đang chờ
+
+| Phase | Cổng |
+|---|---|
+| 3 | Bản chỉ-đọc lịch sử+diff được tác giả dùng hằng ngày trên repo thật, gồm cả một repo bên thứ ba lớn và lộn xộn, **trước khi** bắt đầu việc thư mục làm việc |
+| 4 | Một commit thật vào repo thật, chỉ bằng git-plum |
+| 6 | Một luồng nhánh thật đầu-cuối chỉ bằng git-plum: tạo nhánh, commit, push, giải quyết một xung đột merge thật, hợp nhất xong |
+
+### Validation checkpoint chưa giải quyết
+
+| # | Phase | Câu hỏi |
+|---|---|---|
+| 7 | 1 | Parser có sống sót với locale hệ thống không phải tiếng Anh không? |
+| 1 | 2 | Đồ thị có mở dưới 1s và cuộn 60fps trên repo 50k–100k commit thật không? |
+| 2 | 2 | Vẽ đồ thị bằng canvas hay lớp phủ SVG ở mức 100k dòng? (giữ sau interface) |
+| 4 | 2 | JSON có chiếm phần lớn profile IPC cho dữ liệu lane không? (ship JSON trước rồi đo) |
+| 3 | 3 | `@codemirror/merge` tự tính diff từ hai tài liệu đầy đủ — có đủ nhanh với tệp lớn không? |
+| 5 | 6 | Công sức làm trình giải quyết xung đột trên stack CodeMirror 6 — con số 4 giờ của SourceGit không chuyển giao được |
+| 6 | 7 | Đường dẫn import của `keyring` v4 (API đã tái cấu trúc mạnh so với v3) |
+
+---
+
+## Session Continuity
+
+**Việc tiếp theo:** `/gsd-plan-phase 1`
+
+**Nếu mất ngữ cảnh, đọc theo thứ tự:**
+1. `.planning/ROADMAP.md` — cấu trúc 8 phase, tiêu chí thành công, ràng buộc từng phase
+2. `.planning/REQUIREMENTS.md` — 59 requirement v1 và bảng truy vết
+3. `.planning/PROJECT.md` — Core Value, ràng buộc, bảng Key Decisions (một số quyết định đã bị đảo ngược sau nghiên cứu)
+4. `.planning/research/SUMMARY.md` — mục 3 (phiên bản đã chốt), mục 5 (ràng buộc định hình phase), mục 6 (validation checkpoint)
+
+**Lưu ý:** Tài liệu dự án viết bằng tiếng Việt; mã định danh requirement, tên crate/package và tên lệnh git giữ nguyên dạng gốc.
+
+---
+*State initialized: 2026-09-21 after roadmap creation*

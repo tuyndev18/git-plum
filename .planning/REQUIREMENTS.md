@@ -182,13 +182,89 @@ Phase nào phủ requirement nào. Bảng này do bước lập lộ trình đi�
 
 | Requirement | Phase | Status |
 |---|---|---|
-| (chưa lập lộ trình) | — | Pending |
+| PLAT-01 | Phase 1 | Pending |
+| PLAT-02 | Phase 1 | Pending |
+| PLAT-03 | Phase 1 | Pending |
+| PLAT-04 | Phase 1 | Pending |
+| PLAT-05 | Phase 1 | Pending |
+| PLAT-06 | Phase 1 | Pending |
+| PLAT-07 | Phase 1 | Pending |
+| PLAT-08 | Phase 1 | Pending |
+| PLAT-09 | Phase 1 | Pending |
+| PLAT-10 | Phase 1 | Pending |
+| REL-04 | Phase 1 | Pending |
+| HIST-01 | Phase 2 | Pending |
+| HIST-02 | Phase 2 | Pending |
+| HIST-03 | Phase 2 | Pending |
+| HIST-04 | Phase 2 | Pending |
+| HIST-05 | Phase 2 | Pending |
+| HIST-06 | Phase 2 | Pending |
+| HIST-07 | Phase 2 | Pending |
+| HIST-08 | Phase 2 | Pending |
+| HIST-09 | Phase 2 | Pending |
+| HIST-10 | Phase 2 | Pending |
+| HIST-11 | Phase 2 | Pending |
+| DIFF-01 | Phase 3 | Pending |
+| DIFF-02 | Phase 3 | Pending |
+| DIFF-03 | Phase 3 | Pending |
+| DIFF-04 | Phase 3 | Pending |
+| DIFF-05 | Phase 3 | Pending |
+| DIFF-06 | Phase 3 | Pending |
+| WORK-01 | Phase 4 | Pending |
+| WORK-02 | Phase 4 | Pending |
+| WORK-08 | Phase 4 | Pending |
+| WORK-09 | Phase 4 | Pending |
+| WORK-10 | Phase 4 | Pending |
+| WORK-03 | Phase 5 | Pending |
+| WORK-04 | Phase 5 | Pending |
+| WORK-05 | Phase 5 | Pending |
+| WORK-06 | Phase 5 | Pending |
+| WORK-07 | Phase 5 | Pending |
+| BRANCH-01 | Phase 6 | Pending |
+| BRANCH-02 | Phase 6 | Pending |
+| BRANCH-03 | Phase 6 | Pending |
+| BRANCH-04 | Phase 6 | Pending |
+| BRANCH-05 | Phase 6 | Pending |
+| BRANCH-06 | Phase 6 | Pending |
+| BRANCH-07 | Phase 6 | Pending |
+| BRANCH-08 | Phase 6 | Pending |
+| BRANCH-09 | Phase 6 | Pending |
+| BRANCH-10 | Phase 6 | Pending |
+| BRANCH-11 | Phase 6 | Pending |
+| BRANCH-12 | Phase 6 | Pending |
+| AI-01 | Phase 7 | Pending |
+| AI-02 | Phase 7 | Pending |
+| AI-03 | Phase 7 | Pending |
+| AI-04 | Phase 7 | Pending |
+| AI-05 | Phase 7 | Pending |
+| AI-06 | Phase 7 | Pending |
+| REL-01 | Phase 8 | Pending |
+| REL-02 | Phase 8 | Pending |
+| REL-03 | Phase 8 | Pending |
 
 **Coverage:**
 - v1 requirements: 59 tổng cộng
-- Mapped to phases: 0
-- Unmapped: 59 ⚠️
+- Mapped to phases: 59 ✓
+- Unmapped: 0
+
+**Phân bổ theo phase:**
+
+| Phase | Tên | Số requirement |
+|---|---|---|
+| 1 | Nền tảng và lớp bọc git | 11 |
+| 2 | Lịch sử và đồ thị nhánh | 11 |
+| 3 | Xem khác biệt | 6 |
+| 4 | Vòng lặp commit theo tệp | 5 |
+| 5 | Staging theo khối và an toàn khi huỷ | 5 |
+| 6 | Nhánh, remote và xung đột | 12 |
+| 7 | Hỗ trợ AI soạn thông điệp | 6 |
+| 8 | Phát hành | 3 |
+
+Lưu ý về hai chỗ nhóm requirement không trùng ranh giới phase:
+
+- **REL-04 (CI ba nền tảng) nằm ở Phase 1**, không ở Phase 8. CI dựng sớm bắt lỗi Linux WebKitGTK và macOS lúc còn rẻ để sửa. Ký mã và tự cập nhật thì thuộc phase cuối.
+- **Nhóm WORK trải trên Phase 4 và Phase 5.** Phase 4 giao vòng lặp commit theo tệp (dùng được ngay). Phase 5 giao staging theo khối — phần được nghiên cứu xếp ở mức HIGH và là rủi ro tiến độ lớn nhất của dự án.
 
 ---
 *Requirements defined: 2026-09-21*
-*Last updated: 2026-09-21 after research-informed scope revision*
+*Last updated: 2026-09-21 — bảng truy vết điền sau khi lập lộ trình (8 phase, phủ 59/59)*
