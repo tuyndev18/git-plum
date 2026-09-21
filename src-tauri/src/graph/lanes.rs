@@ -769,14 +769,20 @@ mod tests {
             so_cha,
             "sổ sách phải cân kể cả khi cắt"
         );
+        // Cạnh **rẽ nhánh** không bao giờ được cấp một lane vượt giới hạn. Khẳng định
+        // hẹp đúng chỗ: cạnh *giữ lane* của một hàng vốn đã vượt giới hạn thì được
+        // phép vượt theo — xem ghi chú dài ở assertion (3) của
+        // `tests/graph_fixtures.rs`, nơi bản khẳng định rộng hơn đã đỏ trên `wide`.
         for (i, r) in rows.iter().enumerate() {
-            for e in r.passthrough.iter().chain(r.out_edges.iter()) {
-                assert!(
-                    e.to_lane < MAX_VISIBLE_LANES,
-                    "hàng {i}: cạnh tới lane {} vượt giới hạn hiển thị {}",
-                    e.to_lane,
-                    MAX_VISIBLE_LANES
-                );
+            for e in &r.out_edges {
+                if e.to_lane != r.lane {
+                    assert!(
+                        e.to_lane < MAX_VISIBLE_LANES,
+                        "hàng {i}: cạnh rẽ nhánh tới lane {} vượt giới hạn hiển thị {}",
+                        e.to_lane,
+                        MAX_VISIBLE_LANES
+                    );
+                }
             }
         }
     }

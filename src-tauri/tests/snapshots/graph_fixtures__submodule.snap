@@ -1,0 +1,6 @@
+---
+source: tests/graph_fixtures.rs
+expression: chieu_gon(& rows)
+---
+r0 lane=0 color=0 pass=[] out=[0->0] trunc=0 term=false
+r1 lane=0 color=0 pass=[] out=[] trunc=0 term=false
