@@ -23,24 +23,38 @@ pub const LANE_COLORS: u8 = 7;
 
 /// Số lane tối đa được vẽ trước khi chuyển sang **cách vẽ suy giảm có chủ ý**.
 ///
-/// # GIÁ TRỊ TẠM — plan 02-03 chốt lại con số này
+/// # Đã chốt ở plan 02-03 — **từ bề rộng hiển thị**, không từ số đo fixture
 ///
-/// Đây là một trong hai câu hỏi còn ngỏ của `CONTEXT.md` (`<open_questions>`), nên
-/// không được lặng lẽ đoán một số rồi coi như xong.
+/// Phép tính, ghi đầy đủ ở `docs/04-phase2-degraded-graph.md`:
 ///
-/// **Cách chốt đúng là gì:** con số này phải suy ra từ *bề rộng hiển thị thật* — bao
-/// nhiêu lane lọt vào cột đồ thị ở độ rộng mặc định mà vẫn bấm được và nhìn được. Đó là
-/// một đối số của hàm, không phải một hằng số vũ trụ, nên 02-03 nhiều khả năng biến nó
-/// thành tham số truyền vào.
+/// ```text
+///   cửa sổ mặc định                    1440 px   (tauri.conf.json "width")
+///   × vùng giữa                        × 52%     (AppLayout Panel id="main")
+///   = vùng giữa                        ≈ 749 px
+///   × ngân sách cột đồ thị             × 40%     (60% còn lại cho thông điệp commit)
+///   = cột đồ thị                       ≈ 300 px
+///   − lề trái GRAPH_PADDING_LEFT       −   8 px
+///   ÷ LANE_WIDTH                       ÷  14 px  (chốt ở plan 02-05)
+///   = 20,9                             → 20 lane
+/// ```
 ///
-/// **Cách chốt SAI là gì:** lấy số lane lớn nhất đo được trên repo mẫu `wide` (25 lane
-/// đồng thời) rồi đặt giới hạn cao hơn nó. Lập luận đó vòng tròn — nó bảo đảm đúng một
-/// điều là fixture không bao giờ kích hoạt đường vẽ suy giảm, tức là đường đó không bao
-/// giờ được kiểm. Repo thật rộng hơn `wide` rất nhiều.
+/// **Cách chốt SAI mà đã tránh:** lấy số lane lớn nhất đo được trên repo mẫu `wide`
+/// (25 lane đồng thời) rồi đặt giới hạn cao hơn nó. Lập luận đó vòng tròn — nó bảo đảm
+/// đúng một điều là fixture không bao giờ kích hoạt đường vẽ suy giảm, tức là đường đó
+/// không bao giờ được kiểm. Số đo của `wide` (25) và của repo hiệu năng (21) dùng để
+/// **kiểm chứng** rằng bộ dữ liệu thật đủ rộng để chạm giới hạn 20 này, không dùng để
+/// **chọn** nó.
 ///
-/// Giá trị 32 ở đây chỉ để mã biên dịch và để đường suy giảm có chỗ neo. Khi vượt giới
-/// hạn, cha không vẽ được đếm vào [`GraphRow::truncated_parents`].
-pub const MAX_VISIBLE_LANES: u16 = 32;
+/// # Giới hạn này áp cho CÁI GÌ — đọc kỹ, đây là chỗ dễ sai nhất của cả phase
+///
+/// Áp cho **lane của cha thêm** (bước 3 của thuật toán): merge có nhiều cha hơn số lane
+/// trống thì cha không vẽ được đếm vào [`GraphRow::truncated_parents`].
+///
+/// **KHÔNG** áp cho **lane của chính hàng** (bước 1). Mọi commit trong đầu vào đều nhận
+/// một lane thật, dù lane đó vượt con số này. Bất biến `rows.len() == commits.len()` là
+/// HIST-04 ở tầng dữ liệu và không được phụ thuộc vào một hằng số *hiển thị*. Việc gập
+/// lane vượt giới hạn vào cột cuối là của frontend (plan 02-05).
+pub const MAX_VISIBLE_LANES: u16 = 20;
 
 /// Một đường nối giữa hai lane trên một dòng.
 ///
@@ -188,15 +202,33 @@ mod tests {
         }
     }
 
-    /// Giới hạn lane phải lớn hơn số lane đo được trên repo mẫu `wide` (25 đồng thời),
-    /// nếu không mọi fixture đều đi vào đường vẽ suy giảm và ca thường không được kiểm.
-    /// Đây là cận **dưới** mềm, không phải cách chốt giá trị — xem doc comment của hằng.
+    /// Giới hạn lane phải **nhỏ hơn** số lane đo được trên repo mẫu `wide` (25 đồng
+    /// thời) và của repo hiệu năng (21) — nếu không thì không bộ dữ liệu nào ta có
+    /// chạm tới đường vẽ suy giảm, `truncated_parents` luôn bằng 0, và cả nhánh mã đó
+    /// ship ra mà chưa từng chạy trên dữ liệu thật.
+    ///
+    /// Đây **không** phải cách chốt giá trị — giá trị chốt từ bề rộng hiển thị, xem
+    /// doc comment của hằng. Test này chỉ kiểm rằng con số đã chốt tình cờ nằm đúng
+    /// phía để fixture kiểm được nhánh suy giảm.
+    #[test]
+    fn gioi_han_lane_du_nho_de_fixture_cham_toi() {
+        const {
+            assert!(
+                MAX_VISIBLE_LANES < 21,
+                "giới hạn phải nhỏ hơn 21 lane của repo hiệu năng, \
+                 nếu không nhánh vẽ suy giảm không bao giờ được kiểm"
+            )
+        };
+    }
+
+    /// Nhưng cũng không được nhỏ tới mức ca thường (merge octopus bốn cha, vài nhánh
+    /// song song) rơi vào nhánh suy giảm. Cận dưới mềm.
     #[test]
     fn gioi_han_lane_du_lon_cho_ca_thuong() {
         const {
             assert!(
-                MAX_VISIBLE_LANES > 25,
-                "giới hạn phải vượt 25 lane đồng thời của repo mẫu `wide`"
+                MAX_VISIBLE_LANES >= 8,
+                "giới hạn quá nhỏ thì merge octopus thường ngày cũng bị cắt"
             )
         };
     }
