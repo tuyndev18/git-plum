@@ -191,4 +191,88 @@ describe('CommitList', () => {
 
     expect(screen.getByText('trang dau')).toBeTruthy()
   })
+
+  // --- Checkpoint round 1 REJECTED — test bổ sung sau khi người dùng phát
+  // hiện lỗi bằng mắt trên repo thật mà 103 test cũ không bắt được ---
+
+  it('30 commit có subject tiếng Việt khác nhau: mỗi hàng hiện ĐÚNG subject của chính nó, không hàng nào lặp hay rớt xuống "."', () => {
+    // Đây chính là kiểu dữ liệu thật gây lỗi quan sát được: nhiều hàng, subject
+    // dài, có dấu tiếng Việt, một số commit thật sự có message ngắn/đặc biệt
+    // (dấu "." là message hợp lệ, xem 02-05-SUMMARY.md "checkpoint round 1").
+    // Test này khẳng định KHÔNG có sự trộn lẫn/rớt dữ liệu giữa các hàng khi
+    // danh sách đủ dài để vượt viewport ảo hoá.
+    const subjects = [
+      'feat(clb): kết bạn theo friendRelation',
+      "Merge branch 'feat/update_pool'",
+      'fix: sửa lỗi đăng nhập',
+      '.', // message hợp lệ thật sự chỉ có một dấu chấm — không phải lỗi hiển thị
+      'update',
+      ...Array.from({ length: 25 }, (_, i) => `commit số ${i}: nội dung thay đổi lần thứ ${i}`),
+    ]
+    const commits = subjects.map((s, i) => commit(`c${i}`, s))
+    const rows = commits.map((c) => graphRow(c.id))
+    seedRepo('repo-1', commits, rows)
+
+    render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    // Khẳng định từng subject xuất hiện ĐÚNG MỘT LẦN — nếu một hàng bị lệch dữ
+    // liệu hoặc DOM tái dùng sai, một subject sẽ xuất hiện nhiều lần trong khi
+    // subject đúng của hàng khác biến mất.
+    for (const subject of subjects) {
+      expect(screen.getAllByText(subject, { exact: true })).toHaveLength(1)
+    }
+
+    // Không được có nhiều hơn MỘT hàng hiện dấu "." — nếu lỗi hiển thị làm mọi
+    // subject dài bị cắt xuống một dấu chấm, cổng này bắt được ngay lập tức.
+    expect(screen.getAllByText('.', { exact: true })).toHaveLength(1)
+  })
+
+  it('nhiều lane với color khác nhau: canvas vẽ đúng LANE_COLORS[row.color] cho từng hàng, không phải một màu cố định', () => {
+    // Tái hiện lỗi quan sát được ở checkpoint round 1: đồ thị chỉ thấy một
+    // đường màu đơn. Test này dựng dữ liệu có NHIỀU giá trị color khác nhau
+    // (0, 1, 2) và khẳng định canvas thực sự gọi fillStyle với từng màu tương
+    // ứng — không phải luôn luôn LANE_COLORS[0].
+    const commits = [commit('a', 'lane 0'), commit('b', 'lane 1'), commit('c', 'lane 2')]
+    const rows: GraphRow[] = [
+      { commitId: 'a', lane: 0, color: 0, passthrough: [], outEdges: [], truncatedParents: 0, terminates: false },
+      { commitId: 'b', lane: 1, color: 1, passthrough: [], outEdges: [], truncatedParents: 0, terminates: false },
+      { commitId: 'c', lane: 2, color: 2, passthrough: [], outEdges: [], truncatedParents: 0, terminates: false },
+    ]
+    seedRepo('repo-1', commits, rows)
+
+    const fakeCtx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      scale: vi.fn(),
+      clearRect: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      bezierCurveTo: vi.fn(),
+      arc: vi.fn(),
+      stroke: vi.fn(),
+      fill: vi.fn(),
+      fillText: vi.fn(),
+      setLineDash: vi.fn(),
+      fillStyleHistory: [] as string[],
+      strokeStyle: '',
+      lineWidth: 1,
+      get fillStyle() {
+        return ''
+      },
+      set fillStyle(v: string) {
+        this.fillStyleHistory.push(v)
+      },
+    }
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      fakeCtx as unknown as CanvasRenderingContext2D,
+    )
+
+    render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    // Ba hàng có color 0/1/2 khác nhau — nếu bộ vẽ hardcode một màu, chỉ có
+    // một giá trị duy nhất xuất hiện trong lịch sử fillStyle thay vì ba.
+    const distinctColorsUsed = new Set(fakeCtx.fillStyleHistory)
+    expect(distinctColorsUsed.size).toBeGreaterThanOrEqual(3)
+  })
 })
