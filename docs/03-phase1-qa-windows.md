@@ -413,4 +413,126 @@ Khi nào có remote thì chạy CI là xong ngay — tệp cấu hình đã sẵ
 
 ---
 
+## Phụ lục A — Kết quả checkpoint #7 (locale)
+
+**Chạy:** 2026-09-21 · **Máy:** Windows 11 Pro 10.0.22621
+
+### A.1 Locale thật của máy — chép nguyên đầu ra
+
+**Phát hiện quan trọng: máy này KHÔNG phải Windows tiếng Việt.** Kế hoạch 01-04 và
+`CONTEXT.md` (G6) đều giả định "máy phát triển là Windows tiếng Việt, nên kiểm được ngay".
+Giả định đó **sai**. Đo thật:
+
+```
+Get-Culture Name              = en-US
+Get-Culture DisplayName       = English (United States)
+CurrentUICulture              = en-US
+CurrentUICulture DisplayName  = English (United States)
+chcp                          = Active code page: 437
+```
+
+Kiểm chéo bằng ba nguồn độc lập khác, tất cả đồng thuận:
+
+```
+Get-WinUserLanguageList       = en-US          (chỉ một ngôn ngữ duy nhất)
+Get-WinSystemLocale           = en-US
+Get-WinHomeLocation           = United States
+HKCU\Control Panel\International → LocaleName = en-US, sLanguage = ENU
+systeminfo → System Locale    = en-us;English (United States)
+systeminfo → Input Locale     = en-us;English (United States)
+```
+
+Không có gói ngôn ngữ hiển thị tiếng Việt nào được cài. `vi` và `vi-VN` tồn tại như
+culture của .NET nhưng đó chỉ là dữ liệu định dạng, không phải ngôn ngữ giao diện của hệ
+điều hành.
+
+### A.2 Kết quả bộ kiểm thử dưới locale của máy
+
+| Lệnh | Kết quả | Số liệu |
+|---|---|---|
+| `cargo test` (trong `src-tauri`) | ✅ đỗ | **23 passed**, 0 failed, 3 suite, 0.15s |
+| `cargo clippy --all-targets -- -D warnings` | ✅ sạch | không có cảnh báo |
+| `cargo fmt --all --check` | ✅ sạch | exit 0 |
+| `npm run typecheck` | ✅ sạch | exit 0 |
+| `npm test` | ✅ đỗ | **57 passed**, 5 tệp, 1.27s |
+| `npm run build` | ✅ đỗ | `index-BMeG-kyD.js` **273.83 kB** (gzip 85.96 kB), CSS 5.69 kB (gzip 1.74 kB) |
+
+Phiên bản công cụ: `cargo 1.98.1`, `rustc 1.98.1`, `node v22.16.0`, `npm 10.9.2`,
+`git 2.54.0.windows.1`, `vitest 5.0.1`, `vite 8.3.0`.
+
+### A.3 Kiểm chéo bằng cách ép ngược locale — phần chứng minh thật
+
+Chỉ chạy dưới một locale thì **không phân biệt được** "lớp bọc ghim locale đúng" với
+"máy này tình cờ hợp". Nên chạy `cargo test` hai lần, lần thứ hai ép biến môi trường của
+**tiến trình cha** sang tiếng Việt:
+
+```
+# Lần 1 — bình thường
+cargo test
+→ test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+# Lần 2 — ép locale ở tiến trình cha
+export LC_ALL=vi_VN.UTF-8 LANG=vi_VN.UTF-8 LC_MESSAGES=vi_VN.UTF-8
+cargo test
+→ test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+```
+
+**Kết quả: 23 = 23, giống hệt.** Đây là bằng chứng `apply_env_hardening` ghi đè được biến
+môi trường thừa hưởng. Nếu lớp bọc không ghim `LC_ALL=C`, biến của tiến trình cha sẽ lọt
+xuống git con và test đọc đầu ra git sẽ lệch.
+
+Xác nhận lớp ghim có thật trong mã — `src-tauri/src/git/exec.rs`:
+
+```rust
+cmd.env("LC_ALL", "C");        // dòng 191
+cmd.env("LANG", "C");          // dòng 192
+cmd.env("LC_MESSAGES", "C");   // dòng 193
+```
+
+### A.4 Giới hạn của phép kiểm này — đọc kỹ trước khi kết luận
+
+Hai giới hạn thật, ghi lại để không ai đọc mục A.3 rồi tưởng checkpoint #7 đã đóng trọn.
+
+**Giới hạn 1 — máy là `en-US`, không phải tiếng Việt.** ROADMAP đòi "chạy bộ kiểm thử và
+QA thủ công với locale **hệ thống** không phải tiếng Anh". Phép kiểm ở A.3 ép locale qua
+**biến môi trường POSIX** (`LC_ALL`/`LANG`/`LC_MESSAGES`), không đổi locale **hệ thống**
+của Windows. Đây là hai thứ khác nhau: cái sau đòi cài gói ngôn ngữ hiển thị và đăng nhập
+lại.
+
+**Giới hạn 2 — bản Git for Windows này không có bản dịch nào.** Đo thật:
+
+```
+Số tệp *.mo trong C:\Program Files\Git\mingw64 = 0
+```
+
+Và kiểm bằng hành vi, trong một thư mục không phải repository:
+
+```
+git rev-parse --show-toplevel
+→ fatal: not a git repository (or any of the parent directories): .git
+
+LC_ALL=vi_VN.UTF-8 LANG=vi_VN.UTF-8 LC_MESSAGES=vi_VN.UTF-8 git rev-parse --show-toplevel
+→ fatal: not a git repository (or any of the parent directories): .git
+```
+
+Đầu ra **y nguyên tiếng Anh** kể cả khi ép locale. Nghĩa là trên máy này git **không thể**
+dịch đầu ra dù có muốn — không có catalog để dịch.
+
+**Hệ quả cho cách đọc kết quả.** Phép kiểm A.3 chứng minh đúng một điều, và đó là điều
+đáng giá: lớp bọc **ghim được** biến môi trường, tiếng Việt của tiến trình cha **không**
+lọt xuống tiến trình con. Nhưng nó **chưa** chứng minh được bộ phân tích sống sót khi git
+thật sự nói một ngôn ngữ khác, bởi vì trên máy này không có cách nào làm git nói tiếng
+khác. Rủi ro còn lại: một người dùng có Git bản dịch đầy đủ cộng locale hệ thống không
+phải tiếng Anh vẫn có thể gặp lỗi mà phép kiểm này không bắt được — nhưng chính lớp ghim
+`LC_ALL=C` đã chứng minh ở A.3 là thứ bảo vệ họ.
+
+**Kết luận cho checkpoint #7: ĐẠT MỘT PHẦN.**
+
+- ✅ Lớp ghim môi trường **có** và **chứng minh được** hoạt động (A.3) — đây là phần
+  quan trọng nhất, và chi phí sửa nó thấp vì nằm ở một hàm trung tâm.
+- ⚠️ Chưa kiểm được trên locale **hệ thống** không phải tiếng Anh với một bản git **có
+  bản dịch**. Cần một máy hoặc máy ảo có gói ngôn ngữ khác và Git for Windows bản đầy đủ.
+
+---
+
 *Phase: 01-platform-git-layer · Plan 01-04*
