@@ -32,14 +32,28 @@ progress:
 
 | | |
 |---|---|
-| **Phase** | 1 — Nền tảng và lớp bọc git |
-| **Plan** | 3/4 hoàn thành (01-01, 01-02, 01-03) |
-| **Status** | Đang thực thi Phase 1 |
-| **Progress** | Phase 0/8 hoàn thành · Plan 3/4 của Phase 1 |
+| **Phase** | 2 — Lịch sử và đồ thị nhánh |
+| **Plan** | Chưa lập (chạy `/gsd-plan-phase 2`) |
+| **Status** | Phase 1 đóng với nợ QA thủ công — xem bên dưới |
+| **Progress** | Phase 1/8 · Phase 1 đóng ở mức "đạt phần tự động hoá được" |
 
 ```
-[........] 0/8 phases
+[#.......] 1/8 phases
 ```
+
+**Phase 1 đóng ở trạng thái nào.** Bốn plan xong, mọi kiểm thử tự động xanh (23 test Rust,
+57 test frontend), bản release dựng được. Nhưng **ba tiêu chí thành công chưa kiểm chứng**
+vì chủ dự án hoãn phần QA thủ công để đi tiếp Phase 2:
+
+| Tiêu chí | Chưa biết gì |
+|---|---|
+| 1 — danh sách repo gần đây | `tauri-plugin-store` bị giả lập trong mọi test. Chưa rõ `recent-repos.json` có ghi đúng thư mục dữ liệu ứng dụng, và `autoSave` có kịp ghi trước khi tiến trình thoát |
+| 2 — bố cục còn nguyên sau khởi động lại | Chưa ai chạy thử. Và đã biết **không trọn** — xem G8 |
+| 5 — không nháy cửa sổ console | Chỉ hiện ở bản release, đọc mã không thay được việc chạy thử |
+
+**Cách trả nợ này:** bấm đúp `src-tauri/target/release/git-plum.exe` (đã dựng sẵn) rồi chạy
+sáu kịch bản trong `docs/03-phase1-qa-windows.md`. Không phụ thuộc tiến độ Phase 2, làm lúc
+nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-git-layer/VERIFICATION.md`.
 
 ---
 
@@ -47,9 +61,9 @@ progress:
 
 | Metric | Value |
 |---|---|
-| Phases completed | 0 / 8 |
-| Plans completed | 3 |
-| v1 requirements delivered | 4 / 59 |
+| Phases completed | 1 / 8 (có nợ) |
+| Plans completed | 4 |
+| v1 requirements delivered | 7 / 59 đã kiểm chứng · 2 nữa có mã nhưng chưa kiểm thật (PLAT-07, PLAT-09) · PLAT-01 và REL-04 đạt ở mức yếu hơn ROADMAP |
 
 | Plan | Thời lượng | Tasks | Files |
 |---|---|---|---|
@@ -151,7 +165,11 @@ có catalog dịch. Đáng làm trước khi phát hành công khai (Phase 8), k
 
 ## Session Continuity
 
-**Việc tiếp theo:** thực thi plan còn lại của Phase 1 (01-04). Đã xong: 01-01 (PLAT-02), 01-02 (hạ tầng test giao diện), 01-03 (PLAT-07 — danh sách repository gần đây).
+**Việc tiếp theo:** `/gsd-plan-phase 2` — lịch sử và đồ thị nhánh.
+
+Phase 1 đã đóng, 4/4 plan: 01-01 (PLAT-02 ghim cấu hình git), 01-02 (hạ tầng test giao diện),
+01-03 (PLAT-07 danh sách repository gần đây), 01-04 (kịch bản QA + checkpoint locale).
+Còn nợ phần QA thủ công — chi tiết ở mục Current Position bên trên.
 
 **Còn lại của Phase 1 sau 01-03:** G3 (PLAT-09 chưa kiểm chứng kích thước vùng qua các lần chạy), G6 (locale không phải tiếng Anh), G7 (cửa sổ console ở bản release), và việc kiểm chứng thật PLAT-07 — mở lại ứng dụng và xác nhận danh sách gần đây sống sót. Ba thứ cuối chỉ kiểm được bằng cách chạy bản dựng thật, không kiểm được bằng test tự động.
 

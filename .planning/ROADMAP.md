@@ -60,14 +60,14 @@ Thứ tự phase bám theo chuỗi phụ thuộc thực tế của công việc,
   - REL-04: khung CI ba nền tảng (`windows-latest`, `ubuntu-22.04`, `macos-latest`) dựng được ngay từ phase này. Dùng `libwebkit2gtk-4.1-dev`, không phải 4.0. Không dùng `ubuntu-latest`.
   - Không có parser, không có domain type nào ngoài repo handle tối thiểu. Việc của phase này là chứng minh cầu IPC và lớp sinh tiến trình chạy đúng trên cả ba nền tảng trước khi có bất kỳ logic git nào đặt lên trên.
 **Validation checkpoint**: Chạy bộ kiểm thử và QA thủ công với locale hệ thống không phải tiếng Anh (checkpoint #7). Chi phí sửa thấp vì nằm ở một hàm trung tâm — nhưng phải kiểm, không được giả định.
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 Phần lớn Phase 1 đã có mã chạy được từ commit `1002fa5`. Bốn plan dưới đây đóng sáu khoảng cách còn lại (G1, G2, G3, G4, G6, G7) và kiểm chứng năm tiêu chí thành công. G5 (macOS/Linux) nằm ngoài phạm vi theo quyết định 2026-09-21 — ưu tiên Windows trước, chưa tạo remote.
 
 Plans:
 - [x] 01-01-PLAN.md — G1: ghim đủ cấu hình git trong lớp sinh tiến trình (PLAT-02), test đọc ngược từ tiến trình con
 - [x] 01-02-PLAN.md — G4: dựng hạ tầng vitest và test hai ràng buộc kiến trúc PLAT-04, PLAT-05
-- [ ] 01-03-PLAN.md — G2: danh sách repository gần đây qua tauri-plugin-store (PLAT-07)
+- [x] 01-03-PLAN.md — G2: danh sách repository gần đây qua tauri-plugin-store (PLAT-07)
 - [ ] 01-04-PLAN.md — G3 + G6 + G7: QA thủ công trên bản release Windows, checkpoint #7 locale, VERIFICATION.md
 
 **UI hint**: yes
@@ -227,7 +227,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Nền tảng và lớp bọc git | 2/4 | In Progress|  |
+| 1. Nền tảng và lớp bọc git | 3/4 | In Progress|  |
 | 2. Lịch sử và đồ thị nhánh | 0/? | Not started | - |
 | 3. Xem khác biệt | 0/? | Not started | - |
 | 4. Vòng lặp commit theo tệp | 0/? | Not started | - |

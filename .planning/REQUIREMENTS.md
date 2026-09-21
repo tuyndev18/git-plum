@@ -22,19 +22,19 @@ Lớp nền mà mọi thứ khác dựng lên. Bốn mục **PLAT-02, PLAT-03, P
 - [x] **PLAT-02**: Mọi tiến trình git do ứng dụng sinh ra đều đi qua một lớp bọc duy nhất có
       ghim sẵn `LC_ALL=C`, `LANG=C`, `GIT_TERMINAL_PROMPT=0`, `GIT_ASKPASS` rỗng, stdin đóng,
       và cờ `CREATE_NO_WINDOW` trên Windows
-- [ ] **PLAT-03**: Hai thao tác ghi vào cùng một repository không bao giờ chạy chồng nhau —
+- [x] **PLAT-03**: Hai thao tác ghi vào cùng một repository không bao giờ chạy chồng nhau —
       mọi lệnh làm thay đổi repo được xếp hàng tuần tự theo từng repository
 - [x] **PLAT-04**: Mọi thao tác người dùng gọi được đều đăng ký trong một sổ lệnh trung tâm,
       không gắn trực tiếp vào chỗ xử lý sự kiện bấm nút
 - [x] **PLAT-05**: Trạng thái trong ứng dụng được lưu theo khoá định danh repository, cho phép
       thêm nhiều repository mở cùng lúc về sau mà không phải viết lại
-- [ ] **PLAT-06**: Người dùng mở được một repository bằng hộp thoại chọn thư mục
+- [x] **PLAT-06**: Người dùng mở được một repository bằng hộp thoại chọn thư mục
 - [x] **PLAT-07**: Người dùng mở lại được repository đã dùng gần đây từ một danh sách
-- [ ] **PLAT-08**: Người dùng nhìn thấy đúng những lệnh git mà ứng dụng đã chạy, kèm mã thoát
+- [x] **PLAT-08**: Người dùng nhìn thấy đúng những lệnh git mà ứng dụng đã chạy, kèm mã thoát
       và thời gian chạy
 - [ ] **PLAT-09**: Người dùng kéo được ranh giới giữa ba vùng giao diện, và kích thước đó
       được giữ nguyên ở lần mở ứng dụng sau
-- [ ] **PLAT-10**: Khi git trả về lỗi, người dùng nhận được thông báo đọc hiểu được kèm lệnh
+- [x] **PLAT-10**: Khi git trả về lỗi, người dùng nhận được thông báo đọc hiểu được kèm lệnh
       đã chạy, thay vì ứng dụng treo hoặc im lặng
 
 ### HIST — Đọc lịch sử
@@ -184,14 +184,14 @@ Phase nào phủ requirement nào. Bảng này do bước lập lộ trình đi�
 |---|---|---|
 | PLAT-01 | Phase 1 | Pending |
 | PLAT-02 | Phase 1 | Complete |
-| PLAT-03 | Phase 1 | Pending |
+| PLAT-03 | Phase 1 | Complete |
 | PLAT-04 | Phase 1 | Complete |
 | PLAT-05 | Phase 1 | Complete |
-| PLAT-06 | Phase 1 | Pending |
+| PLAT-06 | Phase 1 | Complete |
 | PLAT-07 | Phase 1 | Complete |
-| PLAT-08 | Phase 1 | Pending |
+| PLAT-08 | Phase 1 | Complete |
 | PLAT-09 | Phase 1 | Pending |
-| PLAT-10 | Phase 1 | Pending |
+| PLAT-10 | Phase 1 | Complete |
 | REL-04 | Phase 1 | Pending |
 | HIST-01 | Phase 2 | Pending |
 | HIST-02 | Phase 2 | Pending |
