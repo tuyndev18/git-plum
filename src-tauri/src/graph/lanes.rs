@@ -1,13 +1,278 @@
-//! Thuật toán gán lane — biến danh sách commit theo thứ tự topo thành hình học từng dòng.
+//! Thuật toán gán lane — biến danh sách commit theo thứ tự topo thành hình học từng
+//! dòng. **Trái tim của Core Value**: nếu tệp này sai, đồ thị sai ở mọi màn hình.
 //!
-//! GIAI ĐOẠN ĐỎ: chỉ có test. Cài đặt đến ở commit kế tiếp.
+//! # Thuật toán, bốn bước, chép từ `docs/01-research-competitors.md` mục 4.2
+//!
+//! ```text
+//! Trạng thái: lanes = mảng, lanes[i] = mã commit mà lane i đang "chờ"
+//!
+//! Với mỗi commit C tại hàng r:
+//!   1. Tìm lane đầu tiên đang chờ C  -> đó là lane của C.
+//!      Không lane nào chờ C          -> cấp lane trống đầu tiên (đây là đầu nhánh).
+//!   2. Mọi lane KHÁC cũng đang chờ C -> điểm hợp nhánh: vẽ đường chéo từ lane đó về
+//!                                       lane của C, rồi giải phóng lane.
+//!   3. Gán cha — LẶP qua toàn bộ danh sách cha:
+//!      - parents[0]    -> tiếp tục chiếm lane của C.
+//!      - parents[1..n] -> MỖI cha một lane trống mới + một đường chéo rẽ nhánh riêng.
+//!      - không cha     -> giải phóng lane của C.
+//!   4. Mọi lane khác đang hoạt động -> một đoạn thẳng dọc đi xuyên qua hàng r.
+//! ```
+//!
+//! Độ phức tạp `O(n × số_lane_hoạt_động)`. Số lane hoạt động hiếm khi vượt 20 kể cả
+//! trên repo thật (repo hiệu năng 100k commit của dự án đo được tối đa 21), nên thực tế
+//! gần tuyến tính.
+//!
+//! # Ba chỗ dễ sai, đã có test riêng cho từng chỗ
+//!
+//! **Bước 3 phải là vòng lặp.** `for parent in commit.parents.iter().skip(1)`, không
+//! bao giờ `parents[1]`. Merge octopus bốn cha phải sinh bốn cạnh, không phải hai; repo
+//! hiệu năng của dự án chứa 320 merge từ ba cha trở lên. Đây là ràng buộc số 3 của
+//! ROADMAP, và chính là lỗi mà công cụ của Microsoft từng mắc
+//! (`.planning/research/PITFALLS.md` mục 2). Tên biến kiểu `parent1`/`parent2` bị cấm.
+//!
+//! **Cha ngoài tập đã nạp không phải cha.** Bản sao nông có commit biên khai báo một
+//! cha không tồn tại trong dữ liệu. Cấp lane cho nó là cấp cho một commit không bao giờ
+//! tới — lane đó rò rỉ vĩnh viễn và mọi hàng sau đều mang thêm một đường đi xuyên qua
+//! ma. [`assign`] dựng một `HashSet` mã commit **một lần** trước vòng lặp và chỉ cấp
+//! lane cho cha nằm trong tập; cha ngoài tập đặt [`GraphRow::terminates`].
+//!
+//! **Giới hạn hiển thị áp cho cha thêm, KHÔNG áp cho hàng.** Xem [`allocate_row_lane`]
+//! và [`allocate_parent_lane`] — hai hàm, hai chữ ký, có chủ ý.
+//!
+//! # Vì sao KHÔNG dùng `rayon`
+//!
+//! `rayon` nằm trong danh sách "không dùng" của `.planning/research/STACK.md`, và lý do
+//! ở đây mạnh hơn "không cần thiết": gán lane **vốn tuần tự**. Trạng thái `lanes` ở
+//! hàng `r` là kết quả của toàn bộ hàng `0..r`; không có cách nào chia đôi danh sách mà
+//! nửa sau biết được lane nào đang trống. Song song hoá không phải vô ích — nó **sai về
+//! mặt thuật toán**. Người đọc thấy vòng lặp nóng chạy 100k lần và nghĩ tới `par_iter`
+//! nên dừng lại ở dòng này.
+//!
+//! # Hàm thuần
+//!
+//! Không IO, không async, không `Mutex`, không biết gì về Tauri.
+//! `.planning/research/ARCHITECTURE.md` mục "graph/lanes.rs isolated and IO-free" là
+//! ràng buộc, không gợi ý: nhờ vậy toàn bộ thuật toán kiểm được bằng dữ liệu dựng tay,
+//! và benchmark của criterion đo được đúng nó chứ không đo lẫn thời gian chạy git.
+
+use std::collections::HashSet;
 
 use crate::domain::Commit;
-use crate::graph::types::GraphRow;
+use crate::graph::types::{Edge, GraphRow, LANE_COLORS, MAX_VISIBLE_LANES};
 
-/// Gán lane cho từng commit. Cài đặt đến ở commit kế tiếp (TDD: đỏ trước).
-pub fn assign(_commits: &[Commit]) -> Vec<GraphRow> {
-    Vec::new()
+/// Màu của một lane. Hợp đồng với bộ vẽ: `color == lane % LANE_COLORS` ở mọi nơi.
+#[inline]
+fn color_of(lane: u16) -> u8 {
+    (lane % LANE_COLORS as u16) as u8
+}
+
+/// Cấp lane cho **chính hàng** (bước 1). **KHÔNG BAO GIỜ giới hạn** — luôn trả một lane.
+///
+/// # Vì sao hàm này không trả `Option`
+///
+/// Mỗi commit trong đầu vào **phải** nhận được một lane, bất kể [`MAX_VISIBLE_LANES`]
+/// là bao nhiêu. Bất biến `rows.len() == commits.len()` là HIST-04 ở tầng dữ liệu và nó
+/// không được phụ thuộc vào một hằng số *hiển thị*.
+///
+/// Dùng chung **một** hàm trả `Option` cho cả bước 1 và bước 3 là nguyên nhân gốc của
+/// một lỗi mất hàng: bước 1 nhận `None` thì không có cách xử lý đúng nào — `unwrap()`
+/// panic, `continue` âm thầm đánh rơi một commit, gán một lane ngoài giới hạn phá chính
+/// assertion mà cap dựng ra. Trên repo mẫu `wide` (25 lane đồng thời) với giới hạn 20,
+/// cài đặt dùng chung một hàm đánh rơi 10 trong 73 hàng — trong khi `linear`, `octopus`
+/// và `orphan` vẫn xanh hết vì chúng không bao giờ chạm cap. Đúng dạng lỗi "đồ thị sai
+/// ship ra trong khi trông đúng trên repo nhỏ".
+///
+/// Trả **lane trống có chỉ số nhỏ nhất**, không phải một lane mới ở cuối mảng: thiếu
+/// điều này thì mảng `lanes` chỉ dài ra mãi và đồ thị loãng dần trên lịch sử dài.
+fn allocate_row_lane(lanes: &mut Vec<Option<String>>, id: &str) -> u16 {
+    if let Some(i) = lanes.iter().position(|l| l.is_none()) {
+        lanes[i] = Some(id.to_string());
+        return i as u16;
+    }
+    lanes.push(Some(id.to_string()));
+    (lanes.len() - 1) as u16
+}
+
+/// Cấp lane cho **một cha thêm** (bước 3). **CÓ giới hạn** — trả `None` khi đã đầy.
+///
+/// Đây là chỗ neo của cách vẽ suy giảm có chủ ý mà ROADMAP ràng buộc số 4 đòi: khi
+/// không còn lane nào dưới [`MAX_VISIBLE_LANES`], cha đó không được cấp lane và hàng
+/// tăng [`GraphRow::truncated_parents`] để giao diện hiện chỉ báo `+N cha nữa` thay vì
+/// vẽ tràn ra ngoài cột.
+///
+/// Khác [`allocate_row_lane`] đúng ở một điểm: ở đây `None` là một câu trả lời **đúng**
+/// và gọi được — cha không vẽ vẫn còn nguyên trong `Commit.parents`, chỉ đường kẻ bị
+/// lược. Suy giảm **hiển thị**, không phải suy giảm **dữ liệu**.
+fn allocate_parent_lane(lanes: &mut Vec<Option<String>>, id: &str) -> Option<u16> {
+    if let Some(i) = lanes.iter().position(|l| l.is_none()) {
+        if i >= MAX_VISIBLE_LANES as usize {
+            return None;
+        }
+        lanes[i] = Some(id.to_string());
+        return Some(i as u16);
+    }
+    if lanes.len() >= MAX_VISIBLE_LANES as usize {
+        return None;
+    }
+    lanes.push(Some(id.to_string()));
+    Some((lanes.len() - 1) as u16)
+}
+
+/// Gán lane cho một danh sách commit **theo thứ tự topo** và sinh hình học từng dòng.
+///
+/// Trả đúng một [`GraphRow`] cho mỗi [`Commit`], cùng thứ tự, cùng độ dài — bất biến
+/// này không có ngoại lệ, kể cả khi số nhánh sống vượt [`MAX_VISIBLE_LANES`].
+///
+/// # Đầu vào phải theo `--topo-order`
+///
+/// Thuật toán giả định **cha luôn xuất hiện sau con**. `LOG_ARGS` của
+/// `crate::git::parsers::log` ghim `--topo-order` đúng vì lý do này. Thứ tự theo thời
+/// gian không dùng được: rebase, cherry-pick và đồng hồ lệch đều sinh ra cha *mới hơn*
+/// con. Đầu vào sai thứ tự không làm hàm sập — nó vẫn trả đủ hàng — nhưng đường nối sẽ
+/// trỏ ngược.
+///
+/// # Không thể lặp vô hạn
+///
+/// Vòng lặp đi đúng một lượt qua `commits` và không bao giờ đi ngược, nên dữ liệu có
+/// vòng (một điều git không tạo ra nhưng một repo thù địch có thể chứa) cũng chỉ làm
+/// đường nối vô nghĩa, không treo ứng dụng (T-02-08).
+pub fn assign(commits: &[Commit]) -> Vec<GraphRow> {
+    // Tập mã commit CÓ trong dữ liệu này. Dựng một lần, O(n).
+    //
+    // Đây là thứ phân biệt "commit gốc thật" với "biên bản sao nông": cả hai đều trông
+    // như điểm cuối, nhưng gốc thật có `parents` rỗng còn biên nông khai báo một cha
+    // mà ta không có. Thiếu tập này thì lane cấp cho cha đó không bao giờ được thu hồi.
+    let known: HashSet<&str> = commits.iter().map(|c| c.id.as_str()).collect();
+
+    // lanes[i] = mã commit mà lane i đang chờ; None là lane trống.
+    let mut lanes: Vec<Option<String>> = Vec::new();
+    let mut rows: Vec<GraphRow> = Vec::with_capacity(commits.len());
+
+    for commit in commits {
+        let id = commit.id.as_str();
+
+        // --- Bước 1: lane của hàng. Lane đầu tiên đang chờ commit này, hoặc lane
+        // trống nhỏ nhất nếu không ai chờ (đây là đầu nhánh). KHÔNG giới hạn.
+        let lane = match lanes.iter().position(|l| l.as_deref() == Some(id)) {
+            Some(i) => i as u16,
+            None => allocate_row_lane(&mut lanes, id),
+        };
+        let color = color_of(lane);
+
+        let mut passthrough: Vec<Edge> = Vec::new();
+        let mut out_edges: Vec<Edge> = Vec::new();
+
+        // --- Bước 2: mọi lane KHÁC cũng đang chờ commit này là một điểm hợp nhánh.
+        // Đường chéo từ lane đó về lane của hàng, rồi giải phóng lane.
+        //
+        // Đường chéo mang màu của lane **nguồn**: nó là phần đuôi của nhánh đang chết,
+        // và tô nó theo màu đích sẽ làm nhánh như đổi màu giữa chừng.
+        for (i, slot) in lanes.iter_mut().enumerate() {
+            if i as u16 == lane {
+                continue;
+            }
+            if slot.as_deref() == Some(id) {
+                passthrough.push(Edge {
+                    from_lane: i as u16,
+                    to_lane: lane,
+                    color: color_of(i as u16),
+                });
+                *slot = None;
+            }
+        }
+
+        // --- Bước 3: gán cha. LẶP qua toàn bộ danh sách — ràng buộc số 3 của ROADMAP.
+        let mut truncated_parents: u16 = 0;
+        let mut terminates = false;
+
+        match commit.parents.first() {
+            // Cha đầu tiếp tục chiếm lane của hàng này.
+            Some(first) if known.contains(first.as_str()) => {
+                lanes[lane as usize] = Some(first.clone());
+                out_edges.push(Edge {
+                    from_lane: lane,
+                    to_lane: lane,
+                    color,
+                });
+            }
+            // Cha đầu KHÔNG có trong tập đã nạp: bản sao nông hoặc trang chưa nạp tới.
+            // Lane kết thúc ở đây, và cờ cho frontend vẽ "còn tiếp" thay vì dấu hết.
+            Some(_) => {
+                lanes[lane as usize] = None;
+                terminates = true;
+            }
+            // Không cha: commit gốc THẬT. Giải phóng lane, `terminates` giữ false.
+            None => {
+                lanes[lane as usize] = None;
+            }
+        }
+
+        // Cha thứ hai trở đi: MỖI cha một lane mới và một đường chéo rẽ nhánh riêng.
+        // `.skip(1)` chứ không `parents[1]` — bốn cha phải cho bốn cạnh.
+        for parent in commit.parents.iter().skip(1) {
+            if !known.contains(parent.as_str()) {
+                // Cha ngoài tập: không cấp lane, nhưng hàng vẫn "còn tiếp".
+                terminates = true;
+                continue;
+            }
+            // Cha này đã có lane đang chờ nó rồi (hai nhánh cùng trỏ về một commit)?
+            // Nối vào lane đó thay vì cấp thêm một lane trùng — nếu không, hai lane
+            // cùng chờ một commit và bước 2 phải dọn, làm đồ thị rộng ra vô cớ.
+            if let Some(i) = lanes
+                .iter()
+                .position(|l| l.as_deref() == Some(parent.as_str()))
+            {
+                out_edges.push(Edge {
+                    from_lane: lane,
+                    to_lane: i as u16,
+                    color: color_of(i as u16),
+                });
+                continue;
+            }
+            match allocate_parent_lane(&mut lanes, parent) {
+                Some(moi) => out_edges.push(Edge {
+                    from_lane: lane,
+                    to_lane: moi,
+                    color: color_of(moi),
+                }),
+                // Hết lane vẽ được: cha vẫn còn trong `Commit.parents`, chỉ đường kẻ
+                // bị lược. Giao diện hiện `+N cha nữa`.
+                None => truncated_parents += 1,
+            }
+        }
+
+        // --- Bước 4: mọi lane khác đang hoạt động đi thẳng xuyên qua hàng này.
+        for (i, slot) in lanes.iter().enumerate() {
+            if i as u16 == lane || slot.is_none() {
+                continue;
+            }
+            passthrough.push(Edge {
+                from_lane: i as u16,
+                to_lane: i as u16,
+                color: color_of(i as u16),
+            });
+        }
+
+        // Cắt đuôi các lane trống ở cuối mảng: giữ `lanes.len()` bằng số lane thật sự
+        // đang sống. Thiếu bước này thì bước 4 phải quét qua một cái đuôi dài mãi trên
+        // lịch sử có nhiều nhánh đã chết, biến O(n × lane_sống) thành
+        // O(n × lane_từng_sống) — khác biệt thật trên repo 100k commit.
+        while matches!(lanes.last(), Some(None)) {
+            lanes.pop();
+        }
+
+        rows.push(GraphRow {
+            commit_id: commit.id.clone(),
+            lane,
+            color,
+            passthrough,
+            out_edges,
+            truncated_parents,
+            terminates,
+        });
+    }
+
+    rows
 }
 
 #[cfg(test)]
@@ -151,18 +416,17 @@ mod tests {
     /// về một và lane thừa được giải phóng.
     #[test]
     fn re_nhanh_don_hai_con_mot_cha_hop_lai() {
-        let commits = vec![
-            commit("c1", &["p"]),
-            commit("c2", &["p"]),
-            commit("p", &[]),
-        ];
+        let commits = vec![commit("c1", &["p"]), commit("c2", &["p"]), commit("p", &[])];
         let rows = assign(&commits);
 
         khang_dinh_mot_hang_moi_commit(&commits, &rows);
         khang_dinh_mau_khop_lane(&rows);
 
         assert_eq!(rows[0].lane, 0, "con thứ nhất ở lane 0");
-        assert_eq!(rows[1].lane, 1, "con thứ hai phải lấy lane MỚI, không trùng");
+        assert_eq!(
+            rows[1].lane, 1,
+            "con thứ hai phải lấy lane MỚI, không trùng"
+        );
         assert_eq!(rows[2].lane, 0, "cha nhận lane thấp nhất đang chờ nó");
 
         // Hàng của cha: lane 1 hợp về lane 0 bằng một đường chéo.
@@ -207,7 +471,10 @@ mod tests {
             "một cạnh giữ lane 0, một cạnh sang lane mới 1"
         );
         for e in &rows[0].out_edges {
-            assert_eq!(e.from_lane, 0, "mọi cạnh ra đều xuất phát từ lane của merge");
+            assert_eq!(
+                e.from_lane, 0,
+                "mọi cạnh ra đều xuất phát từ lane của merge"
+            );
         }
     }
 
@@ -271,7 +538,8 @@ mod tests {
 
         let so_sach = rows[0].out_edges.len() + rows[0].truncated_parents as usize;
         assert_eq!(
-            so_sach, 15,
+            so_sach,
+            15,
             "sổ sách không cân: {} cạnh vẽ + {} cha bị cắt != 15 cha",
             rows[0].out_edges.len(),
             rows[0].truncated_parents
@@ -376,7 +644,11 @@ mod tests {
         khang_dinh_mot_hang_moi_commit(&commits, &rows);
         khang_dinh_mau_khop_lane(&rows);
 
-        assert_eq!(rows[0].out_edges.len(), 2, "merge hai cây rời → hai cạnh ra");
+        assert_eq!(
+            rows[0].out_edges.len(),
+            2,
+            "merge hai cây rời → hai cạnh ra"
+        );
         let max_lane = rows.iter().map(|r| r.lane).max().unwrap();
         assert!(
             max_lane <= 1,
@@ -422,7 +694,10 @@ mod tests {
         // Hàng của chính lane 1 thì không tự đi xuyên qua mình.
         assert_eq!(rows[2].commit_id, "y1");
         assert!(
-            rows[2].passthrough.iter().all(|e| e.from_lane != rows[2].lane),
+            rows[2]
+                .passthrough
+                .iter()
+                .all(|e| e.from_lane != rows[2].lane),
             "hàng không được passthrough chính lane của nó"
         );
     }
