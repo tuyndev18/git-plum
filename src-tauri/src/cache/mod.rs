@@ -4,6 +4,8 @@
 //! thứ đó là Out of Scope. Ở đây chỉ có RAM, và vì là RAM nên **phải có chặn trên** —
 //! xem [`repo_cache::MAX_CACHED_HISTORIES`].
 
+pub mod diff_cache;
 pub mod repo_cache;
 
+pub use diff_cache::{DiffCache, DiffKey, MAX_CACHED_DIFFS};
 pub use repo_cache::{RepoCache, RepoHistory, MAX_CACHED_HISTORIES};

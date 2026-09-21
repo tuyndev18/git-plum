@@ -99,6 +99,14 @@ pub struct AppState {
     ///
     /// Chặn trên số lịch sử được giữ nằm ở `cache::MAX_CACHED_HISTORIES`.
     pub cache: Arc<crate::cache::RepoCache>,
+
+    /// Cache diff đã phân tích, khoá theo `(repo_id, sha, path)` — DIFF-01, T-03-12.
+    ///
+    /// Nằm **cạnh** `cache`, không nằm **trong** nó. Hai cache giải hai bài toán khác
+    /// nhau: `RepoCache` giữ 2 mục cỡ 67 MB với quy tắc loại bỏ phụ thuộc repo đang
+    /// hiển thị; `DiffCache` giữ 200 mục cỡ KB với quy tắc LRU thuần. Gộp chúng lại
+    /// buộc một trong hai phải chịu quy tắc của cái kia. Xem `cache::diff_cache`.
+    pub diff_cache: Arc<crate::cache::DiffCache>,
 }
 
 impl AppState {
@@ -108,6 +116,7 @@ impl AppState {
             active_repo: RwLock::new(None),
             command_log: Arc::new(CommandLog::new()),
             cache: Arc::new(crate::cache::RepoCache::new()),
+            diff_cache: Arc::new(crate::cache::DiffCache::new()),
         }
     }
 
@@ -149,9 +158,15 @@ impl AppState {
     /// một repo người dùng đã đóng, và `MAX_CACHED_HISTORIES` sẽ bảo vệ một thứ không
     /// ai còn nhìn. Đây là ràng buộc RAM dưới 150MB của `PROJECT.md`, không phải dọn
     /// dẹp cho gọn.
+    ///
+    /// **Cả hai** cache phải được giải phóng, không chỉ `cache`. `diff_cache` giữ tới
+    /// 200 mục và chặn trên của nó là toàn cục chứ không theo repo — bỏ sót ở đây thì
+    /// các mục của repo đã đóng vẫn chiếm chỗ và đẩy mục của repo đang mở ra sớm hơn
+    /// cần thiết, tức người dùng mất cache hit ở repo họ đang thật sự dùng.
     pub fn close_repo(&self, id: &str) {
         self.open_repos.write().remove(id);
         self.cache.invalidate(id);
+        self.diff_cache.invalidate_repo(id);
         let mut active = self.active_repo.write();
         if active.as_deref() == Some(id) {
             *active = None;
@@ -258,6 +273,48 @@ mod tests {
         assert!(
             state.cache.get_refs(&h.id).is_none(),
             "đóng repository phải giải phóng cache của nó"
+        );
+    }
+
+    /// Đóng repository cũng phải giải phóng **cache diff** của nó, không chỉ cache
+    /// lịch sử.
+    ///
+    /// `MAX_CACHED_DIFFS` là chặn trên **toàn cục** (200 mục cho mọi repo cộng lại),
+    /// không phải chặn trên theo repo. Nên mục của một repo đã đóng không chỉ lãng phí
+    /// RAM — chúng còn đẩy mục của repo đang mở ra khỏi cache sớm hơn cần thiết, và
+    /// người dùng mất cache hit ở đúng repo họ đang dùng.
+    #[test]
+    fn closing_repo_frees_its_diff_cache() {
+        use crate::cache::DiffKey;
+        use crate::domain::diff::{DiffKind, FileDiff};
+
+        let state = AppState::new();
+        let a = state.open_repo("C:/work/repo-a");
+        let b = state.open_repo("C:/work/repo-b");
+
+        let khoa_a = DiffKey::new(a.id.clone(), "sha1", "f.rs");
+        let khoa_b = DiffKey::new(b.id.clone(), "sha1", "f.rs");
+        let mau = || {
+            Arc::new(FileDiff {
+                path: "f.rs".into(),
+                old_path: None,
+                status: "M".into(),
+                kind: DiffKind::Unchanged,
+            })
+        };
+        state.diff_cache.put_diff(khoa_a.clone(), mau());
+        state.diff_cache.put_diff(khoa_b.clone(), mau());
+        assert_eq!(state.diff_cache.len(), 2, "tiền đề: cả hai repo có mục");
+
+        state.close_repo(&a.id);
+
+        assert!(
+            state.diff_cache.get_diff(&khoa_a).is_none(),
+            "đóng repository phải giải phóng cache diff của nó"
+        );
+        assert!(
+            state.diff_cache.get_diff(&khoa_b).is_some(),
+            "mục của repo còn mở KHÔNG được đụng tới"
         );
     }
 
