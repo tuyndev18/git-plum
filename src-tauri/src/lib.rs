@@ -5,6 +5,7 @@
 //!
 //! Xem `.planning/research/ARCHITECTURE.md` để biết ranh giới các module.
 
+pub mod cache;
 pub mod commands;
 pub mod domain;
 pub mod error;
