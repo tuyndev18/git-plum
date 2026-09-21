@@ -18,7 +18,20 @@
 
 import { describe, it, expect } from 'vitest'
 
-import { phanTichHunk } from './diffSpike'
+import { phanTichHunk, type Hunk } from './diffSpike'
+
+/**
+ * Lấy hunk thứ `i` và khẳng định nó tồn tại.
+ *
+ * `noUncheckedIndexedAccess` bật nên truy cập chỉ mục cho `Hunk | undefined`. Dùng
+ * hàm này thay vì `!`: nếu bộ phân tích trả ít hunk hơn mong đợi thì test thất bại
+ * với thông điệp đọc được, chứ không ném `undefined` ở một dòng assert khác.
+ */
+function hunk(hunks: Hunk[], i: number): Hunk {
+  const h = hunks[i]
+  expect(h, `phải có hunk thứ ${i + 1}`).toBeDefined()
+  return h as Hunk
+}
 
 /** Patch thật của `git diff --unified=3`, hai hunk, có cả thêm và xoá. */
 const PATCH_HAI_HUNK = `diff --git a/a.js b/a.js
@@ -49,7 +62,9 @@ describe('phanTichHunk', () => {
   })
 
   it('đọc đúng số dòng đầu của mỗi hunk từ đầu `@@`', () => {
-    const [h1, h2] = phanTichHunk(PATCH_HAI_HUNK)
+    const hunks = phanTichHunk(PATCH_HAI_HUNK)
+    const h1 = hunk(hunks, 0)
+    const h2 = hunk(hunks, 1)
 
     // `@@ -1,6 +1,7 @@` — phía mới bắt đầu ở dòng 1.
     expect(h1.newStart).toBe(1)
@@ -60,14 +75,14 @@ describe('phanTichHunk', () => {
   })
 
   it('phân loại đúng dòng thêm và dòng xoá', () => {
-    const [h1] = phanTichHunk(PATCH_HAI_HUNK)
+    const h1 = hunk(phanTichHunk(PATCH_HAI_HUNK), 0)
 
     expect(h1.added).toEqual(['dong moi a', 'dong moi b'])
     expect(h1.removed).toEqual(['dong bi xoa'])
   })
 
   it('gán đúng số dòng phía mới cho từng dòng thêm', () => {
-    const [h1] = phanTichHunk(PATCH_HAI_HUNK)
+    const h1 = hunk(phanTichHunk(PATCH_HAI_HUNK), 0)
 
     // Hunk bắt đầu ở dòng 1: hai dòng ngữ cảnh (1, 2), rồi một dòng xoá (không tốn
     // số dòng phía mới), rồi hai dòng thêm ở dòng 3 và 4.
@@ -75,7 +90,7 @@ describe('phanTichHunk', () => {
   })
 
   it('KHÔNG đếm dòng xoá vào số dòng phía mới', () => {
-    const [, h2] = phanTichHunk(PATCH_HAI_HUNK)
+    const h2 = hunk(phanTichHunk(PATCH_HAI_HUNK), 1)
 
     // `@@ -20,4 +21,4 @@`: một dòng ngữ cảnh (21), một dòng xoá (không tốn số),
     // rồi dòng thêm ở 22. Nếu cài đặt đếm cả dòng xoá thì ra 23 — lệch một dòng.
@@ -106,17 +121,18 @@ describe('phanTichHunk', () => {
     const hunks = phanTichHunk(`@@ -5 +5 @@\n-cu\n+moi\n`)
 
     expect(hunks).toHaveLength(1)
-    expect(hunks[0].newStart).toBe(5)
-    expect(hunks[0].added).toEqual(['moi'])
-    expect(hunks[0].removed).toEqual(['cu'])
+    const h = hunk(hunks, 0)
+    expect(h.newStart).toBe(5)
+    expect(h.added).toEqual(['moi'])
+    expect(h.removed).toEqual(['cu'])
   })
 
   it('xử lý được CRLF — git trả `\\r\\n` trên Windows', () => {
     // Không trim `\r` thì dòng thêm mang một `\r` ở cuối và mọi phép so khớp nội
     // dung sau đó lệch. Cùng lớp lỗi với SHA mang `\r` mà CLAUDE.md cảnh báo.
-    const hunks = phanTichHunk('@@ -1 +1 @@\r\n-cu\r\n+moi\r\n')
+    const h = hunk(phanTichHunk('@@ -1 +1 @@\r\n-cu\r\n+moi\r\n'), 0)
 
-    expect(hunks[0].added).toEqual(['moi'])
-    expect(hunks[0].removed).toEqual(['cu'])
+    expect(h.added).toEqual(['moi'])
+    expect(h.removed).toEqual(['cu'])
   })
 })

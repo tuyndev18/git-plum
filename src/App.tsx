@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { open } from '@tauri-apps/plugin-dialog'
 
 import { describeError, ipc } from '@/lib/ipc'
+import { isPerfEnabled } from '@/lib/perf'
 import { clearCommands, registerCommands, runCommand } from '@/lib/commands'
 import { forgetRepo } from '@/lib/recentRepos'
 import { useActiveRepo, useRepoStore } from '@/stores/repoStore'
@@ -14,6 +15,19 @@ import { RefSidebar } from '@/components/RefSidebar'
 import { CommitList, type CommitListHandle } from '@/components/history/CommitList'
 import { CommitDetail } from '@/components/history/CommitDetail'
 import { CommitSearch } from '@/components/history/CommitSearch'
+
+/**
+ * Khung đo của checkpoint #3 (plan 03-01) — nạp lười, **spike tạm thời**.
+ *
+ * `lazy()` chứ không nhập tĩnh: `SpikeHarness` kéo theo `diffSpike.ts`, vốn kéo
+ * `@codemirror/*`. Nhập tĩnh sẽ đưa CodeMirror vào bundle đường chính kể cả khi cờ
+ * perf tắt — tức spike làm chậm khởi động, đúng thứ nó được viết ra để bảo vệ.
+ *
+ * Xoá cùng lúc với `diffSpike.ts` và `SpikeHarness.tsx` khi Task 3 chốt xong A/B.
+ */
+const SpikeHarness = lazy(() =>
+  import('@/components/diff/SpikeHarness').then((m) => ({ default: m.SpikeHarness })),
+)
 
 export function App() {
   const activeRepo = useActiveRepo()
@@ -242,6 +256,14 @@ export function App() {
                     selectedCommitId={selectedCommitId}
                     onSelect={setSelectedCommitId}
                   />
+                  {/* Cờ perf tắt → không render và KHÔNG nạp module CodeMirror.
+                      `isPerfEnabled()` đọc `localStorage` lúc chạy, nên bật được
+                      trên bản release đã dựng mà không phải dựng lại. */}
+                  {isPerfEnabled() && (
+                    <Suspense fallback={null}>
+                      <SpikeHarness repoId={activeRepo.info.id} />
+                    </Suspense>
+                  )}
                 </div>
               ) : (
                 <div className="empty-state">
