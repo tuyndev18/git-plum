@@ -41,11 +41,11 @@ Lớp nền mà mọi thứ khác dựng lên. Bốn mục **PLAT-02, PLAT-03, P
 
 Nhóm chứa Core Value. Mốc kiểm chứng hiệu năng nằm trong chính nhóm này, không để cuối dự án.
 
-- [ ] **HIST-01**: Người dùng thấy danh sách commit của repository đang mở, nạp theo trang
-- [ ] **HIST-02**: Người dùng thấy đồ thị nhánh nhiều làn có màu, vẽ bên trái danh sách commit
+- [x] **HIST-01**: Người dùng thấy danh sách commit của repository đang mở, nạp theo trang
+- [x] **HIST-02**: Người dùng thấy đồ thị nhánh nhiều làn có màu, vẽ bên trái danh sách commit
 - [ ] **HIST-03**: Đồ thị vẽ đúng với merge nhiều hơn hai cha, nhánh mồ côi, lịch sử không liên
       quan, bản sao nông và HEAD tách rời
-- [ ] **HIST-04**: Đồ thị luôn thẳng hàng với danh sách commit ở mọi vị trí cuộn, không lệch
+- [x] **HIST-04**: Đồ thị luôn thẳng hàng với danh sách commit ở mọi vị trí cuộn, không lệch
 - [ ] **HIST-05**: Trên repository 100k commit, đồ thị hiện ra trong dưới một giây và cuộn
       không giật
 - [ ] **HIST-06**: Người dùng thấy nhãn nhánh và nhãn tag neo đúng hàng commit, phân biệt được
@@ -58,7 +58,7 @@ Nhóm chứa Core Value. Mốc kiểm chứng hiệu năng nằm trong chính nh
       thư mục
 - [ ] **HIST-10**: Người dùng tìm được commit theo thông điệp, tên tác giả, mã commit hoặc
       đường dẫn tệp
-- [ ] **HIST-11**: Tên tệp và thông điệp commit chứa ký tự không phải UTF-8 vẫn hiển thị được,
+- [x] **HIST-11**: Tên tệp và thông điệp commit chứa ký tự không phải UTF-8 vẫn hiển thị được,
       không làm hỏng dữ liệu trả về
 
 ### DIFF — Xem khác biệt
@@ -193,17 +193,17 @@ Phase nào phủ requirement nào. Bảng này do bước lập lộ trình đi�
 | PLAT-09 | Phase 1 | Pending |
 | PLAT-10 | Phase 1 | Complete |
 | REL-04 | Phase 1 | Pending |
-| HIST-01 | Phase 2 | Pending |
-| HIST-02 | Phase 2 | Pending |
+| HIST-01 | Phase 2 | Complete |
+| HIST-02 | Phase 2 | Complete |
 | HIST-03 | Phase 2 | Pending |
-| HIST-04 | Phase 2 | Pending |
+| HIST-04 | Phase 2 | Complete |
 | HIST-05 | Phase 2 | Pending |
 | HIST-06 | Phase 2 | Pending |
 | HIST-07 | Phase 2 | Pending |
 | HIST-08 | Phase 2 | Pending |
 | HIST-09 | Phase 2 | Pending |
 | HIST-10 | Phase 2 | Pending |
-| HIST-11 | Phase 2 | Pending |
+| HIST-11 | Phase 2 | Complete |
 | DIFF-01 | Phase 3 | Pending |
 | DIFF-02 | Phase 3 | Pending |
 | DIFF-03 | Phase 3 | Pending |

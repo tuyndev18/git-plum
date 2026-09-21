@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: blocked_on_checkpoint
-last_updated: "2026-09-21T10:23:33.000Z"
+status: executing
+last_updated: "2026-09-21T18:10:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 11
-  completed_plans: 8
-  percent: 73
+  completed_plans: 9
+  percent: 82
 ---
 
 # Project State: git-plum
@@ -33,9 +33,9 @@ progress:
 | | |
 |---|---|
 | **Phase** | 2 — Lịch sử và đồ thị nhánh |
-| **Plan** | 02-05 — Task 1-3/4 xong (hình học + canvas + CommitList + App.tsx nối thật); **DỪNG ở Task 4** |
-| **Status** | **Chờ checkpoint người dùng** — Task 4 của 02-05 là `checkpoint:human-verify gate="blocking"`, đòi sáu bước kiểm bằng mắt (thẳng hàng lúc cuộn nhanh, độ nét HiDPI, bấm chọn qua đồ thị) mà agent không tự trả lời được. Xem `.planning/phases/02-history-graph/02-05-SUMMARY.md` mục "Sáu bước cần làm". |
-| **Progress** | Phase 1/8 · Phase 2 plan 4/7 hoàn tất + 02-05 dở (3/4 task) |
+| **Plan** | 5 / 7 xong (02-05 — canvas graph + virtualizer + CommitList, checkpoint #2 ĐẠT ở vòng 2) |
+| **Status** | Plan 02-05 đóng. Checkpoint #2 (canvas hay SVG) chốt **canvas** — người dùng chấp thuận qua app thật sau khi vòng 1 bị từ chối và đã sửa (xem `02-05-SUMMARY.md` mục "Checkpoint round 1: REJECTED" / "Checkpoint round 2: APPROVED"). Tiếp theo: 02-06 (chi tiết commit, cây/phẳng, nhãn ref, thanh bên, tìm kiếm). |
+| **Progress** | Phase 1/8 · Phase 2 plan 5/7 |
 
 ```
 [#.......] 1/8 phases
@@ -62,8 +62,8 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Metric | Value |
 |---|---|
 | Phases completed | 1 / 8 (có nợ) |
-| Plans completed | 8 |
-| v1 requirements delivered | 7 / 59 đã kiểm chứng · 2 nữa có mã nhưng chưa kiểm thật (PLAT-07, PLAT-09) · PLAT-01 và REL-04 đạt ở mức yếu hơn ROADMAP |
+| Plans completed | 9 |
+| v1 requirements delivered | 12 / 59 đã kiểm chứng (thêm HIST-01, HIST-02, HIST-04, HIST-11 ở plan 02-05, checkpoint #2 người dùng chấp thuận) · 2 nữa có mã nhưng chưa kiểm thật (PLAT-07, PLAT-09) · PLAT-01 và REL-04 đạt ở mức yếu hơn ROADMAP |
 
 | Plan | Thời lượng | Tasks | Files |
 |---|---|---|---|
@@ -74,8 +74,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 2 P02 | 35min | 2 tasks | 8 files |
 | Phase 2 P03 | 65min | 3 tasks | 14 files |
 | Phase 2 P04 | 85min | 3 tasks | 14 files |
-| Phase 2 P05 (Task 1-3, dở) | ~110min | 3/4 tasks | 12 files |
-| Phase 2 P05 checkpoint round 1 (điều tra + sửa) | ~90min | 0 task mới | 4 files |
+| Phase 2 P05 | ~110min (Task 1-3) + ~90min (checkpoint round 1: điều tra + sửa) | 4/4 tasks | 16 files |
 
 ---
 
@@ -150,20 +149,15 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 
 ### Vướng mắc
 
-**Đang chặn: checkpoint Task 4 của plan 02-05, VÒNG 2 (canvas hay SVG, checkpoint #2 của
-ROADMAP).** Vòng 1 người dùng đã tự chạy app thật và **từ chối**: cột thông điệp commit co
-về gần như trống ở cửa sổ hẹp + nhiều lane (đo thật bằng Chromium/Playwright:
-`subjectWidth === 0px` tại 900px/maxLane~19 — lỗi CSS grid, KHÔNG phải lỗi parser/store/canvas,
-cả ba đã kiểm chứng đúng riêng biệt), và đồ thị ít màu (bản chất dữ liệu, không phải lỗi —
-xem `02-05-SUMMARY.md` mục "Checkpoint round 1: REJECTED" để đọc đầy đủ quy trình điều tra).
-Đã sửa (`c2f6714` test, `cc270e4` fix: `.commit-subject` có sàn 120px, `CommitList` dùng
-`ResizeObserver` thay vì đọc `clientHeight` trực tiếp trong thân render) và xác nhận lại bằng
-đo Chromium thật — **chưa tự phê duyệt lại**. Cần người dùng chạy `npm run tauri:dev` (hoặc
-`dev.cmd`), mở repo `git-plum`, làm lại sáu bước kiểm bằng mắt ở `02-05-SUMMARY.md` (chú ý
-thêm: kéo panel giữa hẹp lại để xác nhận cột thông điệp không còn biến mất), rồi trả lời
-"approved" hoặc nêu bước nào còn trượt.
+Không có vướng mắc nào đang chặn. Checkpoint #2 (canvas hay SVG, plan 02-05) đã **đóng**:
+vòng 1 người dùng từ chối vì cột thông điệp commit co về gần như trống ở cửa sổ hẹp + nhiều
+lane (đo thật bằng Chromium/Playwright: `subjectWidth === 0px` tại 900px/maxLane~19 — lỗi CSS
+grid, không phải lỗi parser/store/canvas), đã sửa (`c2f6714` test, `cc270e4` fix) và xác nhận
+lại bằng đo Chromium thật; vòng 2 người dùng tự chạy app thật, kiểm lại, trả lời "approved".
+Chốt **canvas**. Chi tiết đầy đủ ở `02-05-SUMMARY.md` mục "Checkpoint round 1: REJECTED" /
+"Checkpoint round 2: APPROVED".
 
-Ngoài checkpoint trên, không có vướng mắc nào khác đang chặn. Toolchain đã đủ:
+Toolchain đã đủ:
 
 - ✅ rustc 1.98.1, cargo 1.98.1, toolchain `stable-x86_64-pc-windows-msvc`
 - ✅ Visual Studio Community 2022 **kèm workload "Desktop development with C++"** — đã thêm,
@@ -197,7 +191,7 @@ Ngoài checkpoint trên, không có vướng mắc nào khác đang chặn. Tool
 |---|---|---|
 | ~~7~~ | 1 | **ĐẠT MỘT PHẦN** — quyết định của chủ dự án 2026-09-21. Chi tiết bên dưới. |
 | 1 | 2 | Đồ thị có mở dưới 1s và cuộn 60fps trên repo 50k–100k commit thật không? |
-| 2 | 2 | Vẽ đồ thị bằng canvas hay lớp phủ SVG ở mức 100k dòng? (giữ sau interface) |
+| ~~2~~ | 2 | **CHỐT: CANVAS** — plan 02-05, người dùng chấp thuận qua app thật ở checkpoint vòng 2 (vòng 1 bị từ chối vì lỗi CSS cột subject, đã sửa). `interface GraphRenderer` vẫn giữ làm đường lùi. Chi tiết ở `02-05-SUMMARY.md`. |
 | 4 | 2 | JSON có chiếm phần lớn profile IPC cho dữ liệu lane không? (ship JSON trước rồi đo) |
 | 3 | 3 | `@codemirror/merge` tự tính diff từ hai tài liệu đầy đủ — có đủ nhanh với tệp lớn không? |
 | 5 | 6 | Công sức làm trình giải quyết xung đột trên stack CodeMirror 6 — con số 4 giờ của SourceGit không chuyển giao được |
@@ -232,11 +226,20 @@ có catalog dịch. Đáng làm trước khi phát hành công khai (Phase 8), k
 
 ## Session Continuity
 
-**Việc tiếp theo:** hoàn thành checkpoint Task 4 của `02-05-PLAN.md`, **VÒNG 2** — vòng 1 đã
-bị từ chối (cột subject co về 0px ở cửa sổ hẹp + nhiều lane), đã sửa và xác nhận lại bằng
-Chromium/Playwright thật, xem `02-05-SUMMARY.md` mục "Checkpoint round 1: REJECTED". Chạy lại
-sáu bước kiểm bằng mắt trên app thật, trả lời "approved" hoặc nêu bước trượt. Sau đó tiếp tục
-`/gsd-plan-phase 2` cho các plan còn lại (02-06, 02-07).
+**Việc tiếp theo:** `02-06-PLAN.md` — chi tiết commit, cây/phẳng, nhãn ref, thanh bên, tìm
+kiếm (tiêu chí thành công 3, 4, 5, 6). Plan 02-05 đã đóng, checkpoint #2 chốt canvas.
+
+**Ghi chú cho 02-06, đọc trước khi lập/thực thi plan:**
+- `selectedCommitId` hiện là `useState` trong `App.tsx` (plan 02-05) — ARCHITECTURE.md
+  Pattern 3 khuyên `selectionStore` riêng ("giữ CHỈ id, không giữ dữ liệu commit") khi vùng
+  chi tiết không phải con của `App`. Quyết định nâng cấp hay giữ nguyên thuộc về plan này.
+- `.commit-row` là CSS Grid độc lập mỗi hàng, cột subject có sàn cứng `minmax(120px, 2fr)`
+  (checkpoint round 1 — đừng đổi lại `minmax(0, ...)`, có test `app.css.test.ts` chặn). Nếu
+  02-06 thêm cột mới vào `.commit-row` (ví dụ nhãn ref), cân nhắc lại bài toán co cột — đo
+  bằng trình duyệt thật (Playwright, xem quy trình ở `02-05-SUMMARY.md`), đừng chỉ tin
+  `npm test` vì happy-dom không tính layout CSS thật.
+- `historyStore.ts` là nguồn `commits`/`graphRows`; `GitRef.target` đã giải tham chiếu, neo
+  nhãn vào `GraphRow.commitId` bằng so bằng thẳng (ghi chú từ 02-04-SUMMARY.md, vẫn đúng).
 
 Phase 1 đã đóng, 4/4 plan: 01-01 (PLAT-02 ghim cấu hình git), 01-02 (hạ tầng test giao diện),
 01-03 (PLAT-07 danh sách repository gần đây), 01-04 (kịch bản QA + checkpoint locale).

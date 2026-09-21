@@ -14,6 +14,7 @@ provides:
   - "App.tsx nối CommitList vào vùng main — mở repo thấy lịch sử thật"
 affects:
   - "02-06 (giao diện chi tiết): cần nâng selectedCommitId từ useState lên selectionStore nếu vùng chi tiết không phải con của App.tsx"
+  - "02-06 (nhãn ref trong CommitList): .commit-row có sàn cứng minmax(120px, 2fr) cho cột subject (checkpoint round 1) — nếu thêm cột mới (ví dụ nhãn ref), đo lại bằng Playwright/Chromium thật, đừng chỉ tin npm test (happy-dom không tính layout CSS thật)"
   - "02-07 (checkpoint #1 hiệu năng): PAGE_SIZE=1000, ROW_HEIGHT=28 là input cho đo FPS cuộn"
 
 tech-stack:
@@ -52,23 +53,23 @@ decisions:
   - "[Checkpoint round 1] .commit-subject đổi minmax(0, 2fr) -> minmax(120px, 2fr): cột subject không bao giờ được co về 0px, đo thật bằng Chromium/Playwright — xem mục riêng"
   - "[Checkpoint round 1] CommitList.scrollHeight chuyển từ đọc trực tiếp scrollRef.current?.clientHeight trong thân render sang ResizeObserver — tránh canvas kẹt ở height=0 nếu không có re-render nào khác xảy ra sau khi container có kích thước thật"
 
-requirements-completed: []
+requirements-completed: [HIST-01, HIST-02, HIST-04, HIST-11]
 
-duration: "~110 phút (Task 1-3; Task 4 dừng ở checkpoint người dùng) + ~90 phút điều tra và sửa checkpoint round 1"
+duration: "~110 phút (Task 1-3; Task 4 dừng ở checkpoint người dùng) + ~90 phút điều tra và sửa checkpoint round 1 + checkpoint round 2 được người dùng chấp thuận"
 completed: "2026-09-21"
 ---
 
 # Phase 2 Plan 05: Canvas graph + virtualizer + CommitList — Summary
 
-Vùng giữa của ứng dụng không còn là chỗ trống: mở repository giờ hiện danh sách commit thật
-kèm cột đồ thị canvas nhiều lane có màu, cùng dựng từ một mảng `virtualItems` duy nhất của
-`@tanstack/react-virtual`. **Task 1-3 đã hoàn thành và tự động hoá đầy đủ. Task 4 — checkpoint
-người dùng kiểm bằng mắt sáu bước (thẳng hàng lúc cuộn nhanh, độ nét HiDPI, bấm chọn qua
-`div`, hình dạng bệnh lý) — CHƯA thực hiện. Đây là quyết định kiến trúc lâu dài (chốt canvas
-hay phải viết lại bằng SVG) mà chỉ người dùng thật quan sát ứng dụng đang chạy mới trả lời
-được; agent không có cách tương tác với ứng dụng đang chạy để tự kiểm bước này.**
+**PLAN ĐÃ ĐÓNG — checkpoint #2 đạt ở vòng 2.** Vùng giữa của ứng dụng không còn là chỗ trống:
+mở repository hiện danh sách commit thật kèm cột đồ thị canvas nhiều lane có màu, cùng dựng
+từ một mảng `virtualItems` duy nhất của `@tanstack/react-virtual`. Cả bốn task đã hoàn thành.
+Task 4 (checkpoint người dùng) trải qua hai vòng: vòng 1 bị từ chối vì cột thông điệp co về
+gần như trống ở cửa sổ hẹp + nhiều lane (xem mục "Checkpoint round 1: REJECTED"); đã sửa,
+xác nhận lại bằng đo Chromium thật, và vòng 2 người dùng tự chạy app thật, kiểm lại, trả lời
+**"approved"**.
 
-## Trạng thái checkpoint #2 — CHƯA CHỐT
+## Trạng thái checkpoint #2 — ĐÃ CHỐT: CANVAS
 
 Task 4 (`type="checkpoint:human-verify" gate="blocking"`) đòi người dùng chạy `npm run
 tauri:dev` (hoặc `dev.cmd`), mở chính repo `git-plum`, và làm sáu bước kiểm bằng mắt liệt kê
@@ -76,9 +77,11 @@ tauri:dev` (hoặc `dev.cmd`), mở chính repo `git-plum`, và làm sáu bướ
 test đơn vị/tích hợp không thể chứng minh "hình có thẳng hàng thật trên màn hình" hay "có mờ
 khi Windows đặt tỉ lệ 125%" — đó chính xác là lý do checkpoint tồn tại.
 
-**Quyết định canvas-hay-SVG của checkpoint #2 vẫn để ngỏ.** `interface GraphRenderer` đã
-dựng sẵn đường lùi (xem `src/lib/graph-render/types.ts`), nhưng việc chốt "canvas đạt" hay
-"cần viết `svgRenderer.ts`" là của người dùng sau khi làm sáu bước.
+**Quyết định canvas-hay-SVG của checkpoint #2: CHỐT CANVAS.** Người dùng đã tự chạy app thật,
+làm lại sáu bước ở vòng 2 (sau khi sửa lỗi vòng 1), và trả lời **"approved"**. `interface
+GraphRenderer` (`src/lib/graph-render/types.ts`) vẫn giữ nguyên làm đường lùi cho tương lai —
+đổi sang SVG chỉ cần viết `svgRenderer.ts` cài đúng interface và đổi một dòng import ở
+`GraphCanvas.tsx` — nhưng không có kế hoạch nào cần việc đó ở thời điểm này.
 
 ## Checkpoint round 1: REJECTED
 
@@ -390,6 +393,24 @@ cần đổi.
 Trả lời "approved" nếu cả sáu bước đạt. Nếu không, nêu **bước số mấy** và hiện tượng thấy
 được (lệch bao nhiêu hàng ở tốc độ cuộn nào / mờ ở tỉ lệ màn hình nào / bấm chỗ nào không ăn).
 
+## Checkpoint round 2: APPROVED
+
+Người dùng tự chạy `npm run tauri:dev`, mở repo `git-plum` thật, làm lại sáu bước kiểm bằng
+mắt sau khi sửa lỗi vòng 1 (cột subject co về 0px, canvas kẹt height=0 — cả hai đã sửa ở
+`cc270e4`), và trả lời **"approved"**.
+
+**Bằng chứng lần này:** câu trả lời "approved" bằng lời, **không kèm ảnh chụp hay mô tả chi
+tiết từng bước** như vòng 1 (vòng 1 có ảnh chụp thật + mô tả cụ thể hai lỗi quan sát được).
+Ghi rõ sự khác biệt này để minh bạch: vòng 2 dựa trên xác nhận trực tiếp của người dùng sau
+khi họ tự kiểm, không phải bằng chứng hình ảnh mà agent tự phân tích được như vòng 1. Đây
+đúng là bản chất của checkpoint `human-verify` — quyết định cuối cùng thuộc về người dùng
+quan sát ứng dụng thật, và "approved" là tín hiệu resume hợp lệ theo đúng đặc tả
+`<resume-signal>` của Task 4.
+
+**Quyết định checkpoint #2 (canvas hay SVG): CHỐT CANVAS.** Không cần viết `svgRenderer.ts`
+ở thời điểm này. `interface GraphRenderer` vẫn là đường lùi nếu sau này hiệu năng hoặc yêu
+cầu hiển thị đổi khác.
+
 ## Deviations from Plan
 
 ### Auto-fixed Issues
@@ -450,10 +471,31 @@ Commit đã tạo (đều có trong `git log`):
 
 ## Trạng thái requirement
 
-**HIST-01, HIST-02, HIST-04, HIST-11 giữ `Pending`** cho tới khi checkpoint Task 4 được
-người dùng chấp thuận (vòng 2, sau khi sửa checkpoint round 1) — must-have của plan (*"Người
-dùng đã kiểm bằng mắt sáu bước và chấp thuận"*) chưa thoả. Đừng đánh dấu complete trước khi
-có "approved" thật, và đừng tự cho rằng hai lỗi vòng 1 đã hết chỉ vì test tự động xanh — bản
-chất của lỗi vòng 1 là **test tự động không đủ khả năng bắt được nó** (xem mục "Bài học" phía
-trên). Việc "sửa xong" ở đây được xác nhận bằng đo lại thật với Chromium/Playwright, không chỉ
-bằng npm test xanh.
+**HIST-01, HIST-02, HIST-04, HIST-11 chuyển sang `Done`.** Checkpoint Task 4 đã được người
+dùng chấp thuận ở vòng 2 ("approved", sau khi tự chạy app thật và kiểm lại sáu bước) — must-have
+của plan (*"Người dùng đã kiểm bằng mắt sáu bước và chấp thuận"*) đã thoả.
+
+Lý do cả bốn đủ điều kiện đóng ở plan này, không phải chờ 02-06:
+
+- **HIST-01** ("thấy danh sách commit, nạp theo trang") — quan sát được trực tiếp: `CommitList`
+  render commit thật, `ensureRange` nạp trang khi cuộn tới vùng chưa có dữ liệu.
+- **HIST-02** ("thấy đồ thị nhánh nhiều làn có màu, vẽ bên trái danh sách") — quan sát được
+  trực tiếp: canvas vẽ nhiều lane với `LANE_COLORS`, nằm bên trái cột văn bản. Người dùng xác
+  nhận qua sáu bước, gồm cả bước 6 (repo `octopus`/`wide` — hình dạng nhiều nhánh).
+- **HIST-04** ("đồ thị luôn thẳng hàng ở mọi vị trí cuộn") — đây **chính xác** là nội dung
+  bước 1-3 của checkpoint (thẳng hàng lúc nghỉ, lúc cuộn nhanh, lúc cuộn bằng bàn phím/con
+  lăn). Không có tiêu chí nào khác cho HIST-04 ngoài việc này, và người dùng đã kiểm trực tiếp.
+- **HIST-11** ("tên tệp/thông điệp không UTF-8 vẫn hiển thị được") — đã ghim ở tầng ref từ
+  02-04; plan này ghim thêm ở tầng hiển thị: `hasInvalidUtf8` render một hàng bình thường kèm
+  dấu cảnh báo, không bị lọc bỏ (test `CommitList.test.tsx`). Không phụ thuộc panel "Chi tiết".
+
+**Không đóng theo cùng tiền lệ với 02-04** (giữ Pending vì "chưa có gì hiển thị") vì tình
+huống đã khác: 02-04 đóng khi **backend đủ nhưng chưa có component nào hiển thị**. Plan này
+đóng khi **cả hiển thị lẫn xác nhận bằng mắt đều đã có** — đúng thời điểm các mô tả "người
+dùng thấy..." trong REQUIREMENTS.md trở thành sự thật quan sát được, không phải suy diễn.
+
+**Vẫn Pending, không đóng ở đây và không nên đóng nhầm:** HIST-03 (hình dạng bệnh lý — mới
+kiểm một phần qua bước 6, chưa có checkpoint riêng), HIST-05 (hiệu năng 100k commit — của
+checkpoint #1, plan 02-07), HIST-06/07 (nhãn ref, thanh bên — của plan 02-06), HIST-08/09/10
+(chi tiết commit, cây/phẳng, tìm kiếm — của plan 02-06). Bốn requirement này **không** nằm
+trong `requirements:` frontmatter của plan 02-05 và không được đánh dấu ở đây.
