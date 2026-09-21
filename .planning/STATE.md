@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-09-21T07:47:45.680Z"
+last_updated: "2026-09-21T08:16:18.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 11
-  completed_plans: 4
-  percent: 36
+  completed_plans: 6
+  percent: 55
 ---
 
 # Project State: git-plum
@@ -33,9 +33,9 @@ progress:
 | | |
 |---|---|
 | **Phase** | 2 — Lịch sử và đồ thị nhánh |
-| **Plan** | 1 / 7 xong (02-01 — bộ repo mẫu và bộ sinh repo hiệu năng) |
-| **Status** | Wave 1 của Phase 2 xong; wave 2 (phân tích `git log`) sẵn sàng chạy |
-| **Progress** | Phase 1/8 · Phase 2 plan 1/7 |
+| **Plan** | 2 / 7 xong (02-02 — hợp đồng dữ liệu và bộ phân tích `git log`) |
+| **Status** | Wave 2 của Phase 2 xong; wave 3 (thuật toán gán lane) sẵn sàng chạy |
+| **Progress** | Phase 1/8 · Phase 2 plan 2/7 |
 
 ```
 [#.......] 1/8 phases
@@ -62,7 +62,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Metric | Value |
 |---|---|
 | Phases completed | 1 / 8 (có nợ) |
-| Plans completed | 5 |
+| Plans completed | 6 |
 | v1 requirements delivered | 7 / 59 đã kiểm chứng · 2 nữa có mã nhưng chưa kiểm thật (PLAT-07, PLAT-09) · PLAT-01 và REL-04 đạt ở mức yếu hơn ROADMAP |
 
 | Plan | Thời lượng | Tasks | Files |
@@ -71,6 +71,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 1 P02 | 9min | 3 tasks | 6 files |
 | Phase 1 P03 | 14min | 3 tasks | 6 files |
 | Phase 2 P01 | 50min | 3 tasks | 9 files |
+| Phase 2 P02 | 35min | 2 tasks | 8 files |
 
 ---
 
@@ -95,6 +96,12 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 - **Merge octopus: không dùng `--no-ff`** (plan 02-01): `--no-ff` thêm chính `main` làm một cha nữa (5 cha thay vì 4). Và `main` phải có commit riêng trước khi rẽ nhánh, nếu không chiến lược octopus fast-forward và chỉ ra 3 cha.
 - **`module testing` là `pub`, không phải `#[cfg(test)]`** (plan 02-01): benchmark `criterion` là target riêng và không thấy mã dưới `#[cfg(test)]`, mà checkpoint #1 đòi benchmark gán lane ở 100k commit. Thiếu fixture thì `require_fixture` bỏ qua **ồn ào** (`eprintln!` + `None`), không panic — người mới clone repo chạy `cargo test` phải thấy xanh kèm lời nhắc.
 - **Repo mẫu phải tất định tuyệt đối** (plan 02-01): ghim cả sáu biến `GIT_AUTHOR_*`/`GIT_COMMITTER_*`, dấu thời gian tăng dần cố định, `--initial-branch=main`, `core.autocrlf=false` (đặt **lúc clone**, không phải sau). Lý do: plan 02-03 chụp snapshot `insta` của đầu ra gán lane, SHA trôi thì snapshot đỏ vô cớ.
+- **`parse_log` trả `LogParseResult` chứ không trả `Result`** (plan 02-02, HIST-11): một bản ghi méo không được làm đổ cả trang lịch sử — đó là DoS (T-02-04) vì commit hỏng do người khác tạo ra nhiều năm trước. Nhưng cũng không được biến mất im lặng, nên `skipped_records` và `bad_timestamps` đi kèm kết quả và plan 02-04 ghi `tracing::warn!` khi khác 0.
+- **`LOG_FORMAT` và `LOG_ARGS` là hằng duy nhất chứa định dạng và `--topo-order`** (plan 02-02): call site không được chép lại chuỗi. `LOG_FORMAT` với `FIELD_COUNT` là hợp đồng hai chiều — sửa một bên quên bên kia làm mọi bản ghi lệch một nấc mà không báo lỗi, nên có test đếm số `%x1f`.
+- **git chèn `\n` sau mỗi `\x1e`** (plan 02-02, đo bằng `xxd`: buffer chứa `1e 0a`): không cắt byte đó thì **mọi** mã commit dài 41 ký tự và mọi phép so mã về sau thất bại trong im lặng. Đây là bước `trim` đầu mỗi bản ghi trong `parse_record`.
+- **Phần thừa sau dấu `\x1f` thứ chín nằm lại trong `%b`** (plan 02-02, T-02-05): người tạo commit có thể cố ý chèn `\x1f` vào thông điệp; điều đó không được sinh ra bản ghi giả. Vòng lặp `break` khi đủ chín dấu thay vì tách hết rồi nối lại — cùng kết quả byte, không cấp phát.
+- **`bstr` không dùng trong `parse_log`** (plan 02-02): tách theo hai byte là việc của `memchr`, giải mã lossy là việc của `std`. Crate vẫn giữ trong `Cargo.toml` cho plan 02-04/02-05, nơi `for-each-ref` và `diff --name-status -z` có thể cần thao tác chuỗi byte thật sự.
+- **Ngân sách hiệu năng Core Value, đo thật ở 100k commit** (plan 02-02): `git log` mười trường 693ms / 18,9MB + `parse_log` 63ms = **758ms**. Còn khoảng **240ms** cho gán lane trước khi chạm mốc một giây của tiêu chí 1.
 - **Hai thao tác có tham số đi ngoài sổ đăng ký PLAT-04** (`onOpen`/`onForget` truyền bằng prop): `Command.run` có chữ ký `() => void | Promise<void>`, không nhận tham số. Mở rộng sổ đăng ký cho lệnh có tham số để dành cho v2 lúc làm bảng lệnh gõ nhanh. `repo.open` và `repo.close` vẫn đi qua sổ đăng ký như cũ.
 - Chi tiết đầy đủ các quyết định kỹ thuật: xem `.planning/PROJECT.md` mục Key Decisions và `.planning/research/SUMMARY.md` mục 3.
 
