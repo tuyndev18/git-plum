@@ -161,8 +161,27 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
               {commit ? (
                 <>
                   <span className="commit-graph-gutter" style={{ width: graphWidth(maxLane) }} />
-                  <span className="commit-subject" title={commit.subject}>
+                  {/*
+                    Nhãn ref có CỘT GRID RIÊNG, không nằm trong
+                    `.commit-subject` — sửa nguyên nhân B của checkpoint
+                    round 1 (badge ăn hết không gian chữ message; đo thật:
+                    nhóm 4 badge chiếm 258px trong khi cột subject chỉ còn
+                    144px ở cửa sổ 900px, chữ message hiển thị 0%). Xem khối
+                    comment `.commit-row` trong `app.css`.
+
+                    Ô bọc `.commit-ref-cell` LUÔN được render, kể cả khi
+                    không có ref nào: `RefBadges` trả `null` theo đúng đặc tả
+                    ("không có ref -> không render gì, không chiếm chiều
+                    cao"), và nếu để nó tự làm ô grid thì hàng không nhãn sẽ
+                    THIẾU một ô — mọi ô sau đó dồn sang trái một cột và lệch
+                    cột so với hàng có nhãn. Ô rỗng có bề rộng 0 (cột là
+                    `minmax(0, max-content)`) nên không tốn chỗ, chỉ giữ
+                    đúng số lượng ô grid cho mọi hàng.
+                  */}
+                  <span className="commit-ref-cell">
                     <RefBadges refs={refsByCommit?.get(commit.id) ?? []} />
+                  </span>
+                  <span className="commit-subject" title={commit.subject}>
                     {commit.subject}
                     {commit.hasInvalidUtf8 && (
                       <span className="commit-encoding-flag" title="Chứa byte không phải UTF-8">

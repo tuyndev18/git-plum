@@ -150,3 +150,78 @@ describe('.commit-row containment — badge không được phá chiều cao hà
     expect(block).toContain('overflow: hidden')
   })
 })
+
+/*
+ * Nguyên nhân B của checkpoint round 1 (plan 02-06): `RefBadges` từng render
+ * BÊN TRONG `.commit-subject`, nên badge và chữ message cạnh tranh CÙNG một
+ * cột grid. Đo thật bằng Chromium nạp Segoe UI thật: nhóm 4 badge chiếm
+ * 258px trong khi cột subject chỉ còn 332px (cửa sổ 1440px) rồi 144px (cửa
+ * sổ 900px) — chữ message hiển thị 27% rồi **0%**. Khớp chính xác ảnh chụp
+ * của người dùng: chỉ hàng nhiều badge mất chữ, hàng không badge vẫn bình
+ * thường.
+ *
+ * Hai test dưới đây chặn hồi quy về CẤU TRÚC, thứ mà test đọc-chuỗi-CSS ở
+ * trên không thể bắt: một là cột badge phải tồn tại trong grid, hai là
+ * `RefBadges` không được nằm lại trong `.commit-subject` ở JSX.
+ */
+describe('nhãn ref phải có cột grid riêng, không dùng chung cột với chữ message', () => {
+  it('.commit-row có ĐÚNG 6 cột — cột nhãn ref là cột riêng', () => {
+    const block = extractCommitRowBlock(css)
+    const match = block.match(/grid-template-columns:\s*([^;]+);/)
+    expect(match, 'phải tìm thấy grid-template-columns trong .commit-row').not.toBeNull()
+
+    // Đếm số track: tách theo khoảng trắng nhưng giữ nguyên các hàm
+    // minmax(...)/max-content thành một track.
+    const tracks = match![1]
+      .trim()
+      .split(/\s+(?![^(]*\))/)
+      .filter(Boolean)
+
+    expect(
+      tracks.length,
+      `phải có 6 cột (graph, nhãn ref, message, tác giả, thời gian, sha) nhưng thấy ${tracks.length}: ${tracks.join(' | ')}`,
+    ).toBe(6)
+  })
+
+  it('cột nhãn ref có sàn 0 để nhường chỗ được khi cửa sổ hẹp', () => {
+    const start = css.indexOf('.commit-ref-cell {')
+    expect(start, 'phải tìm thấy khối .commit-ref-cell — ô grid của cột nhãn').toBeGreaterThan(-1)
+    const block = css.slice(start, css.indexOf('}', start))
+
+    // max-width cứng: nhóm nhãn không bao giờ chiếm quá phần chia của nó,
+    // nên cột message luôn giữ phần lớn không gian ở cửa sổ rộng.
+    expect(block, '.commit-ref-cell phải có max-width cứng').toContain('max-width')
+    expect(block, '.commit-ref-cell phải có min-width: 0 để co được').toContain('min-width: 0')
+  })
+})
+
+/*
+ * Chặn ở tầng JSX, không chỉ tầng CSS: cột grid riêng trong `app.css` là vô
+ * nghĩa nếu `CommitList.tsx` lại đặt `RefBadges` vào trong `.commit-subject`
+ * như trước. Test này đọc thẳng nguồn JSX vì happy-dom không tính layout nên
+ * không có cách nào đo được hệ quả bằng render.
+ */
+describe('CommitList.tsx — RefBadges không được nằm trong .commit-subject', () => {
+  const tsxPath = path.join(process.cwd(), 'src', 'components', 'history', 'CommitList.tsx')
+  const tsx = readFileSync(tsxPath, 'utf8')
+
+  it('RefBadges nằm trong .commit-ref-cell, không nằm trong .commit-subject', () => {
+    const refCellIdx = tsx.indexOf('className="commit-ref-cell"')
+    expect(refCellIdx, 'CommitList phải render ô grid .commit-ref-cell').toBeGreaterThan(-1)
+
+    const badgeIdx = tsx.indexOf('<RefBadges')
+    expect(badgeIdx, 'CommitList phải render <RefBadges').toBeGreaterThan(-1)
+
+    // RefBadges phải xuất hiện NGAY SAU .commit-ref-cell và TRƯỚC
+    // .commit-subject — nếu nó nằm sau thẻ mở .commit-subject thì badge lại
+    // dùng chung cột với chữ message, đúng lỗi của checkpoint round 1.
+    const subjectIdx = tsx.indexOf('className="commit-subject"')
+    expect(subjectIdx, 'CommitList phải render .commit-subject').toBeGreaterThan(-1)
+
+    expect(
+      badgeIdx > refCellIdx && badgeIdx < subjectIdx,
+      `<RefBadges phải nằm giữa .commit-ref-cell (${refCellIdx}) và .commit-subject (${subjectIdx}) ` +
+        `nhưng đang ở ${badgeIdx} — nếu nó nằm sau .commit-subject thì badge lại ăn vào cột chữ message`,
+    ).toBe(true)
+  })
+})

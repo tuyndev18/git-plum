@@ -492,26 +492,44 @@ button:disabled {
  * dù phải giẫm lên `.commit-author`/`.commit-time` (giờ co được, xem dưới).
  */
 /*
- * Checkpoint round 1 REJECTED (plan 02-06, đo bằng ảnh chụp thật của người
- * dùng): hàng có nhiều badge ref cao hơn hàng thường, kéo theo chấm đồ thị
- * (canvas, vẽ theo ROW_HEIGHT cố định từ geometry.ts) lệch khỏi tâm hàng.
- * `overflow: hidden` + `min-height: 0` là bắt buộc ở CHÍNH `.commit-row`:
- * đây là container CSS Grid, và grid item mặc định có `min-height: auto`
- * (không phải `0`) — nghĩa là nội dung con (`.ref-badges` với nhiều badge)
- * có thể ép TRACK của grid cao lên vượt `height: 28px` đặt qua inline style
- * của virtualizer, bất kể `.commit-subject` bên trong có `overflow: hidden`
- * hay không. `overflow: hidden` trên `.commit-subject` chỉ cắt được NỘI DUNG
- * của chính nó theo chiều ngang (text-overflow: ellipsis) — nó không ngăn
- * được grid TRACK cha giãn theo chiều dọc nếu track đó không tự giới hạn.
- * Không tái hiện được lỗi này trong Chromium/Playwright headless (font thay
- * thế Segoe UI có thể đo khác WebView2 thật trên Windows), nhưng sửa theo
- * hướng containment cứng này loại bỏ toàn bộ lớp lỗi bất kể nguyên nhân đo
- * chữ chính xác là gì — `overflow: hidden` trên container Grid luôn buộc
- * track height tôn trọng `height` đã đặt, không phụ thuộc phông chữ.
+ * Checkpoint round 1 REJECTED (plan 02-06) — HAI nguyên nhân độc lập, cả hai
+ * đã sửa. Xem `02-06-SUMMARY.md` mục "Checkpoint round 1: REJECTED".
+ *
+ * NGUYÊN NHÂN A (chiều cao hàng). `.commit-row` là container CSS Grid, và
+ * grid item mặc định có `min-height: auto` (không phải `0`) — nội dung con
+ * có thể ép TRACK của grid cao lên vượt `height: 28px` mà virtualizer đặt
+ * qua inline style, bất kể con có `overflow: hidden` hay không (overflow
+ * trên con chỉ cắt nội dung của CHÍNH nó). Hàng cao hơn ROW_HEIGHT làm chấm
+ * đồ thị lệch, vì canvas vẽ theo `rowY(index) = index * ROW_HEIGHT` cố định.
+ * Sửa: `overflow: hidden` + `min-height: 0` ngay trên `.commit-row`.
+ *
+ * NGUYÊN NHÂN B (badge ăn hết không gian chữ) — nguyên nhân CHÍNH của thứ
+ * người dùng thấy. Trước đây `RefBadges` render BÊN TRONG `.commit-subject`,
+ * nên badge và chữ message cạnh tranh CÙNG một cột grid. Đo thật bằng
+ * Chromium + Segoe UI THẬT (nạp từ C:/Windows/Fonts): nhóm 4 badge
+ * (`master HEAD`, `origin/HEAD`, `origin/master`, `+1`) chiếm **258px**.
+ * Ở vùng `main` thật (52% cửa sổ) cột subject chỉ rộng 332px (cửa sổ 1440px)
+ * hoặc 144px (cửa sổ 900px) — tức badge chiếm 78%, rồi 179% toàn bộ cột.
+ * Chữ message còn hiển thị được 27%, rồi **0%**. Hàng không badge vẫn hiện
+ * chữ bình thường — khớp chính xác ảnh người dùng gửi (chỉ hàng nhiều badge
+ * mất chữ). Sửa ĐÚNG CẤU TRÚC, không tinh chỉnh px: badge có **cột grid
+ * riêng** (cột 2 dưới đây), đúng như tham chiếu thiết kế GitKraken có cột
+ * `BRANCH / TAG` tách biệt khỏi cột `COMMIT MESSAGE`
+ * (`docs/screenshots/main-1.png`, `main-4.png`). Cột badge dùng
+ * `minmax(0, max-content)` + `max-width` cứng trên `.ref-badges` để nó co
+ * được và không bao giờ ăn quá phần chia của mình; badge tự cắt tên dài bằng
+ * ellipsis (GitKraken cũng làm vậy: `ma...`, `feature/uploa...`).
+ *
+ * Vì sao phép đo vòng điều tra TRƯỚC cho ÂM TÍNH GIẢ: đo bằng Chromium tải
+ * rời KHÔNG có Segoe UI cài sẵn nên rơi về phông thay thế hẹp hơn đáng kể,
+ * và đo `CommitList` ở full viewport thay vì bề rộng vùng `main` thật (52%).
+ * Hai sai số đó cộng lại làm badge "vừa đủ chỗ" trong phép đo trong khi tràn
+ * rõ rệt trên máy thật. Bài học: đo layout phải khớp CẢ phông CẢ bề rộng
+ * vùng chứa thật.
  */
 .commit-row {
   display: grid;
-  grid-template-columns: max-content minmax(120px, 2fr) minmax(0, 1fr) minmax(60px, max-content) minmax(50px, max-content);
+  grid-template-columns: max-content minmax(0, max-content) minmax(120px, 2fr) minmax(0, 1fr) minmax(60px, max-content) minmax(50px, max-content);
   align-items: center;
   gap: 10px;
   padding: 0 10px;
@@ -548,33 +566,73 @@ button:disabled {
 }
 
 /*
- * Nhãn ref (HIST-06) nằm TRONG `.commit-subject` (`overflow: hidden;
- * white-space: nowrap` đã có sẵn) — không phải cột riêng, không phải hàng
- * riêng. Đây là quyết định có chủ ý sau bài học checkpoint round 1 của
- * 02-05: thêm MỘT cột grid mới cho nhãn sẽ lặp lại đúng bài toán co cột đã
- * gây lỗi (nhiều cột max-content/minmax cạnh tranh không gian ở cửa sổ hẹp).
- * Đặt nhãn inline trước subject nghĩa là chúng dùng chung ngân sách bề rộng
- * với chính subject và bị cắt cùng nhau bằng `text-overflow: ellipsis` của
- * phần tử cha — không có cột nào mới để co về 0px.
+ * Nhãn ref (HIST-06) — CỘT GRID RIÊNG (cột 2 của `.commit-row`), không còn
+ * nằm trong `.commit-subject`. Đây là sửa nguyên nhân B của checkpoint
+ * round 1 (xem khối comment của `.commit-row` phía trên cho số đo thật).
  *
- * `white-space: nowrap` trên `.commit-row` (đã có) + `display: inline-flex`
- * ở đây (không phải `inline-block` xuống dòng) giữ chiều cao hàng CỐ ĐỊNH
- * bất kể số nhãn — ràng buộc HIST-04 (đồ thị không được lệch hàng).
+ * Vì sao cột riêng chứ không phải tinh chỉnh px trong cột subject: badge và
+ * chữ message cạnh tranh cùng một không gian là SAI VỀ CẤU TRÚC — mọi cách
+ * chỉnh `max-width` bên trong một cột dùng chung chỉ dịch chuyển điểm vỡ chứ
+ * không loại bỏ nó. Tham chiếu thiết kế GitKraken (`docs/screenshots/
+ * main-1.png`, `main-4.png`) cũng tách hẳn cột `BRANCH / TAG` khỏi cột
+ * `COMMIT MESSAGE` đúng vì lý do này.
+ *
+ * Vì sao cột này KHÔNG lặp lại lỗi co cột của checkpoint round 1 plan 02-05
+ * (nguyên nhân từng làm subject co về 0px): cột badge là
+ * `minmax(0, max-content)` — sàn `0` nên nó **nhường chỗ được hoàn toàn** khi
+ * hẹp, trái với `max-content` cứng (không bao giờ co) của cột date/sha từng
+ * gây lỗi. Cộng với `max-width` cứng trên `.ref-badges` dưới đây, cột badge
+ * không bao giờ chiếm quá phần chia của nó, và cột subject giữ nguyên sàn
+ * `minmax(120px, 2fr)` mà chính checkpoint round 1 của 02-05 đã thêm.
+ *
+ * `max-height` + `overflow: hidden` giữ chiều cao hàng cố định bất kể số
+ * nhãn (nguyên nhân A, ràng buộc HIST-04 — đồ thị không được lệch hàng).
  */
-.ref-badges {
-  display: inline-flex;
-  flex-wrap: nowrap;
+/*
+ * Ô grid của cột nhãn. LUÔN tồn tại cho mọi hàng (kể cả hàng không có ref)
+ * để số ô grid không đổi giữa các hàng — xem comment trong `CommitList.tsx`.
+ * Rỗng thì bề rộng 0, không tốn chỗ.
+ *
+ * `max-width` cứng ở đây là chặn trên tuyệt đối: nhóm nhãn không bao giờ
+ * chiếm quá 220px dù cột grid được chia rộng bao nhiêu, nên cột message luôn
+ * giữ phần lớn không gian ở cửa sổ rộng.
+ */
+.commit-ref-cell {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  margin-right: 6px;
-  vertical-align: middle;
+  min-width: 0;
+  max-width: 220px;
   max-height: 18px;
   overflow: hidden;
 }
 
+.ref-badges {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-height: 18px;
+  overflow: hidden;
+}
+
+/*
+ * Badge tự cắt tên dài bằng ellipsis — `min-width` cho phép flex item co
+ * dưới kích thước nội dung (thiếu nó thì `text-overflow` không bao giờ kích
+ * hoạt trong flex container). GitKraken cắt y hệt: `ma...`, `feature/uploa...`.
+ * `flex-shrink` KHÁC 0 là có chủ ý — badge phải co được để nhóm badge tôn
+ * trọng `max-width` của `.commit-ref-cell` thay vì tràn ra ngoài.
+ *
+ * SÀN `min-width: 48px` (không phải `0`): đo thật ở cửa sổ 900px cho thấy
+ * `min-width: 0` làm badge co tới mức vô nghĩa (`m.`, `o.`, `o.` — không
+ * đọc được nhãn nào cả). Thà hiện ÍT nhãn mà đọc được rồi gộp phần còn lại
+ * vào `+N` (đúng cách GitKraken làm) còn hơn hiện nhiều nhãn không đọc nổi.
+ * Với sàn này, badge nào không đủ 48px sẽ bị `overflow: hidden` của
+ * `.commit-ref-cell` cắt khỏi vùng nhìn thấy thay vì teo lại thành một ký tự.
+ */
 .ref-badge {
-  display: inline-block;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 48px;
   padding: 0 5px;
   border-radius: 3px;
   font-size: 10px;
@@ -583,6 +641,13 @@ button:disabled {
   max-height: 16px;
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Chỉ báo `+N` không bao giờ được co hay bị cắt — nó là thông tin "còn N
+   nhãn nữa", mất nó nghĩa là người dùng không biết có nhãn bị ẩn. */
+.ref-badge--overflow {
+  flex-shrink: 0;
 }
 
 .ref-badge--local {
