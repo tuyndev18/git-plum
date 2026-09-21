@@ -208,5 +208,56 @@ bash scripts/fixtures/make-perf-repo.sh target/fixtures-perf/smoke 2000  # bản
 (threat T-02-03). Nó tách riêng khỏi `make-fixtures.sh` đúng vì lý do đó.
 
 <!-- PERF-NUMBERS:start -->
-Số thật sẽ được ghi vào đây sau lần chạy đầy đủ.
+### Số thật của lần chạy đầy đủ 100k
+
+Đo trên máy phát triển (Windows 11, git 2.54.0.windows.1), lệnh
+`bash scripts/fixtures/make-perf-repo.sh`:
+
+| Chỉ số | Giá trị |
+|---|---|
+| `git rev-list --all --count` | **100 007** |
+| `git log --all --topo-order` (số dòng) | **100 007** — khớp, không commit nào bị lược |
+| Commit merge (nhiều cha) | **3 182** |
+| trong đó octopus (≥3 cha) | **320** |
+| Số cha lớn nhất trên một commit | **3** |
+| Số con lớn nhất trên một commit | **21** (21 lane sống đồng thời) |
+| Kích thước `.git` trên đĩa | **32 MB** |
+| Thời gian sinh (fast-import) | **24 giây** |
+| Thời gian đóng gói (`repack -ad`) | **1 giây** |
+| Tổng thời gian chạy script | **32 giây** |
+
+**Mốc so sánh cho plan 02-02.** Đây là lệnh mà plan 02-02 sẽ phân tích:
+
+```
+git log --all --topo-order --format=%H%x1f%P%x1e | wc -c
+→ 847ms, 8 444 123 byte
+```
+
+847ms chỉ để git sinh ra và ống qua `wc` — chưa phân tích gì. Core Value đòi đồ thị mở
+trong **dưới một giây**, nên phần phân tích của Rust phải rất mỏng, và đây là lý do
+CONTEXT.md chốt "đọc theo luồng, không nạp cả `Output` vào bộ nhớ".
+
+### Về tốc độ sinh: vì sao không dùng tệp tạm trong `emit_data`
+
+Bản đầu của `emit_data` ghi một tệp tạm rồi gọi `wc -c` và `cat` cho **mỗi** khối `data`.
+Đo thật: **2 000 commit mất 328 giây**, tức 100k commit mất khoảng **4,5 giờ**. Toàn bộ thời
+gian là sinh tiến trình con, không phải việc của git.
+
+Bản hiện tại tính số byte trong bash (`${#s} + 1`) và không sinh tiến trình nào; `rand` trả
+kết quả qua biến toàn cục thay vì `$(...)`; các vòng lặp dùng `for (( ))` thay vì `$(seq)`.
+Kết quả: **24 giây cho 100k commit** — nhanh hơn khoảng **650 lần**.
+
+Đánh đổi: `emit_data` chỉ nhận **ASCII thuần**, và có cổng `case $s in *[!\ -~]*)` chặn
+ngay nếu lọt ký tự khác. Nội dung không-ASCII phải đi đường `wc -c` như `make-fixtures.sh`
+làm cho repo `non-utf8`. Script cũng `export LC_ALL=C` để cả cổng ASCII và `${#s}` (đếm
+byte) không đổi hành vi theo locale của máy.
+
+### Luồng thử 12 commit chạy trước luồng lớn
+
+Script luôn import một luồng nhỏ vào thư mục tạm trước khi chạy luồng thật. Điều này đã
+trả công ngay trong lúc phát triển: cổng ASCII viết sai lần đầu (`*[!$' \t!-~']*` khớp cả
+chuỗi ASCII thuần) và luồng thử bắt được trong **một giây** thay vì sau nhiều phút.
+
+Tính tất định đã kiểm: chạy hai lần độc lập ở mức 100k cho `HEAD` y hệt
+(`ab648b3bd1f4dbd2edb92543110ed4c3f7622431`).
 <!-- PERF-NUMBERS:end -->
