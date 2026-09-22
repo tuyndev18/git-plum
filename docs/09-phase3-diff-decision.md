@@ -2,9 +2,12 @@
 
 **Ngày lập:** 2026-09-21
 **Plan:** `03-01` (wave 1), checkpoint #3
-**Trạng thái:** ⏳ **chờ số đo** — công cụ đã dựng và đã kiểm, phép đo cuối cùng
-phải chạy trên bản release bởi người dùng thật. Không ô nào dưới đây được lấp bằng
-số ước lượng hay nội suy.
+**Trạng thái:** ⏭️ **BỎ QUA** — chủ dự án quyết định bỏ qua phép đo ngày 2026-09-22
+khi được hỏi trực tiếp (hai lựa chọn: tự đo ~5 phút, hoặc bỏ qua kèm hệ quả đã nêu).
+Chọn **đường A** (`@codemirror/merge`) **không có bằng chứng đo**.
+
+Không ô nào dưới đây bị lấp bằng số ước lượng hay nội suy. Ô trống vẫn là ô trống —
+xem mục 8 cho hệ quả và điều kiện xem lại.
 
 ---
 
@@ -87,7 +90,7 @@ Repo công ty là repo làm việc thật của chủ dự án: phép đo **ch�
 
 ## 4. Bảng số đo thật
 
-> ⏳ **Chưa có.** Điền sau khi chạy `git-plum.exe` bản release theo mục 6.
+> ⏭️ **BỎ QUA** (2026-09-22) — xem mục 7 và 8. Ô này để trống có chủ ý; công cụ đo vẫn còn nếu muốn điền sau.
 > **Không** điền bằng số ước lượng — một ô trống trung thực hơn một con số bịa.
 
 | Đường | Lần 1 | Lần 2 | Lần 3 | Tốt nhất | Tệ nhất | Đạt ngưỡng? |
@@ -108,7 +111,7 @@ Dữ liệu đầu vào của lần đo (harness in ra sẵn để chép):
 
 ## 5. Kết quả kiểm word-level của đường A
 
-> ⏳ **Chưa có.**
+> ⏭️ **BỎ QUA** (2026-09-22) — xem mục 7 và 8.
 
 CONTEXT.md mục 4 viết "`@codemirror/merge` *có thể* tự cho word-level — cần kiểm,
 không giả định". Harness có nút riêng dựng đúng ca chủ dự án đưa:
@@ -127,7 +130,7 @@ phân biệt được hai lớp CSS mà CodeMirror 6 dùng:
 |---|---|
 | `.cm-changedText` | |
 | `.cm-changedLine` | |
-| Kết luận | ⏳ |
+| Kết luận | ⏭️ bỏ qua |
 
 ---
 
@@ -155,10 +158,52 @@ lần** (455 ms so với 67 ms) và làm tổng vượt mốc một giây. Số 
 
 ## 7. Quyết định
 
-> ⏳ **Chưa có.** Điền "A" hoặc "B" kèm lý do sau khi có bảng mục 4.
+> ⏭️ **ĐƯỜNG A (`@codemirror/merge`) — chọn KHÔNG CÓ SỐ ĐO.**
+>
+> Chủ dự án bỏ qua phép đo ngày 2026-09-22. Đây **không** phải kết luận từ ngưỡng mục 2:
+> ngưỡng đó chưa được đối chiếu với bất kỳ con số nào. Đường A được chọn vì nó là mặc
+> định khi thiếu bằng chứng — ít mã hơn — chứ không vì nó đã chứng minh đủ nhanh.
 
-Nếu quyết định khác điều ngưỡng mục 2 nói, ghi lý do **cạnh con số**, để người sau
-đọc được cả hai.
+Ngưỡng ở mục 2 (250 ms lần tốt nhất / 400 ms lần tệ nhất) **vẫn còn hiệu lực** cho bất
+kỳ lần đo nào về sau. Nó được chốt trước khi có số nào tồn tại (commit `d2b6dca`, kiểm
+được bằng `git log`), nên nếu sau này đo và vượt ngưỡng thì kết luận là **chuyển sang
+đường B**, không phải nới ngưỡng.
+
+---
+
+## 8. Hệ quả của việc bỏ qua, và điều kiện xem lại
+
+**Rủi ro cụ thể đang nhận.** Checkpoint #3 tồn tại vì `@codemirror/merge` **tự tính diff
+từ hai tài liệu đầy đủ**, trong khi `git diff` đã đưa sẵn diff. Với `yarn.lock` 632 KB —
+tệp thật trong repo của chủ dự án — CodeMirror sẽ diff lại hai bản ~630 KB mỗi lần mở.
+Không ai biết việc đó mất bao lâu. Ba khả năng, không phân biệt được mà không đo:
+
+1. Đủ nhanh → đường A đúng, không mất gì.
+2. Chậm thấy được nhưng dùng được → sẽ thành một phàn nàn ở exit gate dogfood (wave 5).
+3. Chậm tới mức treo giao diện → phải viết lại toàn bộ trình xem theo đường B.
+
+**Vì sao điều này đã từng xảy ra.** Phase 2 phải sửa đồ thị **ba vòng** vì viết xong mới
+phát hiện sai. Chủ dự án chọn đặt checkpoint #3 ở wave 1 đúng để tránh lặp lại — rồi bỏ
+qua chính phép đo đó. Ghi lại nguyên văn, không phán xét: đây là đánh đổi có ý thức giữa
+5 phút bây giờ và rủi ro viết lại sau.
+
+**Điều kiện xem lại, cụ thể để nhận ra được:**
+
+- **Ở wave 5 (exit gate dogfood):** nếu mở diff của một tệp lớn cảm thấy chậm, đó **là**
+  phép đo — công cụ vẫn còn (`SpikeHarness` + `spike_blob_pair`), chạy mục 6 rồi đối chiếu
+  ngưỡng mục 2.
+- **Trước khi xoá `SpikeHarness`:** đừng xoá cho tới khi wave 5 đóng. Nó là đường duy nhất
+  lấy được số này mà không phải dựng lại.
+- **Nếu 03-04 phải viết lại theo đường B:** `interface GraphRenderer` của Phase 2 là tiền
+  lệ — 03-04 phải giữ trình xem sau một interface để việc đổi đường là sửa một tệp, không
+  phải sửa cả giao diện.
+
+**Hai thứ KHÔNG bị ảnh hưởng bởi quyết định này**, đã kiểm:
+
+- **Word-level diff** lấy từ `git diff --word-diff=porcelain` (wave 3, đã xong). `spans` là
+  dữ liệu thuần, dùng được cho cả A lẫn B.
+- **Toàn bộ backend** (wave 2): parser, cache LRU, cổng DIFF-06. Không tệp nào của wave 2
+  đọc quyết định A/B.
 
 ---
 
