@@ -36,6 +36,8 @@
 import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import {
   EditorView,
+  GutterMarker,
+  gutter,
   highlightWhitespace,
   lineNumbers,
   type DecorationSet,
@@ -43,7 +45,8 @@ import {
 import { MergeView } from '@codemirror/merge'
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
 
-import { buildDecorations } from './decorations'
+import { buildDecorations, type LineMeta } from './decorations'
+import { dauThemXoa, soDongThat, type GutterSide } from './gutterNumbers'
 import { diffTheme } from './theme'
 import type { DiffRenderer, DiffRendererOptions } from './types'
 
@@ -70,10 +73,77 @@ const whitespaceCompartment = new Compartment()
 /** `Compartment` cho ngôn ngữ — đổi tệp không phải dựng lại view. */
 const languageCompartment = new Compartment()
 
+/**
+ * Gutter số dòng **thật trong tệp** cho một phía.
+ *
+ * 🔴 Không phải `lineNumbers()` trần. Mặc định đếm 1,2,3… theo **tài liệu của
+ * editor này**, và trong chế độ hai cột hai editor mang hai tài liệu khác nhau
+ * (phía cũ bỏ dòng `added`, phía mới bỏ dòng `removed`). Nên con số mặc định
+ * không phải số dòng trong tệp của người dùng — đúng lỗi họ báo ở checkpoint
+ * vòng 2, và đo được bằng Chromium thật: cả hai gutter đọc `1,2,3,…` giống nhau
+ * trong khi phía mới phải là `10..17` và phía cũ `10..15`.
+ *
+ * `soDongThat` trả **chuỗi rỗng** ở vị trí phía này không có dòng. Chỗ trống đó
+ * là thông tin: `@codemirror/merge` đã chèn widget `.cm-mergeSpacer` để căn hàng
+ * (đo được: 2 spacer, cao 36px và 72px cho hunk 2 và 4 dòng), nên hai cột vẫn
+ * thẳng theo nội dung — nhưng một **con số** ở hàng spacer sẽ nói sai.
+ *
+ * `lineMeta` truyền vào là mảng của **đúng tài liệu** mà editor này giữ, nên
+ * `lineNumber` mà CodeMirror đưa vào là chỉ số 1-based hợp lệ cho nó.
+ */
+function gutterSoDong(lineMeta: LineMeta[], side: GutterSide): Extension {
+  return lineNumbers({
+    formatNumber: (lineNumber) => soDongThat(lineMeta, side, lineNumber),
+  })
+}
+
+/**
+ * Gutter dấu `+` / `−`, ngay sau số dòng.
+ *
+ * Phân biệt thêm/xoá **không chỉ bằng màu** — nền dòng của dự án cố ý nhạt
+ * (`16%` alpha) để nền word-level đậm hơn còn nổi lên được, và hai nền nhạt
+ * đỏ/lục là ca không phân biệt được với người mù màu đỏ-lục.
+ */
+function gutterDau(lineMeta: LineMeta[]): Extension {
+  return gutter({
+    class: 'cm-diffSignGutter',
+    lineMarker: (view, line) => {
+      const n = view.state.doc.lineAt(line.from).number
+      const dau = dauThemXoa(lineMeta, n)
+      return dau === '' ? null : new DauMarker(dau)
+    },
+    // Không có dấu nào cũng vẫn giữ cột: thiếu nó thì gutter co giãn theo vùng
+    // nhìn và hai cột lệch ngang khi cuộn.
+    initialSpacer: () => new DauMarker('+'),
+  })
+}
+
+/** `GutterMarker` hiện đúng một ký tự `+` hoặc `−`. */
+class DauMarker extends GutterMarker {
+  constructor(private readonly dau: string) {
+    super()
+  }
+
+  override eq(other: DauMarker): boolean {
+    return other.dau === this.dau
+  }
+
+  override toDOM(): Text {
+    return document.createTextNode(this.dau)
+  }
+}
+
 /** Extension cố định dùng cho mọi view của trình xem. */
-function extensionsCoDinh(deco: DecorationSet, language: Extension | null, ws: boolean) {
+function extensionsCoDinh(
+  deco: DecorationSet,
+  language: Extension | null,
+  ws: boolean,
+  lineMeta: LineMeta[],
+  side: GutterSide,
+) {
   return [
-    lineNumbers(),
+    gutterSoDong(lineMeta, side),
+    gutterDau(lineMeta),
     diffTheme,
     syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
     EditorView.editable.of(false),
@@ -94,7 +164,27 @@ function dungHopNhat(options: DiffRendererOptions): DiffRenderer {
     parent,
     state: EditorState.create({
       doc: newDoc.text,
-      extensions: extensionsCoDinh(deco, language, showWhitespace),
+      /*
+       * Chế độ hợp nhất dùng **một** editor trên tài liệu gộp (mọi dòng, cả
+       * `added` lẫn `removed`), nên gutter số dòng ở đây hiện `newLine`.
+       *
+       * Vì sao `'new'` chứ không phải `'old'`, và vì sao không hiện **cả hai**:
+       *
+       * - `'new'` là thứ người dùng đang đọc. Sau khi commit được áp, tệp trên
+       *   đĩa của họ mang chính hệ số này; mở tệp trong editor rồi nhảy tới số
+       *   đó là thao tác thật và thường xuyên.
+       * - Hai cột số trong chế độ hợp nhất tốn ~80px bề ngang ở một panel vốn
+       *   đã hẹp (`MIN_SPLIT_WIDTH = 720` là mức mà **hai cột nội dung** mới
+       *   vừa đủ), và nó đẩy chế độ hợp nhất — vốn là **mặc định** và là đường
+       *   thoát khi panel hẹp — về đúng vấn đề bề rộng mà nó tồn tại để tránh.
+       * - Dòng `removed` có `newLine === null` nên gutter để **trống** ở đó,
+       *   cộng dấu `−` của `gutterDau` là đủ để đọc: chỗ trống + `−` nói "dòng
+       *   này không còn ở bản mới".
+       *
+       * Ai cần đối chiếu số dòng **cả hai phía** thì chuyển sang hai cột, nơi
+       * mỗi phía có gutter riêng của nó.
+       */
+      extensions: extensionsCoDinh(deco, language, showWhitespace, newDoc.lineMeta, 'new'),
     }),
   })
 
@@ -144,8 +234,20 @@ function dungHaiCot(options: DiffRendererOptions): DiffRenderer {
 
   const merge = new MergeView({
     parent,
-    a: { doc: oldDoc.text, extensions: extensionsCoDinh(decoCu, language, showWhitespace) },
-    b: { doc: newDoc.text, extensions: extensionsCoDinh(decoMoi, language, showWhitespace) },
+    /*
+     * Mỗi phía nhận `lineMeta` của **chính tài liệu nó** và phía gutter tương
+     * ứng: A ↔ `oldLine`, B ↔ `newLine`. Đổi chỗ hai đối số này là lỗi im lặng
+     * — gutter vẫn hiện số, chỉ là số của phía kia — nên `gutterNumbers.test.ts`
+     * ghim rằng hai phía cho dãy KHÁC nhau trên cùng một hunk.
+     */
+    a: {
+      doc: oldDoc.text,
+      extensions: extensionsCoDinh(decoCu, language, showWhitespace, oldDoc.lineMeta, 'old'),
+    },
+    b: {
+      doc: newDoc.text,
+      extensions: extensionsCoDinh(decoMoi, language, showWhitespace, newDoc.lineMeta, 'new'),
+    },
     // Chỉ-đọc ở cả hai phía: gộp khối (`collapseUnchanged`/nút merge) là việc
     // của Phase 5 (staging theo khối), không của trình **xem**.
     revertControls: undefined,
