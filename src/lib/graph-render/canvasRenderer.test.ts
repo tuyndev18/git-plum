@@ -4,10 +4,13 @@
  * hai để tiêm ngữ cảnh giả — xem `types.ts` cho chữ ký đầy đủ.
  */
 
+/// <reference types="node" />
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createCanvasRenderer } from './canvasRenderer'
-import { ROW_HEIGHT } from './geometry'
+import { ROW_HEIGHT, colorFor } from './geometry'
 import type { GraphRenderRow } from './types'
 import type { GraphRow } from '@/lib/ipc'
 
@@ -31,16 +34,23 @@ function fakeContext() {
     setLineDash: vi.fn(),
     set strokeStyle(v: string) {
       this._strokeStyle = v
+      this.strokeStyles.push(v)
     },
     get strokeStyle() {
       return this._strokeStyle
     },
     set fillStyle(v: string) {
       this._fillStyle = v
+      // Ghi LỊCH SỬ, không chỉ giá trị cuối: một hàng vẽ nhiều lớp chồng nhau
+      // (quầng nền, lòng nút, chữ), nên `fillStyle` cuối cùng không nói được
+      // lớp giữa đã tô màu gì. Test avatar cần đúng lớp giữa đó.
+      this.fillStyles.push(v)
     },
     get fillStyle() {
       return this._fillStyle
     },
+    fillStyles: [] as string[],
+    strokeStyles: [] as string[],
     set lineWidth(v: number) {
       this._lineWidth = v
     },
@@ -81,8 +91,20 @@ function baseRow(overrides: Partial<GraphRow> = {}): GraphRow {
   }
 }
 
-function renderRow(row: GraphRow, index = 0): GraphRenderRow {
-  return { row, index, y: index * ROW_HEIGHT }
+/**
+ * `avatar` mặc định `undefined` — hàng **chưa nạp xong dữ liệu commit**.
+ *
+ * Mặc định này là chủ ý: nó giữ mọi test cũ chạy đúng nhánh vẽ nút mà chúng
+ * được viết để kiểm (chấm đặc màu lane), và buộc test nào muốn kiểm nhánh
+ * avatar phải nói ra bằng cách truyền tham số. Nếu mặc định là *có* avatar thì
+ * các cổng cũ sẽ âm thầm đo một nhánh mã khác với nhánh chúng tưởng đang đo.
+ */
+function renderRow(
+  row: GraphRow,
+  index = 0,
+  avatar: GraphRenderRow['avatar'] = undefined,
+): GraphRenderRow {
+  return { row, index, y: index * ROW_HEIGHT, avatar }
 }
 
 describe('createCanvasRenderer', () => {
@@ -439,5 +461,68 @@ describe('chấm commit nằm giữa hàng theo chiều dọc', () => {
           `chấm lệch khỏi giữa hàng thì nó không còn chỉ đúng dòng chữ của mình`,
       ).toContain(cy)
     }
+  })
+})
+
+describe('nút commit là avatar tác giả', () => {
+  /*
+   * Yêu cầu người dùng: "avatar hiển thị ở các node của commit". Nút không còn
+   * là chấm màu lane thuần — nó là đĩa màu theo TÁC GIẢ, viền màu theo NHÁNH.
+   *
+   * Hai màu mang hai nghĩa khác nhau và cả hai phải còn: bỏ viền lane thì mất
+   * tín hiệu nhánh đúng tại điểm mắt đang nhìn, mà lần theo nhánh là việc
+   * chính của đồ thị.
+   */
+  const AVATAR = { chu: 'PT', mauNen: '#8d6a9f' }
+
+  function ve(avatar: GraphRenderRow['avatar']) {
+    const ctx = fakeContext()
+    const { host, canvasEl } = fakeHost(ctx)
+    const renderer = createCanvasRenderer(host as unknown as HTMLElement, {
+      createCanvasElement: () => canvasEl as unknown as HTMLCanvasElement,
+    })
+    renderer.resize(800, 600, 1)
+    renderer.draw([renderRow(baseRow({ lane: 0, color: 0 }), 0, avatar)], null)
+    return ctx
+  }
+
+  it('có avatar -> lòng nút tô màu AVATAR', () => {
+    expect(ve(AVATAR).fillStyles, 'phải tô bằng màu nền avatar').toContain(AVATAR.mauNen)
+  })
+
+  it('có avatar -> VẪN vẽ viền màu lane, giữ tín hiệu nhánh', () => {
+    // Màu avatar nói "ai viết", màu lane nói "nhánh nào". Mất viền là mất
+    // nghĩa thứ hai đúng tại điểm mắt đang nhìn.
+    expect(ve(AVATAR).strokeStyles, 'mất viền lane là mất tín hiệu nhánh').toContain(colorFor(0))
+  })
+
+  it('KHÔNG có avatar -> nút là chấm đặc màu lane, như trước', () => {
+    // Hàng chưa nạp xong dữ liệu commit (`commits` là mảng thưa) vẫn phải vẽ
+    // được nút — không để trống một lỗ trong đồ thị.
+    const ctx = ve(undefined)
+    expect(ctx.fillStyles).toContain(colorFor(0))
+    expect(ctx.fillStyles).not.toContain(AVATAR.mauNen)
+  })
+
+  it('bộ vẽ KHÔNG BAO GIỜ nạp ảnh — `draw` chạy mỗi khung hình cuộn', () => {
+    /*
+     * 🔴 Ràng buộc, không phải chi tiết cài đặt.
+     *
+     * `draw()` chạy lại ở **mỗi khung hình cuộn**. Nạp ảnh Gravatar trong đó là
+     * một request mỗi tác giả mỗi khung — bão request, cộng một nguồn
+     * ảnh-chưa-về gây nháy. Ảnh chỉ xuất hiện ở panel chi tiết (`Avatar.tsx`),
+     * nơi có đúng một, đã chọn, và React lo vòng đời.
+     *
+     * Kiểm bằng **nguồn** thay vì bằng hành vi: một cổng hành vi ("không có
+     * request nào") cần chặn mạng trong test và vẫn xanh nếu ai đó nạp ảnh
+     * bằng đường khác.
+     */
+    const src = readFileSync(
+      path.join(process.cwd(), 'src', 'lib', 'graph-render', 'canvasRenderer.ts'),
+      'utf8',
+    )
+    expect(src, 'không được dùng Image/drawImage trong bộ vẽ').not.toMatch(
+      /new Image\(|drawImage|createImageBitmap/,
+    )
   })
 })

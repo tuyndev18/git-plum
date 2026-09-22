@@ -10,16 +10,28 @@
 import { useEffect, useRef } from 'react'
 
 import { createCanvasRenderer } from '@/lib/graph-render/canvasRenderer'
-import type { GraphRenderer, GraphRenderRow } from '@/lib/graph-render/types'
+import type {
+  GraphRenderer,
+  GraphRenderRow,
+  WipEdgeRender,
+} from '@/lib/graph-render/types'
 
 interface Props {
   rows: GraphRenderRow[]
   width: number
   height: number
   selectedCommitId: string | null
+  /**
+   * Cạnh hàng WIP — WORK-11. `null`/vắng = không có hàng WIP.
+   *
+   * Đi qua **prop rồi qua tham số của `draw`**, không qua một phương thức mới
+   * trên `GraphRenderer`: xem `WipEdgeRender` trong `types.ts` về lý do, và
+   * checkpoint #2 của ROADMAP (đổi canvas ↔ SVG phải là sửa một tệp).
+   */
+  wip?: WipEdgeRender | null
 }
 
-export function GraphCanvas({ rows, width, height, selectedCommitId }: Props) {
+export function GraphCanvas({ rows, width, height, selectedCommitId, wip }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<GraphRenderer | null>(null)
 
@@ -55,8 +67,11 @@ export function GraphCanvas({ rows, width, height, selectedCommitId }: Props) {
     const renderer = rendererRef.current
     if (!renderer) return
     renderer.resize(width, height, window.devicePixelRatio)
-    renderer.draw(rows, selectedCommitId)
-  }, [width, height, rows, selectedCommitId])
+    renderer.draw(rows, selectedCommitId, wip)
+    // `wip` nằm trong mảng phụ thuộc vì cùng lý do `width` nằm trong đó: nó đổi
+    // được (stage hết tệp → hàng WIP biến mất) trong khi `rows` giữ nguyên danh
+    // tính, và thiếu nó thì canvas giữ lại cạnh WIP của lần vẽ trước.
+  }, [width, height, rows, selectedCommitId, wip])
 
   // Canvas thuần trình bày (ràng buộc số 5): không bắt sự kiện bấm nào ở đây
   // hay trong CSS `.graph-canvas` (`pointer-events: none`). Chọn hàng là việc

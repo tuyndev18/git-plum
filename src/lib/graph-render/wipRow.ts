@@ -46,7 +46,7 @@
  */
 
 import { laneX, MAX_VISIBLE_LANES, ROW_HEIGHT } from '@/lib/graph-render/geometry'
-import type { WipCounts } from '@/lib/ipc'
+import type { RepoStatus, WipCounts } from '@/lib/ipc'
 
 /**
  * Số hàng mà hàng WIP chiếm: **một**.
@@ -128,6 +128,50 @@ export function commitIndexFor(virtualIndex: number): number {
  */
 export function virtualizerCount(total: number, _hasWip: boolean): number {
   return total
+}
+
+/**
+ * Số đếm hàng WIP suy từ [`RepoStatus.entries`] — đối ứng TS của
+ * `RepoStatus::wip_counts` phía Rust.
+ *
+ * # 🔴 Vì sao phải viết lại ở đây thay vì đọc một trường IPC
+ *
+ * `wip_counts` phía Rust là một **method dẫn xuất**, có chủ ý: doc comment của
+ * nó nói rằng một *trường* `wip_counts` có thể bị ghi từ bất kỳ đâu, kể cả từ
+ * một chỗ đã đếm sai. Hệ quả là nó **không** được `serde` sinh ra, nên
+ * `RepoStatus` trên dây IPC không mang nó — đã kiểm bằng `interface RepoStatus`
+ * của `src/lib/ipc.ts`, chỉ có `branch`/`entries`/`hasConflicts`.
+ *
+ * Nên phía TS phải tự dẫn xuất từ **cùng** một `entries`. Đó là hai bản cài
+ * của một quy tắc, và hai bản cài lệch nhau được trong im lặng — vì vậy quy
+ * tắc được chép **nguyên văn** dưới đây và có test ghim cả hai ca đặc biệt mà
+ * bản Rust ghim (`MM` đếm một; `A.` là tệp mới, không phải tệp sửa).
+ *
+ * # Quy tắc (nguyên văn từ `domain/status.rs`)
+ *
+ * * Đếm theo **đường dẫn duy nhất**, không theo số phần tử: một tệp `MM` sinh
+ *   **hai** phần tử (một mỗi nhóm) nhưng người dùng chỉ sửa **một** tệp.
+ * * `added` — nhóm `untracked`, **hoặc** XY chứa `A` (đã stage thêm mới). Một
+ *   tệp đã `git add` xong vẫn là tệp mới với mắt người dùng.
+ * * `modified` — mọi tệp theo dõi còn lại. Tệp đã đếm `added` **không** đếm lại.
+ */
+export function wipCountsFromStatus(status: RepoStatus | undefined | null): WipCounts {
+  if (!status) return { modified: 0, added: 0 }
+
+  const daThem = new Set<string>()
+  const daSua = new Set<string>()
+
+  for (const e of status.entries) {
+    if (e.group === 'untracked' || e.xy.includes('A')) daThem.add(e.path)
+    else daSua.add(e.path)
+  }
+
+  // Một tệp vừa stage thêm mới (`A.`) vừa sửa tiếp ở worktree (`.M`) sinh hai
+  // phần tử rơi vào hai tập. Với mắt người dùng đó là **một tệp mới**, nên
+  // `added` thắng — giống hệt vòng lặp tương ứng phía Rust.
+  for (const p of daThem) daSua.delete(p)
+
+  return { modified: daSua.size, added: daThem.size }
 }
 
 /**
