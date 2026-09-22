@@ -265,10 +265,25 @@ trên test happy-dom. Ghi "có mã, chưa kiểm".
   gần 7 lần. Đọc số debug rồi kết luận "trượt Core Value" là sai.
 - **Baseline criterion bị ghi đè** bởi lần chạy mới nhất; muốn so ngược phải stash về
   commit cũ rồi chạy lại.
-- **`git log` bị rtk cắt còn 50 dòng** trong môi trường này (`git log --all --oneline |
-  wc -l` = 50 trong khi `git rev-list --count HEAD` = 150). Dùng `git rev-list` hoặc
-  `git merge-base --is-ancestor` cho câu hỏi reachability. Một session khác đã kết luận
-  sai rằng ba commit của nó bị xoá vì dùng `git log | grep <sha>`.
+- **`git log` bị cắt còn 50 dòng** trong môi trường này — **trần cứng**, không phụ
+  thuộc cách gọi. Đo bare, là lệnh duy nhất trong lượt gọi:
+
+  ```text
+  git log --all --oneline | wc -l    ->  50
+  git log --all --format=%h | wc -l  ->  50
+  git rev-list --all --count         -> 151
+  git rev-list HEAD --count          -> 151
+  ```
+
+  Dùng `git rev-list` hoặc `git merge-base --is-ancestor` cho **mọi** câu hỏi
+  reachability hoặc tồn tại. **Thất bại im lặng:** `git log | grep <sha>` trả exit 1 và
+  0 khớp — không phân biệt được với một commit thật sự không tồn tại. Một session khác
+  đã kết luận sai rằng ba commit của nó bị xoá và lịch sử bị viết lại; cả ba đều
+  reachable. Tôi cũng từng ghi sai rằng việc cắt này "phụ thuộc cách gọi" — nó không;
+  tôi đã nhận con số 151 từ `rev-list` rồi gán sai nguyên nhân.
+
+  `rev-list --all` và `rev-list HEAD` **bằng nhau** ở repo này, nên không có ref nào
+  unreachable từ HEAD — đừng đọc chênh lệch hai số đó thành "có việc bị mất".
 - **`.vitest/json/output.json` bị cache**: phải `rm -f` trước mỗi lần chạy, nếu không
   đọc lại kết quả cũ. Tôi đã đo sáu lần "ổn định" trên một tệp stale trước khi phát
   hiện.
