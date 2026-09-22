@@ -184,7 +184,16 @@ Hai mục đã có, từ phép đo chứ không từ việc dùng:
 
 | Dựng lúc | Commit | Ghi chú |
 |---|---|---|
-| *(điền bởi lần dựng cuối — xem hand-back)* | | |
+| **2026-09-22 11:27:48 +0700** | `d1b59cc` | `npx tauri build --no-bundle`, 4 620 800 byte. Gồm **toàn bộ** DIFF-05 (backend + giao diện). |
+
+Đối chiếu trước khi báo lỗi:
+
+```bash
+ls -l --time-style=full-iso src-tauri/target/release/git-plum.exe
+```
+
+Nếu dấu thời gian **cũ hơn** bảng trên thì bạn đang chạy một exe cũ — dựng lại bằng
+`npx tauri build --no-bundle` (mất ~2 phút).
 
 **Bài học quy trình từ wave 4, áp cho cổng này:** mỗi vòng phải kết thúc bằng một lần
 dựng release, và dấu thời gian exe phải được ghi ra để đối chiếu. Vòng trước mất một

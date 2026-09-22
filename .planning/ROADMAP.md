@@ -126,7 +126,9 @@ Plans:
 - [x] 03-02-PLAN.md — Hợp đồng dữ liệu diff + bộ phân tích unified diff viết tay + cache LRU 200 mục khoá `(sha, path)` + cổng DIFF-06 chạy TRƯỚC `git diff` (ngưỡng 5 MB) — **xong 2026-09-22**, 216 test Rust + 233 test frontend, 9/9 mutation
 - [x] 03-03-PLAN.md — Word-level diff từ `git diff --word-diff=porcelain` (chính tả `--word-diff-porcelain` **không tồn tại** — đã đo trên git 2.54) — **xong 2026-09-22**, 257 test Rust + 236 test frontend, 12/12 mutation. 🔴 Phải đổi biên từ sang `--word-diff-regex=[^[:space:]]+|[[:space:]]+`: biên **mặc định** làm mất khoảng trắng ngăn cách nên không dựng lại được dòng nguồn
 - [ ] 03-04-PLAN.md — Trình xem CodeMirror: tô màu cú pháp nạp lười, hai chế độ, nhảy khối, hiện khoảng trắng (DIFF-01..04, 06) + checkpoint hiển thị 11 bước
-- [ ] 03-05-PLAN.md — Lịch sử một tệp qua `git log --follow` (DIFF-05) + **exit gate dogfood**
+- [ ] 03-05-PLAN.md — Lịch sử một tệp qua `git log --follow` (DIFF-05) + **exit gate dogfood** — **mã xong 2026-09-22**, 284 test Rust + 435 test frontend, 9/9 mutation. ⛔ **Exit gate CHƯA CHẠY** (`docs/08-phase3-dogfood.md`; bản release `d1b59cc`, 11:27:48 +0700). 🔴 Plan sai **hai** chỗ, cả hai đo được: `--follow` **đã** lọc `--name-status` theo pathspec nên phép lọc theo path là mã chết *và* sẽ xoá các phiên bản trước lần đổi tên; merge commit **không xuất hiện** trong danh sách chứ không "xuất hiện với danh sách rỗng". ⚠️ Giới hạn đã biết: merge commit không vào lịch sử tệp — `--diff-merges=first-parent` đo được là **tệ hơn** (104 → 5715 bản ghi, phá `--max-count`)
+
+**Trạng thái Phase 3: CHƯA ĐÓNG.** Cả 5 wave có mã và mọi test tự động xanh, nhưng **0 requirement nào có bằng chứng từ mắt người** — checkpoint #3 bị bỏ qua, checkpoint 11 bước của 03-04 chưa chạy, và exit gate dogfood chưa chạy. Xem `.planning/phases/03-diff-viewer/VERIFICATION.md`.
 **UI hint**: yes
 
 ### Phase 4: Vòng lặp commit theo tệp

@@ -3,16 +3,20 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-09-22T09:00:00.000Z"
+last_updated: "2026-09-22T04:30:00.000Z"
 progress:
   total_phases: 8
-  completed_phases: 0
-  total_plans: 11
-  completed_plans: 11
-  # % tính trên số PLAN ĐÃ LẬP (Phase 1 + 2 = 11 plan), KHÔNG phải toàn dự án:
-  # Phase 3–8 chưa lập plan nào. Toàn dự án vẫn là 1/8 phase xong.
-  # Và "11/11" là mã đã thực thi — hai checkpoint người kiểm của Phase 2 còn nợ,
-  # nên Phase 2 chưa đóng. Xem Current Position và VERIFICATION.md.
+  completed_phases: 1
+  total_plans: 16
+  completed_plans: 16
+  # % tính trên số PLAN ĐÃ LẬP (Phase 1 + 2 = 11, Phase 3 = 5 → 16), KHÔNG phải
+  # toàn dự án: Phase 4–8 chưa lập plan nào.
+  #
+  # "16/16" là MÃ đã thực thi, không phải phase đã đóng. Ba cổng người-kiểm còn nợ:
+  #   - Phase 2: hai checkpoint (02-06 vòng 2, 02-07 hiệu năng 100k)
+  #   - Phase 3: checkpoint 11 bước của 03-04, checkpoint #3 của 03-01 (bị bỏ qua),
+  #              và CỔNG THOÁT dogfood của 03-05 — xem Session Continuity.
+  # Nên Phase 2 VÀ Phase 3 đều chưa đóng. completed_phases: 1 là Phase 1 (có nợ).
   percent: 100
 ---
 
@@ -42,11 +46,14 @@ progress:
 | **Wave 2 (03-02)** | ✅ Xong, `autonomous` nên không phụ thuộc checkpoint #3. Backend diff đầy đủ: hợp đồng dữ liệu 5 dạng, `parse_patch` viết tay, `DiffCache` LRU 200 mục, `get_file_diff` với cổng DIFF-06 chạy **trước** `git diff`. **216 test Rust** (mốc 163) + **233 test frontend** (mốc 226); `clippy`/`typecheck`/`tauri:build` đều xanh. **9/9 mutation đã chạy**, trong đó **ba cổng vô dụng phải sửa rồi chạy lại**. Repo mẫu `target/fixtures/diff-cases` 26 commit, gồm ba fixture mà wave 3 phụ thuộc. |
 | **Wave 3 (03-03)** | ✅ Xong, `autonomous` nên không phụ thuộc checkpoint #3. Diff mức **từ** lấy từ `git diff --word-diff=porcelain`: bộ phân tích riêng dựng lại dòng nguồn từ các đoạn từ (`parse_word_diff`), `DiffLine.spans` là khoảng **byte** vào `content`, và một lệnh git thứ hai **có điều kiện** trong `get_file_diff` với ba cổng bỏ qua. **257 test Rust** (mốc 216) + **236 test frontend** (mốc 233); `clippy`/`typecheck` xanh. **12/12 mutation đã chạy**: 9 đỏ, 3 ghi rõ là không kiểm được (hai trong đó vì **dữ liệu**, không vì cổng sai). Chi phí đo được: lệnh word-diff ≈ **32–39ms**, xấp xỉ bằng lệnh diff chính — bị chi phối bởi chi phí sinh tiến trình. |
 | **Wave 4 (03-04)** | ⏸️ **Mã xong, CHECKPOINT 11 BƯỚC CHƯA CHẠY.** Trình xem diff thật — đây là wave đầu tiên có thứ nhìn được trên màn hình: tô màu cú pháp nạp lười theo phần mở rộng, hai chế độ hiển thị, nhảy khối có **nói ra khi hết** (không nhảy vòng im lặng), bật tắt khoảng trắng qua `Compartment`, word-level từ `spans` của wave 3, và năm dạng thông báo DIFF-06. Toàn bộ nằm sau **`interface DiffRenderer`** (tiền lệ `GraphRenderer` của Phase 2) với **cổng kiểm biên giới**: `@codemirror/merge` chỉ được nhập trong **một** tệp, nên đổi đường A→B là sửa một tệp. **365 test frontend** (mốc 236, **+129**); `cargo test` **257 + 1 ignored, không đổi**; `typecheck`/`build`/`clippy`/`tauri:build` đều xanh, MSI đã dựng. **13/13 mutation đã chạy**, trong đó **ba cổng xanh sai phải sửa** — một cổng xanh sai **hai lần liên tiếp vì hai nguyên nhân độc lập**. |
+| **Wave 5 (03-05)** | ⏸️ **Mã xong, EXIT GATE DOGFOOD CHƯA CHẠY.** DIFF-05 xong: `parse_file_history` đọc `git log --follow --max-count=200 --name-status -z`, lần theo được đổi tên và **nói ra** chỗ đổi tên trên giao diện, chặn 200 phiên bản có cờ `truncated` hiện ra, timeout 30s riêng, **không cache** (lịch sử tệp phụ thuộc HEAD; watcher chỉ tới ở Phase 4). Bấm một phiên bản dùng `historyCommitOverride` nên **không** làm mất chỗ người dùng trên đồ thị. **284 test Rust + 2 doctest** (mốc 259, **+25**) + **435 test frontend** (mốc 397, **+38**); `clippy`/`typecheck`/`build`/`tauri build` xanh. **9/9 mutation đã chạy**, trong đó **một cổng xanh sai phải sửa** và **một cổng của plan là bất khả**. |
+| **Phát hiện đo được (wave 5)** | 🔴 **Plan 03-05 sai hai chỗ, cả hai đo được.** (1) `<behavior>` nói *"`--follow` vẫn in mọi tệp của commit đó"* và đòi một phép lọc theo path — **sai**: git với pathspec **đã lọc** `--name-status` xuống đúng path đó (đếm được `grep -c other.txt` → **0** trên commit sửa hai tệp). Phép lọc đó sẽ là mã chết, và tệ hơn: nó cần biết "path đang theo", vốn **đổi** ở mỗi lần đổi tên, nên nó sẽ xoá đúng các phiên bản trước lần đổi tên mà `--follow` vừa mua được. (2) `<behavior>` nói merge commit *"xuất hiện với danh sách tệp rỗng"* — **sai**: nó **không xuất hiện** trong danh sách commit ở tất cả, kể cả merge đã thật sự giải quyết xung đột trong chính tệp đó.<br>🔴 **Bẫy plan không nêu:** phải tách theo **CẢ** `\x1f` **VÀ** `\0`. Plan chỉ nói về `\0\n`; nhưng bốn trường của `--format=` ngăn nhau bằng `\x1f`, nên tách chỉ theo `\0` làm cả header thành **một** trường và **mọi** bản ghi bị tính là méo — đo được `skipped_records = 9` trên buffer ba commit hợp lệ.<br>🔴 **Cổng đọc nguồn khớp chú thích do chính MUTATION sinh ra** — lần thứ **năm** dự án gặp lớp lỗi này, và lần đầu chú thích gây nhiễu không có sẵn trong mã mà do phép kiểm tạo ra. Nên một cổng đọc nguồn thô sống qua mọi lần review và chỉ hỏng **đúng lúc đang được kiểm**. Cổng **đã có** của 03-02 bắt được mutation này ngay — chỉ cổng mới sai.<br>🔴 **`--diff-merges=first-parent` trông như bản sửa nhưng PHÁ hai chặn trên** — đo trên repo thật `dau-tri-toan-hoc` (1140 commit, 39 merge): `.planning/STATE.md` **104 → 5715** bản ghi, `.planning/ROADMAP.md` **118 → 4655**. Cờ đó làm git in bản vá ra cùng luồng nên `--max-count` mất tác dụng — phá cả T-03-33 (DoS) lẫn T-03-34 (200 hàng DOM). Giới hạn merge được **nhận và ghim bằng test**, không lấp bằng cờ tệ hơn. |
 | **Quyết định bố cục (cần xác nhận)** | `DiffViewer` chiếm vùng **`main`** khi có tệp đang chọn, **không** thêm panel thứ tư. Lý do: hai cột cần bề rộng, và thêm panel thứ tư chia cửa sổ thành bốn phần — làm ca hẹp (ca tệ nhất của chế độ hai cột) tệ hơn. Cách đã chọn **không đổi một dòng nào** trong `AppLayout.tsx`. Đây là **bước 1** của checkpoint. |
 | **Phát hiện đo được** | 🔴 **Plan 03-04 sai một chỗ:** cổng bundle theo **tên chunk** là **bất khả** trên Vite 8 — Vite đặt tên chunk theo tên tệp entry của gói, và mọi `@codemirror/lang-*` có entry `dist/index.js`, nên năm chunk lang đều tên `dist-<băm>.js`. Đã thay bằng cổng neo vào **nội dung** chunk entry (`scripts/check-lang-chunks.mjs`), và **kiểm là đỏ được**. Chọn dấu hiệu mất **ba** lần thử: tên định danh và tên nhập đều bị bộ rút gọn đổi; chỉ **khoá object literal** (`stateData:`/`nodeNames:`/`tokenPrec:`) sống qua rút gọn.<br>🔴 **`await Promise.resolve()` KHÔNG flush render của React 19** — ba lần liên tiếp vẫn không đủ, nên test chống đua xanh **kể cả ở cài đặt đã bị đột biến**. Phải `act()`. Lớp lỗi "đo sai **thời điểm**", họ hàng bài học `measureFirstPaint` của Phase 2.<br>🔴 **Nhãn đọc TRẠNG THÁI store che mất lỗi đua** — `diff-path` render từ `selectedFile` nên nó hiện tệp *đang chọn* bất kể phản hồi nào đã ghi đè nội dung. Không chỉ là cổng yếu: người dùng thật sẽ thấy tiêu đề `b.ts` trên nội dung `a.ts` mà không có cách nào biết. Sửa ở **mã sản phẩm**.<br>🔴 **Plan 03-02 sai một chỗ:** `git diff --name-status` **mang pathspec** làm git báo `A` thay vì `R077` cho tệp đổi tên. Đã sửa và ghim bằng ba test.<br>🔴 **Plan 03-03 sai một chỗ:** biên từ **mặc định** của git **mất** khoảng trắng ngăn cách (`alpha beta` → `alpha` dựng lại thành `alphabeta`; `dong hai` → `dong hai da sua` để lại dấu cách thừa ở phía cũ), làm bất biến "dựng lại bằng từng byte với `parse_patch`" **bất khả**. Ca thứ hai nằm ngay trong `text-simple.txt`. Đã sửa sang `--word-diff-regex=[^[:space:]]+\|[[:space:]]+` — vẫn an toàn với UTF-8 vì nó khớp theo **vệt** byte, không theo byte lẻ như `.`. |
-| **Tiếp theo** | ⏸️ **Checkpoint 11 bước của 03-04** — chủ dự án chạy bản release (`src-tauri/target/release/git-plum.exe`, đã dựng) và trả lời 11 bước. Sau đó cập nhật `VERIFICATION.md`, rồi wave 5 (03-05, exit gate). |
-| **DIFF-05** | **Chưa cài, ĐÚNG THEO KẾ HOẠCH** — là việc của wave 5. `03-05-PLAN.md` nhận nó tường minh (`requirements: [DIFF-05]`) và có đủ tệp: `file_history.rs`, `FileHistory.tsx`, command, kiểu TS. Hiện chưa có mã vì wave 5 chưa chạy.<br>⚠️ Executor của 03-04 báo đây là **lỗ kế hoạch** và ghi "03-05 chưa lập kế hoạch chi tiết" — **sai, nó đọc thiếu**; plan đã tồn tại từ `8d59856`. Orchestrator đã kiểm và đính chính ở `03-04-SUMMARY.md` mục 3 cùng `VERIFICATION.md`. Giữ ghi chú này để không ai đọc bản cũ rồi tưởng có lỗ. |
-| **Requirement** | `VERIFICATION.md` của phase đã lập: **DIFF-01..04 và DIFF-06 đều ở mức "Có mã, chưa kiểm"**; hiệu năng mở diff ở mức **"Chưa đo"** (checkpoint #3 bị bỏ qua, `MergeView` trên tệp 630 KB **không có con số nào**). Không ô nào lấp bằng suy luận từ test tự động — happy-dom không tính layout CSS nên 365 test xanh **không** là bằng chứng cho tiêu chí nói về thứ nhìn thấy được. Riêng chế độ **hai cột chưa bao giờ được render trong một test nào** (happy-dom không có `ResizeObserver` → `paneWidth = 0` → mọi test chạy nhánh hợp nhất). |
+| **Tiếp theo** | ⛔ **CỔNG THOÁT PHASE 3 — chủ dự án dùng thật vài ngày.** Bản release đã dựng: `src-tauri/target/release/git-plum.exe`, **2026-09-22 11:27:48 +0700**, commit `d1b59cc`. Khung ghi chép ở `docs/08-phase3-dogfood.md`. **Không còn wave nào để hoãn việc sang** — đây là cổng cuối trước Phase 4, vốn dựng ngay trên trình xem diff này (WORK-01). Checkpoint 11 bước của 03-04 cũng vẫn chưa chạy và có thể gộp vào cùng lần dùng thật. |
+| **DIFF-05** | ✅ **Có mã** (wave 5). `parse_file_history` + `get_file_history` + `FileHistory.tsx`; 15 test đơn vị, **10 test tích hợp chạy git thật**, 25 test giao diện, 6 test IPC, 7 test CSS. Mức requirement: **"Có mã, chưa kiểm"** — chưa ai thấy danh sách phiên bản trên màn hình.<br>⚠️ **Giới hạn đã biết, KHÔNG phải ô chưa kiểm:** merge commit không xuất hiện trong lịch sử tệp. Đo được, có test ghim, và cờ trông-như-bản-sửa đã đo là **tệ hơn** (xem "Phát hiện đo được (wave 5)"). Việc cho Phase 4 nếu cổng thoát cho thấy nó đáng: một lệnh **riêng** cho merge, không một cờ thêm vào lệnh lịch sử tệp. |
+| **Requirement** | `VERIFICATION.md` của phase đã cập nhật: **cả bảy ô (DIFF-01..06 + word-level) ở mức "Có mã, chưa kiểm"**; hiệu năng mở diff ở mức **"Chưa đo"**. **Đạt: 0.** Không một requirement nào của Phase 3 có bằng chứng từ mắt người, vì cả ba cổng dùng-mắt đều chưa chạy hoặc bị bỏ qua (checkpoint #3 bỏ qua, checkpoint 11 bước chưa chạy, cổng thoát chưa chạy). happy-dom không tính layout CSS nên 435 test xanh **không** là bằng chứng cho tiêu chí nói về thứ nhìn thấy được. Chế độ **hai cột vẫn chưa bao giờ được render trong một test nào**. |
+| **🔴 Cây làm việc** | Bốn tệp có thay đổi **không thuộc plan nào đã chạy**, chưa commit: `src/App.tsx`, `src/components/RefSidebar.tsx`, `src/components/history/CommitList.tsx`, `src/styles/app.css` (hai hunk đầu). Nội dung là việc **Phase 2**: bấm nhánh/tag ở thanh bên thì cuộn đồ thị tới commit (`handleSelectRef`, `scrollToCommit`). Executor của 03-05 **không** commit và **không** stash chúng (stash có thể làm mất việc của người khác); nó stage từng tệp một và với `app.css` thì tách diff để chỉ đưa hunk của mình vào commit. **Chủ dự án cần quyết định:** việc đang làm dở, hay cần một commit riêng. Đây cũng là lý do mốc frontend là 397 chứ không 396. |
 
 ### Phase 2 — nợ cũ
 
@@ -81,8 +88,8 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 
 | Metric | Value |
 |---|---|
-| Phases completed | 1 / 8 (có nợ) |
-| Plans completed | 11 (mã đã thực thi; Phase 2 chưa đóng — 2 checkpoint người kiểm còn nợ) |
+| Phases completed | 1 / 8 (có nợ) — Phase 3 có đủ mã cho DIFF-01..06 nhưng **0 requirement nào có bằng chứng từ mắt người** |
+| Plans completed | 16 (mã đã thực thi; **Phase 2 VÀ Phase 3 đều chưa đóng** — 5 cổng người-kiểm còn nợ, xem Session Continuity) |
 | v1 requirements delivered | 12 / 59 đã kiểm chứng (thêm HIST-01, HIST-02, HIST-04, HIST-11 ở plan 02-05, checkpoint #2 người dùng chấp thuận) · 2 nữa có mã nhưng chưa kiểm thật (PLAT-07, PLAT-09) · PLAT-01 và REL-04 đạt ở mức yếu hơn ROADMAP |
 
 | Plan | Thời lượng | Tasks | Files |
@@ -100,6 +107,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 | Phase 3 P02 | ~85min | 3/3 tasks | 15 files |
 | Phase 3 P03 | ~75min | 3/3 tasks | 13 files |
 | Phase 3 P04 | ~150min | 2/3 tasks (Task 3 là checkpoint 11 bước, chờ người kiểm) | 16 files |
+| Phase 3 P05 | ~75min | 2/3 tasks (Task 3 là **EXIT GATE dogfood**, chờ chủ dự án dùng thật) | 11 files |
 
 ---
 
@@ -279,7 +287,7 @@ Toolchain đã đủ:
 
 | Phase | Cổng |
 |---|---|
-| 3 | Bản chỉ-đọc lịch sử+diff được tác giả dùng hằng ngày trên repo thật, gồm cả một repo bên thứ ba lớn và lộn xộn, **trước khi** bắt đầu việc thư mục làm việc |
+| 3 | ⛔ **ĐANG CHỜ, là việc kế tiếp.** Bản chỉ-đọc lịch sử+diff được tác giả dùng hằng ngày trên repo thật, gồm cả một repo bên thứ ba lớn và lộn xộn, **trước khi** bắt đầu việc thư mục làm việc. Bản release: **2026-09-22 11:27:48 +0700** (`d1b59cc`). Khung ghi chép: `docs/08-phase3-dogfood.md`. Repo lớn/lộn xộn có trên máy: `dau-tri-toan-hoc` (1140 commit, 39 merge) |
 | 4 | Một commit thật vào repo thật, chỉ bằng git-plum |
 | 6 | Một luồng nhánh thật đầu-cuối chỉ bằng git-plum: tạo nhánh, commit, push, giải quyết một xung đột merge thật, hợp nhất xong |
 
@@ -324,96 +332,40 @@ có catalog dịch. Đáng làm trước khi phát hành công khai (Phase 8), k
 
 ## Session Continuity
 
-**Việc tiếp theo:** Resume `02-06-PLAN.md` Task 4 — checkpoint người dùng thật VÒNG 2
-(gate=blocking). Vòng 1 đã chạy và bị từ chối (ba lỗi bố cục CSS, **hai nguyên nhân độc lập**),
-đã sửa cả hai (`7596e63` fix A chiều cao, `5ac43ef`+`970e31c` fix B cột grid riêng cho nhãn, `60a0caa` fix C cạnh đồ thị),
-commit đủ (16 commit, xem `02-06-SUMMARY.md`). KHÔNG cần agent viết thêm mã trừ khi vòng 2 trả
-về "không đạt" cho một bước cụ thể.
+**Việc tiếp theo:** ⛔ **CỔNG THOÁT PHASE 3 (Task 3 của `03-05-PLAN.md`) — chủ dự án dùng
+git-plum thật vài ngày.** Đây **không** phải checklist; nó là cổng đo xem công cụ **có dùng
+được** cho một luồng công việc thật không. KHÔNG cần agent viết thêm mã cho tới khi cổng trả
+về kết quả.
 
-**Để resume:** đọc `02-06-SUMMARY.md` mục "Task 4 — CHECKPOINT ROUND 1 REJECTED, đã sửa, cần
-người dùng kiểm lại VÒNG 2" để lấy nguyên văn 12 bước kiểm, chuyển cho người dùng thật chạy
-`npm run tauri:dev` (hoặc `dev.cmd`) — đặc biệt chú ý bước 6 (chiều cao hàng có badge) và bước
-1-2 (thẳng hàng đồ thị). Nhận lại "approved" hoặc số bước cụ thể bị sai. Nếu "approved": đóng
-plan 02-06 (đánh dấu HIST-06 tới HIST-10 Done trong REQUIREMENTS.md, cập nhật
-`requirements-completed` trong frontmatter `02-06-SUMMARY.md`, chạy `state advance-plan`), rồi
-sang 02-07 (checkpoint #1 hiệu năng 100k commit — mốc còn lại duy nhất của validation checkpoint
-Phase 2). Nếu không đạt: agent kế tiếp áp Rule 1/2/3 để tự sửa nếu là lỗi mã hiển thị/logic,
-Rule 4 nếu cần quyết định kiến trúc, rồi build lại `tauri build --debug --no-bundle` và yêu cầu
-kiểm lại đúng bước đã nêu (không phải lại từ đầu 12 bước, theo đúng tiền lệ 02-05 checkpoint
-round 1→2, giờ là round 2→round 3 nếu cần).
+**Bản release để dùng:**
 
-**Không đụng tới theme/màu/icon/font** trừ khi có yêu cầu rõ ràng riêng — người dùng đã nói yêu
-cầu đổi theme giống GitKraken hơn "sau này sửa sau" (`PROJECT.md` commit `5417400`).
+```
+src-tauri/target/release/git-plum.exe
+dựng 2026-09-22 11:27:48 +0700, commit d1b59cc, 4 620 800 byte
+```
 
-**Ghi chú kỹ thuật đã chốt ở 02-06 (Task 1-3), đọc trước khi tiếp tục:**
-- `selectedCommitId` đã nâng từ `useState` (plan 02-05) lên `selectionStore.selectedByRepo`
-  — Pattern 3 áp dụng: store chỉ giữ id, `CommitDetail`/`RefSidebar` tự lấy dữ liệu.
-- Nhãn ref (`RefBadges`) nằm INLINE trong `.commit-subject` hiện có, KHÔNG phải cột grid mới —
-  quyết định có chủ ý để tránh lặp lại lỗi checkpoint round 1 của 02-05 (cột `max-content`/
-  `minmax` mới cạnh tranh không gian ở cửa sổ hẹp). Nếu sửa CSS `.commit-row` sau này, đọc kỹ
-  comment trong `app.css` trước khi thêm cột.
-- `CommitList.tsx` giờ là `forwardRef<CommitListHandle>` — `scrollToIndex` lộ ra qua
-  `useImperativeHandle`, `CommitSearch` dùng handle này thay vì tạo `useVirtualizer` thứ hai.
-  Vẫn đúng MỘT tệp gọi `useVirtualizer(` trong toàn `src/` (đã kiểm bằng grep).
-- `CommitDetail` cache theo `commitId` trong `Map` cấp module (200 mục, không bao giờ tự vô
-  hiệu hoá — diff lịch sử bất biến). Có `__resetCommitDetailCacheForTest()` chỉ dùng trong test.
-- `historyStore.ts` là nguồn `commits`/`graphRows`; `GitRef.target` đã giải tham chiếu, neo
-  nhãn vào `GraphRow.commitId` bằng so bằng thẳng (ghi chú từ 02-04-SUMMARY.md, vẫn đúng).
-- **🔴 `.commit-row` (container CSS Grid) cần `overflow: hidden` + `min-height: 0` của CHÍNH nó**
-  — grid item mặc định `min-height: auto`, không phải `0`, nên nội dung con (`.ref-badges`) có
-  thể ép track Grid cao hơn `height` inline mà virtualizer đặt, bất kể phần tử con có
-  `overflow: hidden` hay không (`overflow: hidden` trên con chỉ cắt nội dung của chính nó).
-  Đã sửa ở checkpoint round 1 của 02-06 (`7596e63`), không tái hiện được bằng Chromium headless.
-  Nếu sau này thêm nội dung mới vào `.commit-row` (không chỉ badge), áp dụng lại nguyên tắc này.
-- **🔴 Nhãn ref (`RefBadges`) có CỘT GRID RIÊNG (`.commit-ref-cell`), KHÔNG dùng chung cột với
-  chữ message** (checkpoint round 1 của 02-06, `5ac43ef` — **đảo ngược** quyết định ban đầu của
-  chính plan 02-06 là đặt nhãn inline trong `.commit-subject`). Lý do: dùng chung cột nghĩa là
-  nhãn ăn vào không gian của chữ — đo thật với Segoe UI, nhóm 4 nhãn chiếm 258px trong khi cột
-  subject chỉ còn 144px ở cửa sổ 900px, chữ message hiển thị **0%**. Cột nhãn là
-  `minmax(0, max-content)` (sàn `0` nên nhường chỗ được hoàn toàn — đó là lý do thêm cột ở đây
-  KHÔNG lặp lại lỗi co cột của 02-05, lỗi đó do cột `max-content` cứng không bao giờ co).
-  `.commit-ref-cell` **luôn render** kể cả khi không có ref, nếu không hàng không nhãn sẽ thiếu
-  một ô grid và mọi ô sau dồn sang trái. `.ref-badge` có `min-width: 48px` (không phải `0`) để
-  nhãn không teo thành một ký tự vô nghĩa. Bố cục này khớp tham chiếu GitKraken.
-- **🔴 Đo layout phải khớp CẢ phông CẢ bề rộng vùng chứa thật** (bài học đắt nhất của checkpoint
-  round 1 plan 02-06): vòng điều tra 1 đo trong Chromium **không có Segoe UI** (rơi về phông
-  thay thế hẹp hơn) và ở **full viewport** thay vì vùng `main` 52% thật → **âm tính giả**, kết
-  luận sai là "không tái hiện được". Nạp phông thật qua `@font-face` từ `C:/Windows/Fonts` và
-  đặt viewport bằng 52% cửa sổ mới tái hiện được ngay. Quy trình đo lại dùng được cho lần sau.
-- **Test đọc chuỗi CSS có trần**: `app.css.test.ts` bắt được "ai xoá `overflow: hidden`" nhưng
-  KHÔNG bắt được lỗi *quan hệ cấu trúc* (nhãn dùng chung cột với message) — lỗi đó cần test
-  **cấu trúc** (đếm số cột grid, kiểm vị trí `RefBadges` trong JSX), đã thêm ở `5ac43ef`.
-- **Cạnh rẽ nhánh vẽ GÓC VUÔNG (ngang rồi gập dọc), không phải bezier chéo** (`e272965`, nửa
-  thứ hai của báo cáo "đồ thị khó đọc"): tham chiếu `docs/screenshots/main-4.png` vẽ góc vuông,
-  và đó là lý do nó đọc được với hàng chục nhánh song song — mắt theo được đoạn ngang và đoạn
-  dọc riêng biệt. Bezier chéo với `LANE_WIDTH` 14px / `ROW_HEIGHT` 28px chạy ở ~63°, gần dọc đủ
-  để nhiều đường cắt nhau thành khó phân biệt. Đoạn ngang đặt ở **tâm hàng nguồn** để cạnh mọc
-  ra từ nút commit; bán kính góc bo clamp vào nửa khoảng cách còn lại trên **cả hai** trục nên
-  không overshoot khi hai lane sát nhau.
-- **🔶 CÒN MỞ — `LANE_WIDTH = 14px` hẹp hơn tham chiếu (~22px)**, nhưng cap 20 lane trong
-  `docs/04-phase2-degraded-graph.md` **suy ra từ** chính con số 14px, nên đổi `LANE_WIDTH` là
-  đổi luôn cap. Cần quyết định riêng khi làm phase dựng lại bố cục — xem
-  `docs/07-ui-reference-gap.md`. KHÔNG sửa lẻ trong plan 02-06.
-- **🔴 Test hình học chỉ kiểm MỘT trục là test một nửa** (bài học nguyên nhân C, `60a0caa`): bộ
-  test `canvasRenderer` kiểm rất kỹ trục **X** (lane nào, màu nào) nhưng **không một test nào
-  đọc toạ độ Y** — nên lỗi `outEdges` vẽ tràn 1.5 hàng vô hình với toàn bộ 179 test. Trục Y
-  chính là trục mà `ROW_HEIGHT`/`rowY` và ràng buộc thẳng hàng HIST-04 sống trên đó. Mọi test
-  hình học mới phải kiểm **cả hai trục**.
+Đối chiếu bằng `ls -l --time-style=full-iso src-tauri/target/release/git-plum.exe` trước khi
+báo lỗi — vòng checkpoint của wave 4 mất một lượt qua lại vì người dùng thử một exe **cũ hơn
+bản sửa 32 phút**. Người dùng kiểm bằng **exe**, không bằng `npm run dev`.
 
-Phase 1 đã đóng, 4/4 plan: 01-01 (PLAT-02 ghim cấu hình git), 01-02 (hạ tầng test giao diện),
-01-03 (PLAT-07 danh sách repository gần đây), 01-04 (kịch bản QA + checkpoint locale).
-Còn nợ phần QA thủ công — chi tiết ở mục Current Position bên trên.
+**Để resume:** đọc `docs/08-phase3-dogfood.md` (có khung năm câu hỏi và hai giới hạn đã biết,
+để không mất thời gian báo lại thứ đã đo). Ghim exe vào taskbar, và vài ngày tới khi cần đọc
+lịch sử hay xem diff thì **mở nó trước** thay vì `git log`/VS Code/GitKraken. Repo: **git-plum**
+(ROADMAP đòi tường minh) và **`dau-tri-toan-hoc`** (1140 commit, 39 merge — lớn và lộn xộn hơn
+cả `quanly-truong-phong-so` mà plan dự kiến, và nó **có** trên máy này).
 
-**Còn lại của Phase 1 sau 01-03:** G3 (PLAT-09 chưa kiểm chứng kích thước vùng qua các lần chạy), G6 (locale không phải tiếng Anh), G7 (cửa sổ console ở bản release), và việc kiểm chứng thật PLAT-07 — mở lại ứng dụng và xác nhận danh sách gần đây sống sót. Ba thứ cuối chỉ kiểm được bằng cách chạy bản dựng thật, không kiểm được bằng test tự động.
+**Checkpoint 11 bước của 03-04 cũng vẫn chưa chạy** và có thể gộp vào cùng lần dùng thật —
+nguyên văn 11 bước ở `03-04-SUMMARY.md`. Gộp là hợp lý: cả hai đo cùng một bản exe.
 
-**Nếu mất ngữ cảnh, đọc theo thứ tự:**
+**Ba kết quả có thể, và hệ quả của từng cái:**
 
-1. `.planning/ROADMAP.md` — cấu trúc 8 phase, tiêu chí thành công, ràng buộc từng phase
-2. `.planning/REQUIREMENTS.md` — 59 requirement v1 và bảng truy vết
-3. `.planning/PROJECT.md` — Core Value, ràng buộc, bảng Key Decisions (một số quyết định đã bị đảo ngược sau nghiên cứu)
-4. `.planning/research/SUMMARY.md` — mục 3 (phiên bản đã chốt), mục 5 (ràng buộc định hình phase), mục 6 (validation checkpoint)
+| Kết quả | Việc kế tiếp |
+|---|---|
+| **"Cổng đóng"** | Điền ghi chép vào `docs/08-phase3-dogfood.md`, cập nhật `VERIFICATION.md` (các ô "Có mã, chưa kiểm" → **"Đạt"**, kèm bằng chứng là lời xác nhận của chủ dự án), đánh dấu DIFF-01..06 Done trong `REQUIREMENTS.md`, `state advance-plan`, rồi **sang Phase 4**. |
+| **"Còn thiếu X"** | Lập **`03-06-PLAN.md`** đóng khoảng cách. **KHÔNG** sang Phase 4 — Phase 4 dựng ngay trên trình xem diff này (WORK-01 đọc diff viewer tường minh), nên xây tiếp trên một trình xem chưa dùng được là nhân lỗi lên. |
+| **"Hoãn"** | Ghi vào `docs/08-phase3-dogfood.md` và `VERIFICATION.md` rằng cổng thoát **chưa chạy**, và ghi đúng hệ quả: Phase 3 **chưa đóng**, và đó là **phase thứ ba liên tiếp** đóng với nợ kiểm chứng (Phase 1: ba tiêu chí; Phase 2: hai checkpoint; Phase 3: cổng thoát). |
 
-**Lưu ý:** Tài liệu dự án viết bằng tiếng Việt; mã định danh requirement, tên crate/package và tên lệnh git giữ nguyên dạng gốc.
-
----
-*State initialized: 2026-09-21 after roadmap creation*
+**Một việc nhỏ cần quyết định trước:** bốn tệp trong cây làm việc có thay đổi **không thuộc
+plan nào đã chạy** (`App.tsx`, `RefSidebar.tsx`, `CommitList.tsx`, hai hunk đầu của `app.css`)
+— việc Phase 2 về cuộn đồ thị tới nhánh/tag. Chưa commit. Xem hàng "🔴 Cây làm việc" ở
+Current Position.

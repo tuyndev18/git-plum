@@ -1,10 +1,18 @@
 # Phase 3 — Xác minh từng requirement
 
 **Ngày:** 2026-09-22
-**Trạng thái phase:** 4/5 wave đã thực thi (03-01..03-04). **Checkpoint 11 bước của 03-04
-CHƯA CHẠY**, và **checkpoint #3 của 03-01 BỊ BỎ QUA** — nên năm requirement (DIFF-01, 02, 03,
-04, 06) còn ở mức "Có mã, chưa kiểm". **DIFF-05 chưa có mã vì wave 5 chưa chạy** (plan `03-05` đã nhận nó);
-đó là một lỗ trong kế hoạch phase, không phải một ô chưa kiểm.
+**Trạng thái phase:** **5/5 wave đã thực thi** (03-01..03-05). DIFF-05 nay **có mã** (wave 5).
+
+Nhưng **cả sáu requirement vẫn ở mức "Có mã, chưa kiểm"**, vì cả ba cổng dùng-mắt-người đều
+chưa chạy hoặc bị bỏ qua:
+
+- **checkpoint #3 của 03-01 BỊ BỎ QUA** (hiệu năng diff — không có số nào)
+- **checkpoint 11 bước của 03-04 CHƯA CHẠY**
+- **cổng thoát dogfood của 03-05 CHƯA CHẠY** — xem `docs/08-phase3-dogfood.md`
+
+Nên **Phase 3 chưa đóng**. Đó là **phase thứ ba liên tiếp** đóng với nợ kiểm chứng
+(Phase 1: ba tiêu chí; Phase 2: hai checkpoint; Phase 3: cổng thoát), và khuôn hình đó
+được ghi ra ở đây thay vì để nó tích lại im lặng.
 
 Tài liệu này nêu **bằng chứng** cho từng requirement, không nêu ý kiến. Ba mức, **đúng ba mức
 mà Phase 2 đã dùng**:
@@ -31,14 +39,20 @@ về thứ nhìn thấy được.
 | DIFF-02 | **Có mã, chưa kiểm** | `viewMode` không-theo-repo + mutation #2 (5 đỏ). **Hai cột chưa bao giờ được render** — `ResizeObserver` không có trong happy-dom |
 | DIFF-03 | **Có mã, chưa kiểm** | `nextHunkLine`/`prevHunkLine` trả `null` khi hết + mutation #6 (2 đỏ). Chưa ai bấm thử |
 | DIFF-04 | **Có mã, chưa kiểm** | `Compartment` + mutation #9 (1 đỏ, cùng instance `EditorView`). **Vị trí cuộn chưa kiểm được** — không có cuộn thật |
-| DIFF-05 | **Chưa cài — theo kế hoạch** | Là việc của **wave 5** (`03-05-PLAN.md`, `requirements: [DIFF-05]`, có `file_history.rs` + `FileHistory.tsx`). Chưa chạy, nên chưa có mã. **Không** phải lỗ kế hoạch — xem đính chính ở `03-04-SUMMARY.md` |
+| DIFF-05 | **Có mã, chưa kiểm** | `parse_file_history` + `get_file_history` + `FileHistory.tsx`; 15 test đơn vị, 10 tích hợp **chạy git thật**, 25 test giao diện. Mutation `\0\n` → **7 đỏ**; bỏ `--follow` → **2 đỏ**. **Chưa ai thấy danh sách trên màn hình** |
 | DIFF-06 | **Có mã, chưa kiểm** | Năm thông báo khác nhau + 21 test; backend có test tích hợp chạy git thật (03-02). Giao diện chưa ai mở |
 | Word-level | **Có mã, chưa kiểm** | `spanToUtf16` + mutation #5 (**4 đỏ**, tiếng Việt và emoji). **Tô đúng chỗ về pixel chưa kiểm** |
 | Hiệu năng diff | **Chưa đo** | Checkpoint #3 **bị bỏ qua**. `MergeView` trên tệp 630 KB: **không có con số nào** |
 
-**Đạt: 0** · **Có mã, chưa kiểm: 6** · **Chưa đo: 1** (hiệu năng) · **Chưa tới lượt: 1** (DIFF-05, wave 5)
+**Đạt: 0** · **Có mã, chưa kiểm: 7** · **Chưa đo: 1** (hiệu năng) · **Chưa tới lượt: 0**
 
-Con số này **sẽ đổi** sau checkpoint 11 bước. Trước đó nó là trạng thái thật.
+Con số này **sẽ đổi** sau checkpoint 11 bước và sau cổng thoát. Trước đó nó là trạng thái
+thật: **không một requirement nào của Phase 3 có bằng chứng từ mắt người.**
+
+**Một giới hạn đã biết, KHÔNG phải một ô chưa kiểm:** merge commit không xuất hiện trong
+lịch sử tệp (DIFF-05). Đo được, có test ghim, và cờ trông-như-bản-sửa
+(`--diff-merges=first-parent`) đã đo là **tệ hơn** — xem mục DIFF-05 và
+`docs/08-phase3-dogfood.md`.
 
 ---
 
@@ -118,36 +132,72 @@ thiếu tính năng. Bước 7 hỏi rõ điều này.
 
 ---
 
-### DIFF-05 — lịch sử thay đổi của riêng một tệp · **Chưa cài, theo kế hoạch**
+### DIFF-05 — lịch sử thay đổi của riêng một tệp · **Có mã, chưa kiểm**
 
-> **Đính chính 2026-09-22.** Bản đầu của mục này kết luận DIFF-05 là một **lỗ kế hoạch**.
-> Sai. Orchestrator kiểm lại: `03-05-PLAN.md` nhận nó tường minh và có đủ tệp. Executor của
-> 03-04 ghi "03-05 chưa lập kế hoạch chi tiết" trong khi plan đã tồn tại từ vòng lập kế hoạch
-> ban đầu (`8d59856`, sửa ở `48d9944`/`857aee9`) — nó đọc thiếu.
+**Đã cài ở wave 5** (plan `03-05`). Trước đó ô này là "chưa tới lượt"; nay có mã và
+có test tự động, nhưng **chưa ai thấy danh sách trên màn hình**.
 
-DIFF-05 thuộc Phase 3 (ROADMAP: `Requirements: DIFF-01..DIFF-06`, tiêu chí thành công số 3:
-*"Người dùng mở lịch sử thay đổi của riêng một tệp và lần theo được các phiên bản của nó"*)
-và **đã được giao cho wave 5**:
+**Có, ở hai tầng:**
 
-| Wave | Phạm vi | DIFF-05? |
-|---|---|---|
-| 03-01 | spike đo A/B | không |
-| 03-02 | backend diff, cổng DIFF-06 | không |
-| 03-03 | word-level diff | không |
-| 03-04 | giao diện DIFF-01..04, 06 | không (`requirements: [DIFF-01, DIFF-02, DIFF-03, DIFF-04, DIFF-06]`) |
-| 03-05 | **DIFF-05** + exit gate dogfood | ✅ **CÓ** — `requirements: [DIFF-05]` |
+*Tầng backend (`git/parsers/file_history.rs` + `commands/diff.rs`):*
+- `parse_file_history` đọc `git log --follow --max-count=200 --format=<FMT>
+  --name-status -z -- <path>`. **15 test đơn vị** cộng **10 test tích hợp chạy git
+  thật** trên repo mẫu.
+- 🔴 **Dấu phân tách `\0\n` đã xử lý**, và đây là chỗ hỏng-im-lặng duy nhất của tệp.
+  Đo bằng `od -c` trên git 2.54.0.windows.1: git kết thúc phần `--format=` bằng `\0`
+  rồi in `\n` **trước** khối `--name-status`. Một bộ phân tích chỉ tách `\0` đọc
+  `status` thành `"\nM"`, phép so `status == "M"` trượt **không một tiếng nào**, và
+  danh sách về rỗng. Mutation bỏ bước cắt → **7 test đỏ** (5 đơn vị + 2 tích hợp),
+  trong đó một test in ra đúng `left: "\nM" / right: "M"`.
+- **Đổi tên lần theo được.** Repo mẫu có `renamed.txt` → `renamed-new.txt` (`R077`);
+  test khẳng định có phiên bản mang `old_path` **và** có phiên bản mang tên cũ phía
+  trước chỗ đổi tên. Mutation bỏ `--follow` → **2 đỏ**. Đây là cổng đúng cho `--follow`:
+  một `grep` sẽ khớp doc comment giải thích quyết định dùng nó.
+- `R`/`C` chiếm **hai** đường dẫn; test đặt **hai** bản ghi sau bản ghi `R` để bắt
+  lệch nấc. Mutation đọc `R` như một đường dẫn → **3 đỏ**, và đỏ ở bản ghi **sau** nó
+  (`left: 1 / right: 3`).
+- `--` **trước** pathspec (T-03-32), kiểm bằng test **đọc thân hàm thật** đã bỏ chú
+  thích. Mutation xoá `.arg("--")` → **2 đỏ** (sau khi sửa một cổng xanh sai — xem
+  `03-05-SUMMARY.md`).
+- Chi phí chặn hai lớp: `--max-count=200` (T-03-33) và `DEFAULT_TIMEOUT` 30 s riêng,
+  **không** mượn `HISTORY_TIMEOUT` 120 s. **Không cache** — lịch sử tệp phụ thuộc
+  HEAD, và watcher chỉ tới ở Phase 4.
+- Bản ghi méo → bỏ, **đếm**, `tracing::warn!` ghi `repo.id` và **số**, không ghi path
+  (T-03-36 / T-03-38). Tên tệp không UTF-8 → lossy, bản ghi sau **không mất** (HIST-11).
 
-Tệp mà `03-05` sẽ tạo: `src-tauri/src/git/parsers/file_history.rs`,
-`src/components/diff/FileHistory.tsx`, cộng command và kiểu TS.
+*Tầng giao diện (`components/diff/FileHistory.tsx`):*
+- **25 test**. Danh sách phẳng, **không** ảo hoá: chặn 200 ở tầng git nghĩa là DOM
+  không bao giờ vượt 200 hàng (T-03-34).
+- Bấm một phiên bản đặt `diffStore.historyCommitOverride`, **không** ghi vào
+  `selectionStore`. Mutation đổi sang `selectionStore.select()` → **3 đỏ**.
+- Chỗ đổi tên **hiện ra** ("đổi tên từ `<tên cũ>`"); `truncated` hiện "200 phiên bản
+  gần nhất" **trên giao diện**, không chỉ trong payload.
+- Ba tình huống rỗng là **ba câu khác nhau** (đang nạp / lỗi / không có trong lịch sử),
+  khuôn năm thông báo của DIFF-06.
+- Cổng chống đua (T-03-37): mutation bỏ → **1 đỏ**. `authorTime` là **giây**; test
+  khẳng định không hiện 1970 **và** khẳng định `new Date(giây)` *sẽ* cho 1970 — thiếu
+  khẳng định thứ hai thì khẳng định thứ nhất không chứng minh gì.
+- Lệnh qua sổ đăng ký (PLAT-04) và **gỡ khi unmount**; mutation bỏ `unregisterCommand`
+  → **1 đỏ** (test mount hai lần).
 
-**Hiện chưa có mã** — không `git log --follow -- <path>` ở Rust, không component ở TS. Đúng
-như kế hoạch: wave 5 chưa chạy. Đây là một ô **chưa tới lượt**, không phải ô bị bỏ sót.
+**Chưa kiểm — và đây là toàn bộ phần còn lại:**
 
-Ghi chú thiết kế đã có sẵn trong `03-05-PLAN.md`: giới hạn một-đường-dẫn của `--follow`
-**khớp chính xác** phạm vi DIFF-05 ("lịch sử của riêng **một** tệp"), nên nó không phải đánh
-đổi mà là sự trùng khớp. Chi phí chặn bằng `--max-count=200`; timeout 30s riêng, không mượn
-120s của `git log --all`; **không cache** vì lịch sử tệp phụ thuộc HEAD mà watcher chỉ tới ở
-Phase 4.
+1. **Không ai đã thấy danh sách phiên bản trên màn hình.** happy-dom không tính layout
+   CSS, nên bốn cột có **thẳng hàng** không, tiêu đề dài có bị cắt kèm ellipsis hay
+   **biến mất**, panel có **đẩy diff ra khỏi khung** không — cả ba chưa có bằng chứng.
+   Cổng cấp hai là `app.css.test.ts` (đọc nguồn CSS, 7 test mới, **đã kiểm là đỏ được**
+   ở cả ba điều: containment, `minmax(0,`, sàn `min-width`).
+2. **Chưa ai bấm một phiên bản trong app thật** và thấy diff đổi sang commit đó trong
+   khi hàng đang sáng trên đồ thị **không nhảy**. Test khẳng định giá trị store; nó
+   không khẳng định người dùng nhìn thấy điều đó.
+3. ⚠️ **Giới hạn đã biết, không phải ô chưa kiểm:** merge commit **không** xuất hiện
+   trong lịch sử tệp — kể cả merge đã giải quyết xung đột trong chính tệp đó. Đo được,
+   có test ghim. `--diff-merges=first-parent` **không** phải bản sửa: đo trên
+   `dau-tri-toan-hoc` (1140 commit, 39 merge) cho 104 → **5715** bản ghi cho
+   `.planning/STATE.md`, vì cờ đó làm git in bản vá ra cùng luồng và `--max-count`
+   mất tác dụng. Chi tiết ở `docs/08-phase3-dogfood.md`.
+
+→ **cổng thoát** (Task 3 của `03-05`) là chỗ kiểm cả ba.
 
 ---
 
@@ -237,9 +287,15 @@ repo công ty 398 commit) nhưng nó **không** thay phép đo `yarn.lock` 632 K
 | DIFF-01, 03, 06 | Checkpoint 11 bước — bước 6, 7, 10 |
 | DIFF-02 | Checkpoint bước 3, 4, 9. **Hoặc** Playwright trên Chromium thật nếu checkpoint bị hoãn (quy trình 02-05: cài ở scratch, không vào `package.json`) |
 | DIFF-04 | Checkpoint bước 8 — nó hỏi cả "có hiện ra" lẫn "cuộn có giữ nguyên" |
+| DIFF-05 | **Cổng thoát dogfood** — ba điều ở mục DIFF-05: danh sách có hiển thị đúng, bấm một phiên bản có đổi diff mà không nhảy đồ thị, và bốn cột có thẳng hàng |
 | Word-level | Checkpoint bước 5 |
-| Hiệu năng | Mục 6 của `docs/09-phase3-diff-decision.md`, đối chiếu ngưỡng mục 2 |
+| Hiệu năng | Mục 6 của `docs/09-phase3-diff-decision.md`, đối chiếu ngưỡng mục 2. **Hoặc** cổng thoát: mục 8 của tài liệu đó nói rõ *"nếu mở diff của một tệp lớn cảm thấy chậm, đó **là** phép đo"* |
 
-**Nếu checkpoint bị hoãn:** cả sáu requirement giữ mức "Có mã, chưa kiểm", và Task 1 của plan
-03-05 (exit gate) là chỗ đầu tiên phát hiện lỗi hiển thị — muộn hơn, nhưng vẫn trước khi đóng
-phase.
+**Không còn wave nào để hoãn việc sang.** 03-04 ghi rằng nếu checkpoint 11 bước bị hoãn thì
+cổng thoát của 03-05 là "chỗ đầu tiên phát hiện lỗi hiển thị". Wave 5 nay đã xong, nên cổng
+thoát **là** chỗ đó — và nó là cổng cuối trước khi Phase 4 dựng lên trên trình xem này
+(WORK-01 đọc diff viewer tường minh).
+
+**Nếu cổng thoát cũng bị hoãn:** cả bảy requirement giữ mức "Có mã, chưa kiểm", Phase 3 đóng
+với nợ, và lỗi hiển thị đầu tiên sẽ được phát hiện trong lúc Phase 4 đang xây trên nó — tức
+chi phí sửa nhân lên, đúng điều ROADMAP đặt cổng này để tránh.
