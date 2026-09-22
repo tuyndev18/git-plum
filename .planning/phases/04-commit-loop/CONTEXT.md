@@ -203,6 +203,44 @@ lời khuyên.
 | 4 | 3 | fixture **không phân biệt** được đột biến |
 | 5 | 3 | grep trên nguồn **thô** khớp chú thích **do chính mutation sinh ra** |
 | 6 | 3 | `waitFor` neo vào phần tử có mặt ở **mọi** trạng thái → thoả mãn tức thì |
+| 7 | **4** | fixture có **đúng hình dạng** nhưng dữ liệu vô hại nên lệch nấc **không quan sát được** |
+
+**Lỗi #7 — và đây là lần ĐẦU một executor tự bắt cổng của chính nó trước khi giao.**
+Sáu lần trước đều do orchestrator hoặc chủ dự án tìm ra sau.
+
+Wave 1 (04-01) viết một test cho mutation M1 (bản ghi dạng `2` chỉ tiêu thụ **một**
+đoạn NUL thay vì hai). Fixture dùng đường dẫn cũ `a_old.txt` — đúng hình dạng plan
+đòi: một bản ghi dạng `2` đứng trước ≥ 2 bản ghi khác. **M1 cho 0 đỏ.**
+
+Vì sao: M1 làm đoạn đường-dẫn-cũ rò sang vòng lặp sau. Nhưng `a_old.txt` **không khớp
+dạng bản ghi nào** (không có khoảng trắng sau ký tự đầu), nên nó rơi vào `_ => {}` và
+bị **bỏ im lặng**. Bộ phân tích vẫn trả đúng 3 phần tử với đúng đường dẫn. Lệch nấc
+xảy ra thật nhưng **không để lại dấu vết quan sát được**.
+
+Khẳng định `old_path` **cũng không** bắt được — tôi đã kiểm: M1 chỉ bỏ bước *tiêu thụ*,
+`duong_dan_cu` vẫn được đọc đúng nên `old_path` vẫn đúng.
+
+Sửa: đường dẫn cũ phải **trông như một bản ghi** để đoạn rò trở thành phần tử rác
+đếm được. `? cu.txt` làm được (git cho phép mọi byte trừ NUL và `/` trong tên tệp, nên
+đây là dữ liệu hợp lệ). Sau sửa M1 cho **2 đỏ**, và output đỏ nói đúng cơ chế:
+
+```
+đường dẫn cũ `? cu.txt` phải được TIÊU THỤ như một phần của bản ghi đổi tên, không
+được đọc lại thành một bản ghi dạng `?`.
+Được: [("moi.txt", Staged), ("cu.txt", Untracked), ("sau.txt", Staged)]
+  left: 3   right: 2
+```
+
+**Tôi kiểm chứng độc lập cả hai chiều:** đổi 9 chỗ `? cu.txt` về `a_old.txt` **trong
+khi M1 vẫn áp dụng** → `242 passed, 0 đỏ`. Lỗi đi qua hoàn toàn. Với `? cu.txt` → 2 đỏ.
+
+**Quy tắc rút ra, bổ sung cho mục này:** một fixture đúng *hình dạng* vẫn có thể không
+phân biệt được nếu *dữ liệu* của nó vô hại. Hình dạng là điều kiện cần, không đủ. Phải
+chạy đột biến và **thấy** đỏ, không phải lập luận rằng fixture bao được.
+
+Điều này cũng nói về **mã**, không chỉ về test: lệch nấc chỉ im lặng khi đường dẫn cũ
+tình cờ vô hại. Một đường dẫn cũ có khoảng trắng, hoặc bắt đầu bằng ký tự dạng bản ghi,
+sinh ra bản ghi **sai thật sự** — nên đây là lỗi có thể gặp trên repo thật.
 
 **Quy tắc bắt buộc cho Phase 4:**
 
@@ -287,6 +325,27 @@ trên test happy-dom. Ghi "có mã, chưa kiểm".
 - **`.vitest/json/output.json` bị cache**: phải `rm -f` trước mỗi lần chạy, nếu không
   đọc lại kết quả cũ. Tôi đã đo sáu lần "ổn định" trên một tệp stale trước khi phát
   hiện.
+- 🔴 **Ứng dụng đang mở khoá `cargo test --lib --tests`.** Nếu
+  `src-tauri/target/debug/git-plum.exe` đang chạy (session khác hoặc chủ dự án mở app):
+
+  ```text
+  error: failed to remove file `...\target\debug\git-plum.exe`
+  Caused by: Access is denied. (os error 5)
+  ```
+
+  **Chỉ định target không thoát được**: cargo relink binary chính kể cả khi chỉ yêu cầu
+  test target. Tôi đã kiểm cả `--lib --tests --no-run` và `--test <một-tên>` — **cả hai
+  exit 101**. `CARGO_TARGET_DIR` riêng cũng thất bại (rebuild 292 crate →
+  `paging file is too small`, os error 1455).
+
+  **Chạy được:** `cargo test --lib` (không cần bin). Wave 1 đo được 242 ở đó.
+
+  **Không kill tiến trình đó** nếu nó không phải của mình — có thể là app chủ dự án đang
+  dùng để chạy cổng dogfood. Ghi con số `--lib` và ghi `--lib --tests` là **chưa đo**,
+  đừng suy ra tổng rồi báo như đã đo.
+- **`rtk` lọc đầu ra `cargo test`** nhưng **có** ghi một dòng tổng vào tệp khi
+  redirect (`cargo test: 284 passed, 1 ignored`), nên `> tệp` cho tổng số. Muốn **tên
+  từng test** thì cần `rtk proxy cargo test`.
 
 ### 3.7 Kiểm tra bản dựng người dùng nhận
 
