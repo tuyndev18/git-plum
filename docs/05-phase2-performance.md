@@ -133,6 +133,56 @@ Hệ quả thứ hai: benchmark `criterion` của plan 02-03 chỉ đo (b) và (
 15.3% của bài toán. Nó vẫn có ích để bắt hồi quy thuật toán, nhưng **không** phải
 thước đo của Core Value.
 
+#### 1.2b Criterion trên cùng repo — ✅ ĐÃ CHẠY 2026-09-22, số **cao hơn** bảng trên
+
+Bảng 1.2 đo **một lần** mỗi đoạn. `cargo bench --bench graph` đo **100 mẫu** rồi lấy
+trung bình, trên đúng repo 100 007 commit đó (tên ca đo in `repo-that`, không phải
+`tong-hop` — đó là lý do benchmark in nguồn dữ liệu vào tên ca):
+
+| Đoạn | Bảng 1.2 (một lần) | Criterion (trung bình 100 mẫu) | Khoảng tin cậy |
+|---|---:|---:|---|
+| `parse_log` 100k | 63.1 / 66.9 ms | **87.9 ms** | [86.1 – 90.0 ms] |
+| `assign_lanes` 100k | 51.9 / 54.0 ms | **64.4 ms** | [62.5 – 66.6 ms] |
+
+**Số criterion cao hơn 20–39 %, và đó không phải hồi quy.** Một lần chạy đơn lẻ trên
+cache nóng nhanh hơn trung bình của 100 lần; criterion còn tính cả phương sai và các
+lần chạy lạnh hơn. Hai phép đo trả lời hai câu hỏi khác nhau, nên **giữ cả hai** thay
+vì chọn một con số "đúng".
+
+**Con số dùng cho Core Value là số criterion**, vì nó bảo thủ hơn:
+
+```text
+  git log --all --topo-order + đọc stdout    633.8 ms   (bảng 1.2; criterion không đo đoạn này)
+  parse_log                                   87.9 ms   criterion
+  lanes::assign                               64.4 ms   criterion
+  cache put/get + cắt trang + JSON             0.9 ms   bảng 1.2
+  ────────────────────────────────────────────────────
+  tổng đường nóng phía Rust                  787.0 ms   mốc 1000 ms → còn 213 ms dư
+```
+
+Vẫn **đạt** mốc một giây ở tầng Rust, với 21 % dư. Tỉ lệ cũng không đổi kết luận:
+`git log` chiếm 80,5 % (so với 84,5 % ở bảng 1.2), nên chỗ duy nhất đáng tối ưu vẫn là
+(a), và đường lùi `Channel` vẫn tấn công đúng chỗ.
+
+> ⚠️ **Baseline criterion không so được ngược.** Lần chạy này in
+> `Performance has regressed` cho ba ca (`+8.6 %` ở `parse_log/100000`, `+11.3 %` ở
+> `assign_lanes/100000`, p < 0,05), nhưng criterion **ghi đè** `base/` bằng kết quả mới
+> nhất, nên baseline mà nó so với — lần chạy 2026-09-21 15:47 — **không còn đọc được**.
+> Mã được đo (`graph/lanes.rs`, `graph/types.rs`) **có** đổi giữa hai lần
+> (`544ae5f`, `157b398`: cap 20→13, `LANE_COLORS` 7→13), nên "regressed" ở đây **không**
+> quy được về nhiễu môi trường, mà cũng **không** chứng minh được là do mã — hai lần đo
+> chạy trên máy có tải khác nhau và baseline đã mất. Muốn kết luận thì phải
+> `git stash` về `544ae5f~1` rồi chạy lại; chưa làm. Con số tuyệt đối ở trên không phụ
+> thuộc vào việc này.
+
+**Cách chạy lại:**
+
+```bash
+cd src-tauri && cargo bench --bench graph
+# kiểm tên ca đo có "repo-that", KHÔNG phải "tong-hop" — "tong-hop" nghĩa là
+# fixture 100k không tìm thấy và số vô nghĩa với checkpoint này
+```
+
 > ⚠️ **Profile release là bắt buộc.** Cùng máy, cùng repo, profile debug cho
 > `parse_log` 455 ms và `assign` 220 ms — chậm gần 7 lần và làm tổng vượt mốc một
 > giây. Đọc số debug rồi kết luận "trượt Core Value" là sai.
@@ -232,11 +282,16 @@ virtualizer là ràng buộc kiến trúc có test ràng buộc ở tầng front
 ⏭️ **BỎ QUA — KHÔNG KẾT LUẬN.** Không có trung vị thời gian vẽ lần đầu (1.3), không có
 ba bộ số FPS (1.4), không có kiểm thẳng hàng ở 100k (1.5).
 
-Phần Rust (**749.7 ms**, còn dư ~250 ms so với mốc 1000 ms) là **dấu hiệu thuận lợi**,
-và nó là một con số thật. Nhưng nó **không** phải kết luận của checkpoint: phần dư
-~250 ms đó phải gánh cả IPC lẫn React render lẫn lần vẽ canvas đầu tiên, và không ai
-biết ba thứ đó tốn bao nhiêu. Một con số phía Rust không trả lời được một tiêu chí nói
-về thứ người dùng **nhìn thấy**.
+Phần Rust (**749.7 ms** một-lần, **787.0 ms** theo criterion ở mục 1.2b — còn dư
+213–250 ms so với mốc 1000 ms) là **dấu hiệu thuận lợi**, và cả hai đều là con số
+thật. Nhưng nó **không** phải kết luận của checkpoint: phần dư đó phải gánh cả IPC lẫn
+React render lẫn lần vẽ canvas đầu tiên, và không ai biết ba thứ đó tốn bao nhiêu. Một
+con số phía Rust không trả lời được một tiêu chí nói về thứ người dùng **nhìn thấy**.
+
+> Lần chạy criterion ngày 2026-09-22 **không** đổi kết luận này theo hướng nào cả. Nó
+> chỉ thay con số phía Rust bằng một con số bảo thủ hơn (787.0 ms thay vì 749.7 ms) và
+> thu hẹp phần dư từ ~250 ms xuống ~213 ms. Ba phép đo còn thiếu (1.3, 1.4, 1.5) vẫn
+> còn thiếu, và chúng là ba phép đo **duy nhất** nói về thứ người dùng nhìn thấy.
 
 **Trạng thái của tiêu chí thành công số 1 và của HIST-05 vì vậy là "chưa kiểm chứng" —
 không phải "đạt", không phải "có thể đạt", không phải "đạt một phần".**

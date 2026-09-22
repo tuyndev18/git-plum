@@ -309,6 +309,68 @@ lần đầu sẽ sai.
 
 ---
 
+## KB-4b — 🔴 Repo THẬT bị git từ chối (khoảng cách đã biết, chưa sửa)
+
+**Tiêu chí thành công 4 · PLAT-10 · thêm 2026-09-22**
+
+KB-4 chỉ kiểm thư mục **không** phải repository. Ca này ngược lại: một repository
+**hợp lệ** mà git từ chối mở. Nó vẫn đi vào cùng một biến thể lỗi, nên thông báo
+**sai**, và KB-4 không bắt được vì KB-4 coi thông báo đó là đúng.
+
+### Vì sao ca này tồn tại
+
+`open_repository` (`src-tauri/src/commands/repo.rs:41`) rẽ **mọi** `!is_success()` của
+`rev-parse --show-toplevel` sang `GitError::NotARepository`. Biến thể đó chỉ mang
+`path`. Nhưng exit khác 0 của `rev-parse` có **nhiều hơn một** nguyên nhân, và ít nhất
+một nguyên nhân là một repo hoàn toàn bình thường.
+
+### Dựng điều kiện
+
+Đã có sẵn trên máy này — nhiều repo trong `D:/MyCompanyProjects/` thuộc một SID
+Windows khác. Kiểm bằng dòng lệnh trước:
+
+```bash
+git -C D:/MyCompanyProjects/cocos-engine rev-parse --git-dir; echo "exit=$?"
+# exit=128
+# fatal: detected dubious ownership in repository at '...'
+# To add an exception for this directory, call:
+#     git config --global --add safe.directory D:/MyCompanyProjects/cocos-engine
+```
+
+Không có repo nào như vậy thì dựng bằng cách chép một repo sang thư mục thuộc người
+dùng khác, hoặc tạm đặt `[safe] directory` thành một giá trị không khớp.
+
+### Các bước
+
+1. Bấm **"Mở repository"**, chọn repo mà dòng lệnh vừa cho exit 128.
+2. Đọc banner lỗi.
+3. Mở bảng nhật ký lệnh, tìm dòng thất bại.
+
+### Hiện trạng (đo 2026-09-22, **chưa sửa**)
+
+- Banner nói **"Không phải một repository git: &lt;đường dẫn&gt;"** — **sai**, đó *là*
+  một repository.
+- Câu `git config --global --add safe.directory …` mà git in ra — câu **duy nhất** cho
+  người dùng biết cách sửa — **không** tới giao diện: `NotARepository` không mang
+  `stderr`.
+- `stderr` **có** vào nhật ký lệnh (`open_repository` ghi `out.stderr_lossy()` khi
+  thất bại), nên thông tin không mất hẳn — nhưng người dùng phải biết mở nhật ký, và
+  banner thì đang dẫn sai hướng.
+
+### Đỗ khi (sau khi sửa)
+
+- Banner **phân biệt** được hai ca: thư mục không phải repo, và repo bị git từ chối.
+- Với ca bị từ chối, giao diện nói ra **cách sửa**, không chỉ nói đã thất bại.
+- KB-4 vẫn đỗ — nghĩa là sửa không làm ca "thư mục không phải repo" rơi vào nhánh mới.
+
+### Ghi chú
+
+Tìm được ngoài mọi cổng, lúc dò tệp lớn để đo hiệu năng Phase 3. Không sửa trong
+Phase 3 vì đó là mã Phase 1 ngoài phạm vi. Ghi ở đây để nợ nằm cạnh tiêu chí mà nó
+thuộc về, chứ không nằm rải trong tài liệu của phase khác.
+
+---
+
 ## KB-5 — Không nháy cửa sổ console
 
 **Tiêu chí thành công 5 · đây là G7**
