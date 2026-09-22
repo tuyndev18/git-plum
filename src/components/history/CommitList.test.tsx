@@ -14,9 +14,21 @@ import { render, screen } from '@testing-library/react'
 import { CommitList, type CommitListHandle } from '@/components/history/CommitList'
 import { useHistoryStore } from '@/stores/historyStore'
 import { useRefsStore } from '@/stores/refsStore'
-import type { Commit, GitRef, GraphRow } from '@/lib/ipc'
-import { colorFor } from '@/lib/graph-render/geometry'
+import { useStatusStore } from '@/stores/statusStore'
+import type { Commit, GitRef, GraphRow, RepoStatus, StatusEntry } from '@/lib/ipc'
+import { colorFor, graphWidth } from '@/lib/graph-render/geometry'
+import {
+  commitRowY,
+  contentOffset,
+  virtualizerCount,
+  WIP_ROW_HEIGHT,
+} from '@/lib/graph-render/wipRow'
 
+// `CommitList` đọc `statusStore` từ 04-05 (hàng WIP), và `statusStore` nhập
+// `describeError` + `ngheTrangThaiNgoai` từ cùng module này. Giả lập thiếu một
+// trong hai làm cả suite **không nạp được** — và một suite không nạp được báo
+// `total 0 / failed 0`, tức XANH GIẢ (lỗi #8 của CONTEXT.md 3.1). Đó là lý do
+// mấy khoá dưới đây có mặt dù test trong tệp này không gọi tới chúng.
 vi.mock('@/lib/ipc', () => ({
   ipc: {
     getCommitPage: vi.fn().mockResolvedValue({
@@ -25,7 +37,16 @@ vi.mock('@/lib/ipc', () => ({
       total: 0,
       skippedRecords: 0,
     }),
+    getStatus: vi.fn().mockResolvedValue({
+      branch: { head: null, oid: null, upstream: null, ahead: null, behind: null },
+      entries: [],
+      hasConflicts: false,
+    }),
+    stageFiles: vi.fn(),
+    unstageFiles: vi.fn(),
   },
+  describeError: (e: unknown) => String(e),
+  ngheTrangThaiNgoai: vi.fn().mockResolvedValue(() => {}),
 }))
 
 function commit(id: string, subject: string, overrides: Partial<Commit> = {}): Commit {
@@ -378,5 +399,364 @@ describe('scrollToIndex lộ ra qua ref (HIST-10, không tạo virtualizer thứ
     render(<CommitList ref={ref} repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
 
     expect(() => ref.current?.scrollToIndex(1)).not.toThrow()
+  })
+})
+
+describe('scrollToCommit — bấm nhánh/tag ở thanh bên nhảy tới commit', () => {
+  /*
+   * 🔴 Lỗi người dùng báo: "bấm vào branch, tag ở cột bên trái không bị nhảy
+   * đến commit". Nguyên nhân: `RefSidebar` chỉ ghi `selectionStore`, và không
+   * một đường nào nối từ đó tới virtualizer của `CommitList` — `scrollToIndex`
+   * tồn tại nhưng chỉ `CommitSearch` gọi, mà thanh bên không đi qua nó.
+   *
+   * `scrollToCommit` là điểm nối còn thiếu: nhận **sha** thay vì chỉ số, vì
+   * thanh bên chỉ biết `ref.target`, không biết hàng thứ mấy.
+   */
+  it('commit đã nạp -> trả true', () => {
+    seedRepo('repo-1', [commit('a', 'x'), commit('b', 'y')], [graphRow('a'), graphRow('b')])
+    const ref = createRef<CommitListHandle>()
+
+    render(<CommitList ref={ref} repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    expect(ref.current?.scrollToCommit('b')).toBe(true)
+  })
+
+  it('sha không có trong lịch sử đã nạp -> trả false, KHÔNG ném', () => {
+    seedRepo('repo-1', [commit('a', 'x')], [graphRow('a')])
+    const ref = createRef<CommitListHandle>()
+
+    render(<CommitList ref={ref} repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    expect(ref.current?.scrollToCommit('khong-ton-tai')).toBe(false)
+  })
+
+  it('mảng commits THƯA (trang chưa nạp) -> lỗ không làm hỏng chỉ mục', () => {
+    /*
+     * `mergePage` cấp trước `commits` tới `total` và để các vị trí chưa nạp ở
+     * `undefined`. Một vòng lặp dựng chỉ mục mà tin rằng mọi phần tử đều có
+     * commit sẽ ném ở đây — và ném đúng trên repo lớn, tức đúng ca mà tính
+     * năng này tồn tại để phục vụ.
+     */
+    const commits: Commit[] = []
+    commits.length = 2000
+    commits[0] = commit('a', 'dau')
+    commits[1500] = commit('z', 'cuoi')
+    const rows: GraphRow[] = []
+    rows.length = 2000
+    rows[0] = graphRow('a')
+    rows[1500] = graphRow('z')
+
+    seedRepo('repo-1', commits, rows, 2000)
+    const ref = createRef<CommitListHandle>()
+
+    render(<CommitList ref={ref} repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    expect(ref.current?.scrollToCommit('z')).toBe(true)
+    // Vị trí 999 là một lỗ — không có commit nào mang sha đó.
+    expect(ref.current?.scrollToCommit('chua-nap')).toBe(false)
+  })
+})
+
+describe('bề rộng cột đồ thị tính CẢ lane của cạnh, không chỉ lane của hàng', () => {
+  /*
+   * 🔴 Lỗi người dùng báo bằng ảnh: hai nút ở lane 1 nằm lơ lửng, không một
+   * đường lane nào nối tới chúng.
+   *
+   * Dữ liệu backend ĐÚNG — kiểm bằng `cargo run --bin rowdump` trên repo thật:
+   * hàng 106 của `dau-tri-toan-hoc` mang `lane 0` nhưng có `passthrough 1->1`
+   * và `outEdges 0->0, 0->2`. Chuỗi lane liền mạch từ đầu tới cuối.
+   *
+   * Lỗi ở frontend: `maxLane` chỉ đọc `row.lane` của các hàng ĐANG THẤY, rồi
+   * `graphWidth(maxLane)` đặt cả bề rộng cột CSS lẫn bề rộng canvas. Cuộn tới
+   * một vùng toàn hàng lane 0 → cột co về đúng một lane → mọi cạnh ở lane ≥ 1
+   * bị vẽ ra ngoài canvas và biến mất.
+   *
+   * Vì sao không test nào cũ bắt được: lỗi cần một hàng có `lane` THẤP nhưng
+   * cạnh ở lane CAO. Fixture nào đặt `lane` bằng lane cao nhất của chính nó
+   * đều xanh — đúng khuôn "hình dạng đúng, dữ liệu vô hại" đã dính ba lần.
+   */
+  it('hàng lane 0 mang passthrough ở lane 2 -> cột vẫn đủ rộng cho lane 2', () => {
+    const commits = [commit('a', 'hang mot'), commit('b', 'hang hai')]
+    const rows: GraphRow[] = [
+      {
+        ...graphRow('a'),
+        lane: 0,
+        // Nhánh song song đi xuyên qua hàng này ở lane 2 — hàng ở lane 0 nhưng
+        // vẫn PHẢI vẽ tới lane 2.
+        passthrough: [{ fromLane: 2, toLane: 2, color: 2 }],
+      },
+      { ...graphRow('b'), lane: 0 },
+    ]
+    seedRepo('repo-1', commits, rows)
+
+    const { container } = render(
+      <CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />,
+    )
+
+    const canvas = container.querySelector('canvas')
+    expect(canvas, 'phải có canvas đồ thị').not.toBeNull()
+    // `graphWidth(2)` cần chỗ cho ba lane (0,1,2). `graphWidth(0)` chỉ cho một.
+    expect(
+      Number((canvas as HTMLCanvasElement).getAttribute('width')),
+      'bề rộng canvas phải đủ cho lane 2 của passthrough, không co theo row.lane',
+    ).toBe(graphWidth(2))
+  })
+
+  it('hàng lane 0 mang outEdges rẽ sang lane 3 -> cột đủ rộng cho lane 3', () => {
+    // Ca merge: `outEdges 0->0, 0->3` là hình dạng thật ở hàng 111 của
+    // `dau-tri-toan-hoc` (`merge(23-04)`).
+    const commits = [commit('a', 'merge')]
+    const rows: GraphRow[] = [
+      {
+        ...graphRow('a'),
+        lane: 0,
+        outEdges: [
+          { fromLane: 0, toLane: 0, color: 0 },
+          { fromLane: 0, toLane: 3, color: 3 },
+        ],
+      },
+    ]
+    seedRepo('repo-1', commits, rows)
+
+    const { container } = render(
+      <CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />,
+    )
+
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement
+    expect(Number(canvas.getAttribute('width'))).toBe(graphWidth(3))
+  })
+})
+
+/* ------------------------------------------------------------------------ *
+ * Hàng WIP — WORK-11, plan 04-05 Task 1
+ *
+ * 🔴 Ranh giới của những test này, nói thẳng: chúng chứng minh các **con số**
+ * khớp nhau. Chúng **không** chứng minh mắt người thấy thẳng hàng. happy-dom
+ * không tính CSS layout và không có cuộn thật (CONTEXT.md 3.4) — cả năm lỗi
+ * hiển thị của Phase 3 đi qua 435 test tự động. Việc kiểm bằng mắt là Task 3.
+ * ------------------------------------------------------------------------ */
+
+function muc(path: string, xy: string, group: StatusEntry['group']): StatusEntry {
+  return { path, oldPath: null, xy, group, hasInvalidUtf8: false }
+}
+
+function trangThai(entries: StatusEntry[], headOid: string | null = null): RepoStatus {
+  return {
+    branch: { head: 'main', oid: headOid, upstream: null, ahead: null, behind: null },
+    entries,
+    hasConflicts: false,
+  }
+}
+
+function seedStatus(repoId: string, status: RepoStatus | undefined) {
+  useStatusStore.setState((s) => ({
+    byRepo: { ...s.byRepo, [repoId]: { status, isLoading: false, error: null } },
+  }))
+}
+
+describe('hàng WIP trong CommitList (WORK-11)', () => {
+  beforeEach(() => {
+    useStatusStore.setState({ byRepo: {} })
+  })
+
+  it('TIỀN ĐỀ: không có status → KHÔNG hàng WIP, và mọi hàng commit vẫn render', () => {
+    // Đây là ca hồi quy của toàn bộ 04-05: bật tính năng lên **không được**
+    // đổi hành vi khi repo sạch. Nếu test này đỏ, mọi test dưới nó vô nghĩa.
+    seedRepo('repo-1', [commit('a', 'khong co thay doi')], [graphRow('a')])
+
+    render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    expect(screen.queryByTestId('wip-row')).toBeNull()
+    expect(screen.getByText('khong co thay doi')).toBeTruthy()
+  })
+
+  it('có tệp sửa + tệp mới → hàng WIP hiện, mang chuỗi nhận diện dem sua va dem moi', () => {
+    seedRepo('repo-1', [commit('a', 'commit dau')], [graphRow('a')])
+    seedStatus(
+      'repo-1',
+      trangThai([
+        muc('x1.txt', '.M', 'unstaged'),
+        muc('x2.txt', '.M', 'unstaged'),
+        muc('x3.txt', '.M', 'unstaged'),
+        muc('moi.txt', '??', 'untracked'),
+      ]),
+    )
+
+    render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    const hang = screen.getByTestId('wip-row')
+    expect(hang.getAttribute('data-wip-modified')).toBe('3')
+    expect(hang.getAttribute('data-wip-added')).toBe('1')
+    // Và con số phải thật sự HIỆN RA, không chỉ nằm trong thuộc tính data.
+    expect(hang.textContent).toContain('3')
+    expect(hang.textContent).toContain('1')
+  })
+
+  it('tệp XY = MM sinh HAI phần tử nhưng đếm MỘT — đếm đường dẫn duy nhất', () => {
+    // Cùng bất biến mà `RepoStatus::wip_counts` phía Rust ghim. Phía TS phải
+    // tự dẫn xuất (trường đó KHÔNG đi qua dây IPC), nên nó cần cổng riêng.
+    seedRepo('repo-1', [commit('a', 'x')], [graphRow('a')])
+    seedStatus(
+      'repo-1',
+      trangThai([muc('same.txt', 'MM', 'staged'), muc('same.txt', 'MM', 'unstaged')]),
+    )
+
+    render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    expect(screen.getByTestId('wip-row').getAttribute('data-wip-modified')).toBe('1')
+  })
+
+  it('tệp đã stage thêm mới (A.) đếm là TỆP MỚI, không phải tệp sửa', () => {
+    seedRepo('repo-1', [commit('a', 'x')], [graphRow('a')])
+    seedStatus('repo-1', trangThai([muc('moi.txt', 'A.', 'staged')]))
+
+    render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    const hang = screen.getByTestId('wip-row')
+    expect(hang.getAttribute('data-wip-added')).toBe('1')
+    expect(hang.getAttribute('data-wip-modified')).toBe('0')
+  })
+
+  it('🔴 tiêu chí 7: entries rỗng (đã commit hết) → hàng WIP BIẾN MẤT', () => {
+    seedRepo('repo-1', [commit('a', 'x')], [graphRow('a')])
+    seedStatus('repo-1', trangThai([]))
+
+    render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    expect(screen.queryByTestId('wip-row')).toBeNull()
+  })
+
+  it('bấm hàng WIP gọi onOpenCommitBox, và KHÔNG gọi onSelect với commitId bịa', () => {
+    seedRepo('repo-1', [commit('a', 'x')], [graphRow('a')])
+    seedStatus('repo-1', trangThai([muc('x1.txt', '.M', 'unstaged')]))
+
+    const onSelect = vi.fn()
+    const onOpenCommitBox = vi.fn()
+    render(
+      <CommitList
+        repoId="repo-1"
+        selectedCommitId={null}
+        onSelect={onSelect}
+        onOpenCommitBox={onOpenCommitBox}
+      />,
+    )
+
+    screen.getByTestId('wip-row').click()
+
+    expect(onOpenCommitBox).toHaveBeenCalledTimes(1)
+    // 🔴 Hàng WIP KHÔNG có SHA. Gọi `onSelect` ở đây nghĩa là bịa một commitId
+    // và `CommitDetail` sẽ đi hỏi backend về một sha không tồn tại.
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('hàng WIP KHÔNG vào historyStore.commits — số commit không đổi khi bật/tắt', () => {
+    const commits = [commit('a', 'x'), commit('b', 'y')]
+    seedRepo('repo-1', commits, [graphRow('a'), graphRow('b')])
+
+    const truoc = useHistoryStore.getState().byRepo['repo-1']?.commits.length
+    seedStatus('repo-1', trangThai([muc('x1.txt', '.M', 'unstaged')]))
+    render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+    const sau = useHistoryStore.getState().byRepo['repo-1']?.commits.length
+
+    expect(screen.getByTestId('wip-row')).toBeTruthy()
+    expect(sau, 'hàng WIP không được chen vào mảng commits').toBe(truoc)
+    expect(sau).toBe(2)
+  })
+
+  it('🔴 count của virtualizer === total KỂ CẢ khi có hàng WIP (cách B)', () => {
+    // Cách A (`count: total + 1`) rải một phép `-1` ra bảy chỗ tiêu thụ
+    // `virtualItems`. Test này ghim cách B ở mức số học; cổng số học của
+    // `wipRow.test.ts` ghim nó ở mức nguồn.
+    expect(virtualizerCount(2, true)).toBe(2)
+    expect(virtualizerCount(2, false)).toBe(2)
+
+    seedRepo('repo-1', [commit('a', 'x'), commit('b', 'y')], [graphRow('a'), graphRow('b')])
+    seedStatus('repo-1', trangThai([muc('x1.txt', '.M', 'unstaged')]))
+
+    const { container } = render(
+      <CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />,
+    )
+
+    // Đúng 2 hàng commit được dựng — không 3. Hàng WIP là anh em NGOÀI vùng đó.
+    expect(container.querySelectorAll('.commit-row').length).toBe(2)
+  })
+
+  it('🔴 THẲNG CỘT ở 3 vị trí cuộn: cột đồ thị và cột văn bản dùng CÙNG một y', () => {
+    /*
+     * ⚠️ Đây là test **số học**, không phải bằng chứng hiển thị. happy-dom
+     * không cuộn thật, nên nó khẳng định đúng một điều: với cùng đầu vào, hai
+     * cột đọc **cùng** hàm `commitRowY` nên chúng **không thể** ra hai số khác
+     * nhau. Việc mắt người thấy thẳng hàng là bước 5 của checkpoint Task 3.
+     *
+     * R1 đòi ≥ 3 vị trí cuộn: đầu, giữa, cuối.
+     */
+    const viTriCuon = [0, 1400, 27_972]
+    for (const scrollTop of viTriCuon) {
+      for (const start of [0, 28, 1400]) {
+        const yCoWip = commitRowY(start, scrollTop, true)
+        const yKhongWip = commitRowY(start, scrollTop, false)
+        // Cột đồ thị và cột văn bản gọi CÙNG hàm này với CÙNG tham số, nên
+        // đẳng thức dưới đây là điều duy nhất cần chứng minh về "thẳng cột".
+        expect(yCoWip - yKhongWip, `lech tai scrollTop=${scrollTop}`).toBe(WIP_ROW_HEIGHT)
+        expect(yCoWip - yKhongWip, 'lech DUNG mot hang, khong hai').toBe(contentOffset(true))
+      }
+    }
+  })
+
+  it('headLane ngoài tầm (>= MAX_VISIBLE_LANES) → chỉ báo suy giảm, không vẽ vào cột 12', () => {
+    // HEAD ở lane 25 trên một repo nhiều nhánh. `laneX` clamp vô điều kiện,
+    // nên vẽ thẳng sẽ nối hàng WIP vào một commit KHÁC — sai một cách tự tin.
+    const commits = [commit('head-sha', 'HEAD o lane cao')]
+    const rows: GraphRow[] = [{ ...graphRow('head-sha'), lane: 25 }]
+    seedRepo('repo-1', commits, rows)
+    seedStatus('repo-1', trangThai([muc('x1.txt', '.M', 'unstaged')], 'head-sha'))
+
+    render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    const hang = screen.getByTestId('wip-row')
+    expect(
+      hang.getAttribute('data-wip-edge'),
+      'lane HEAD vuot cap phai bao `clamped`, khong im lang ve sai cot',
+    ).toBe('clamped')
+  })
+
+  it('HEAD nằm trong tầm → cạnh WIP ở biến thể normal, mang đúng lane của HEAD', () => {
+    const commits = [commit('c0', 'moi nhat theo topo'), commit('head-sha', 'HEAD that su')]
+    const rows: GraphRow[] = [
+      { ...graphRow('c0'), lane: 0 },
+      { ...graphRow('head-sha'), lane: 3 },
+    ]
+    seedRepo('repo-1', commits, rows)
+    seedStatus('repo-1', trangThai([muc('x1.txt', '.M', 'unstaged')], 'head-sha'))
+
+    render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    const hang = screen.getByTestId('wip-row')
+    expect(hang.getAttribute('data-wip-edge')).toBe('normal')
+    // 🔴 Lane 3 của HEAD, KHÔNG phải lane 0 của hàng 0. Nhầm hai thứ này là
+    // gốc của cả lỗi — xem doc comment của `wipEdge`.
+    expect(hang.getAttribute('data-wip-lane')).toBe('3')
+  })
+
+  it('HEAD không nằm trong lịch sử đã nạp → unknownHead, không đoán lane 0', () => {
+    seedRepo('repo-1', [commit('a', 'x')], [{ ...graphRow('a'), lane: 0 }])
+    seedStatus('repo-1', trangThai([muc('x1.txt', '.M', 'unstaged')], 'sha-khong-co-trong-trang'))
+
+    render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    expect(screen.getByTestId('wip-row').getAttribute('data-wip-edge')).toBe('unknownHead')
+  })
+
+  it('hàng WIP cao ĐÚNG WIP_ROW_HEIGHT trong style — Phase 2 hỏng hai lần ở đây', () => {
+    // ⚠️ Khẳng định về **style inline**, không phải về layout đã tính. CSS
+    // padding/border vẫn có thể phá chiều cao và happy-dom sẽ không thấy —
+    // bước 5 của checkpoint Task 3 mới kiểm được điều đó.
+    seedRepo('repo-1', [commit('a', 'x')], [graphRow('a')])
+    seedStatus('repo-1', trangThai([muc('x1.txt', '.M', 'unstaged')]))
+
+    render(<CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />)
+
+    const hang = screen.getByTestId('wip-row') as HTMLElement
+    expect(hang.style.height).toBe(`${WIP_ROW_HEIGHT}px`)
   })
 })
