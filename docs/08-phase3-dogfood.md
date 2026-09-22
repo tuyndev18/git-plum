@@ -164,6 +164,46 @@ Lịch sử tệp trả tối đa 200 phiên bản gần nhất, và giao diện
 path) thành hằng số. Nếu bạn gặp một tệp mà 200 không đủ, nói ra — con số này là một
 hằng số, không phải một giới hạn kiến trúc.
 
+### 🔴 Repo trên D: báo sai "Không phải một repository git" (lỗi Phase 1, chưa sửa)
+
+Tìm được **trước** khi cổng chạy, lúc dò tệp lớn để đo hiệu năng — nên nó không phải
+phát hiện của cổng thoát, và ghi ở đây chỉ để bạn không mất thời gian báo lại.
+
+Nhiều repo trong `D:/MyCompanyProjects/` thuộc một SID Windows khác (máy cũ, hoặc copy
+từ tài khoản khác), nên git **từ chối** chúng:
+
+```
+$ git -C /d/MyCompanyProjects/cocos-engine rev-parse --git-dir
+exit=128
+fatal: detected dubious ownership in repository at 'D:/MyCompanyProjects/cocos-engine'
+'D:/MyCompanyProjects/cocos-engine' is owned by:
+	(inconvertible) (S-1-5-21-2703031427-392326974-3748735076-1001)
+but the current user is:
+	TUYENPN/tuyen (S-1-5-21-3544381181-92016924-2619198207-1001)
+To add an exception for this directory, call:
+
+	git config --global --add safe.directory D:/MyCompanyProjects/cocos-engine
+```
+
+`open_repository` (`src-tauri/src/commands/repo.rs:41`) rẽ **mọi** `!is_success()` của
+`rev-parse --show-toplevel` sang `GitError::NotARepository`, và biến thể đó chỉ mang
+`path` — **không** mang `stderr`. Hệ quả: git-plum nói **"Không phải một repository
+git"**, vốn sai (đó *là* repo), và câu duy nhất giúp sửa —
+`git config --global --add safe.directory …` — không bao giờ tới giao diện. `stderr`
+*có* vào nhật ký lệnh, nên không mất hẳn, nhưng thông báo lỗi thì dẫn sai hướng.
+
+Đây là nợ **PLAT-10** ("lỗi đọc hiểu được") của Phase 1, không phải lỗi Phase 3. Chưa
+sửa: sửa nó là đổi mã ngoài phạm vi phase này. Cách đi vòng khi dogfood, nếu bạn cần
+mở một repo trên D::
+
+```bash
+git config --global --add safe.directory D:/MyCompanyProjects/<tên-repo>
+```
+
+Nếu gặp khi dùng thật thì **không cần báo lại** — đã ghim ở đây. Nhưng **có** đáng nói
+nếu bạn gặp ca nào khác cũng bị gán sai thành "Không phải một repository git", vì thế
+nghĩa là biến thể lỗi đó đang hút nhiều nguyên nhân hơn ta biết.
+
 ---
 
 ## Việc cho Phase 4 rút ra từ tài liệu này
