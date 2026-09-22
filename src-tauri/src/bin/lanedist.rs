@@ -54,6 +54,34 @@ fn main() {
     for r in &rows {
         hist[r.lane as usize] += 1;
     }
+    // Hang 0 va HEAD KHONG phai cung mot thu. `git log --all --topo-order` xep commit
+    // moi nhat theo topo cua MOI ref o hang 0; neu nguoi dung dang o mot nhanh cu thi
+    // HEAD nam giua danh sach va lane cua no la bat ky. Hang WIP (WORK-11) noi xuong
+    // HEAD, khong noi xuong hang 0, nen lane can kiem la lane cua HEAD.
+    let head_out = Command::new("git")
+        .current_dir(&repo)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .expect("rev-parse HEAD");
+    let head_sha = String::from_utf8_lossy(&head_out.stdout).trim().to_string();
+    println!(
+        "hang 0: lane {} (commit moi nhat theo topo cua MOI ref)",
+        rows[0].lane
+    );
+    match commits.iter().position(|c| c.id == head_sha) {
+        Some(i) => {
+            let l = rows[i].lane;
+            println!(
+                "HEAD that su: hang {i}, lane {l} -> canh hang WIP {}",
+                if l >= cap {
+                    "BI CLAMP, se ve sai cot"
+                } else {
+                    "ve dung cot"
+                }
+            );
+        }
+        None => println!("HEAD KHONG co trong danh sach (detached ngoai moi ref?)"),
+    }
     println!("--- phan bo lane ---");
     for (lane, n) in hist.iter().enumerate() {
         if *n > 0 {
