@@ -15,6 +15,8 @@ import { RefSidebar } from '@/components/RefSidebar'
 import { CommitList, type CommitListHandle } from '@/components/history/CommitList'
 import { CommitDetail } from '@/components/history/CommitDetail'
 import { CommitSearch } from '@/components/history/CommitSearch'
+import { DiffViewer } from '@/components/diff/DiffViewer'
+import { useDiffStore } from '@/stores/diffStore'
 
 /**
  * Khung đo của checkpoint #3 (plan 03-01) — nạp lười, **spike tạm thời**.
@@ -55,6 +57,29 @@ export function App() {
     activeRepoId ? (s.selectedByRepo[activeRepoId] ?? null) : null,
   )
   const selectCommit = useSelectionStore((s) => s.select)
+
+  /*
+   * Tệp đang chọn quyết định vùng `main` hiện đồ thị hay hiện diff (plan 03-04).
+   *
+   * **Quyết định bố cục, và vì sao.** `<action>` Task 2 cho hai lựa chọn:
+   * (a) diff chiếm vùng `main`, hay (b) thêm một `Panel` thứ tư. Chọn **(a)**.
+   *
+   * Cách (b) an toàn hơn về hồi quy — không đụng `AppLayout.tsx` vốn vừa qua hai
+   * vòng checkpoint — nhưng nó chia bề rộng cửa sổ thành **bốn** phần, và chế độ
+   * hai cột cần hai cột nội dung cộng hai cột số dòng trong **một** panel.
+   * `<layout_constraints>` mục 4 gọi hẹp là "ca hẹp tệ nhất". Cách (a) cho diff
+   * vùng rộng nhất (`main`, `defaultSize="52%"`) mà cũng **không đổi một dòng
+   * nào** trong `AppLayout.tsx` — nó chỉ đổi thứ render *bên trong* vùng `main`.
+   *
+   * Đổi lại: đồ thị bị che khi đang xem diff. Nút "Đóng diff" đưa nó về, và
+   * `FileList` ở vùng `detail` vẫn hiện nên người dùng không mất ngữ cảnh commit.
+   *
+   * 🔴 Đây là **thay đổi bố cục** và Phase 2 cho thấy bố cục là chỗ hay sai nhất
+   * — nên nó là **bước 1** của checkpoint để chủ dự án xác nhận hoặc chọn (b).
+   */
+  const selectedFile = useDiffStore((s) =>
+    activeRepoId ? (s.selectedFileByRepo[activeRepoId] ?? null) : null,
+  )
   const setSelectedCommitId = (commitId: string) => {
     if (activeRepoId) selectCommit(activeRepoId, commitId)
   }
@@ -244,7 +269,9 @@ export function App() {
           }
           main={
             <main className={`pane main${activeRepo ? ' main-history' : ''}`}>
-              {activeRepo ? (
+              {activeRepo && selectedFile ? (
+                <DiffViewer repoId={activeRepo.info.id} />
+              ) : activeRepo ? (
                 <div className="main-history-body">
                   <CommitSearch
                     repoId={activeRepo.info.id}

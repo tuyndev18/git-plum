@@ -68,6 +68,15 @@
    * con số đó để vẽ vào cột 2. Có test ghim hai phía.
    */
   --ref-col-width: 132px;
+
+  /*
+   * Bề rộng tối thiểu của vùng hai cột — PHẢI khớp `MIN_SPLIT_WIDTH` ở
+   * `src/components/diff/DiffViewer.tsx`. JS quyết định "hai cột hay hợp nhất"
+   * theo con số TS, còn sàn cột ở đây theo con số CSS: lệch nhau thì có một dải
+   * bề rộng mà JS hiện hai cột trong khi CSS đã co cột xuống dưới mức đọc được.
+   * Có test ghim hai phía, đúng tiền lệ `--ref-col-width`.
+   */
+  --min-split-width: 720px;
 }
 
 @media (prefers-color-scheme: light) {
@@ -1327,4 +1336,188 @@ button:disabled {
 
 .spike-removed {
   background: rgba(170, 50, 50, 0.28);
+}
+
+/* ==========================================================================
+ * Trình xem diff — plan 03-04 (DIFF-01..04, DIFF-06).
+ * ==========================================================================
+ *
+ * Ba ràng buộc bố cục dưới đây đến thẳng từ ba lỗi hiển thị của Phase 2, và
+ * cả ba có test đọc nguồn CSS trong `app.css.test.ts`:
+ *
+ * 1. **Containment cứng** (`overflow: hidden` + `min-height: 0`). Grid/flex item
+ *    mặc định có `min-height: auto`, KHÔNG phải `0` — nên nội dung con ép track
+ *    cao lên bất kể `overflow: hidden` ở phần tử con. `EditorView` có thể cao
+ *    hàng nghìn px; thiếu containment nó đẩy cả panel giãn thay vì tự cuộn.
+ *    Đúng bản sửa đã phải thêm cho `.commit-row` sau checkpoint vòng 1.
+ *
+ * 2. **Sàn px cứng, KHÔNG `minmax(0, ...)`.** `0` là sàn hợp lệ và cột co về
+ *    ĐÚNG 0px ở cửa sổ hẹp — chữ hiển thị 0% trong khi DOM vẫn có `textContent`
+ *    đúng (đo bằng Chromium thật ở 02-05). `DiffViewer` nằm trong một `Panel`
+ *    KÉO ĐƯỢC nên bề rộng nhỏ tuỳ ý — đúng điều kiện đã kích hoạt lỗi đó.
+ *
+ * 3. **`.diff-word-changed` là LỚP PHỦ có alpha.** Nó nằm TRÊN nền dòng
+ *    thêm/xoá; một nền đục xoá mất tín hiệu "dòng này đã thêm" — cùng lớp lỗi
+ *    với `.commit-row:hover` dùng `var(--bg-inset)` và xoá sạch đoạn đồ thị
+ *    canvas của hàng đó.
+ *
+ * Màu khai ở ĐÂY, không trong `EditorView.theme` của `theme.ts`: theme sáng của
+ * dự án bật qua `@media (prefers-color-scheme: light)`, và màu đặt trong object
+ * JS không đi qua cascade đó — trình xem diff sẽ giữ màu tối khi cả giao diện
+ * đã sang sáng. Xem doc comment của `theme.ts`.
+ */
+
+.diff-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  /* Containment cứng — ràng buộc 1. */
+  overflow: hidden;
+  min-height: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.diff-viewer-empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.diff-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /*
+   * Sàn px cứng cho cột đường dẫn — ràng buộc 2. `minmax(0, 1fr)` ở đây sẽ làm
+   * đường dẫn tệp biến mất hoàn toàn ở panel hẹp, đúng lỗi `.commit-subject`.
+   */
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  flex: 0 0 auto;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.diff-path {
+  /* 120px là sàn còn đọc được vài ký tự trước dấu ellipsis. */
+  flex: 1 1 120px;
+  min-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.diff-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.diff-toolbar-spacer {
+  width: 8px;
+}
+
+.diff-close {
+  flex: 0 0 auto;
+}
+
+.diff-pane {
+  flex: 1 1 auto;
+  /* Containment cứng — ràng buộc 1, cấp thứ hai của chuỗi cha-con. */
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+}
+
+.diff-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/*
+ * Vùng hai cột. `min-width` dùng `var(--min-split-width)` — con số này PHẢI
+ * khớp `MIN_SPLIT_WIDTH` trong `DiffViewer.tsx`, có test ghim hai phía.
+ *
+ * Panel hẹp hơn mức đó thì JS đã tự chuyển về hợp nhất và class `.diff-split`
+ * không được gắn, nên `min-width` ở đây không bao giờ gây tràn ngang — nó là
+ * lớp phòng thủ thứ hai cho ca JS và CSS lệch nhau.
+ */
+.diff-split {
+  min-width: var(--min-split-width);
+}
+
+.diff-loading {
+  align-items: center;
+  justify-content: center;
+}
+
+/* Nền dòng thêm/xoá — class do `decorations.ts` gắn qua `Decoration.line`. */
+.diff-line-added {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+}
+
+.diff-line-removed {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+/*
+ * Word-level — ràng buộc 3. Nền CÓ ALPHA để nền dòng thêm/xoá bên dưới vẫn
+ * hiện xuyên qua: người dùng phải thấy CẢ HAI tín hiệu cùng lúc ("dòng này đã
+ * thêm" + "đoạn chữ này là phần đổi"). Đậm hơn nền dòng để phân biệt được.
+ */
+.diff-word-changed {
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: 2px;
+}
+
+.diff-notice {
+  flex: 0 0 auto;
+  margin: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-raised) 70%, transparent);
+  font-family: var(--font-ui);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.diff-notice-detail {
+  margin: 6px 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.diff-notice-truncated,
+.diff-notice-degraded,
+.diff-notice-hunk {
+  margin: 6px 10px;
+  padding: 6px 10px;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.diff-notice-error {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+}
+
+.diff-notice-error pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Hàng tệp đang chọn — nền có alpha, cùng lý do `.commit-row.selected`. */
+.file-row {
+  cursor: pointer;
+}
+
+.file-row-selected {
+  background: color-mix(in srgb, var(--row-highlight) 14%, transparent);
 }

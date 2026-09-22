@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "fixtures": "bash scripts/fixtures/make-fixtures.sh",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:chunks": "node scripts/check-lang-chunks.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "6.11.1",

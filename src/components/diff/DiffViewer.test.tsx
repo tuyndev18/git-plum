@@ -324,7 +324,10 @@ describe('nhảy khối — giao diện NÓI RA khi hết khối (DIFF-03)', () 
     getFileDiff.mockResolvedValue(textDiff('a.ts', 'x'))
     useDiffStore.setState({ selectedFileByRepo: { r: 'a.ts' } })
     render(<DiffViewer repoId="r" />)
-    await waitFor(() => expect(screen.getByTestId('diff-path')).toBeTruthy())
+    // Chờ tới lúc trình xem THẬT SỰ được dựng: `diff-path` render ngay từ khung
+    // đầu (nó chỉ đọc `selectedFile`), nên chờ nó là chờ sai thứ — và
+    // `lineMetaRef` còn rỗng thì `nhayKhoi` thoát sớm và không đặt thông báo nào.
+    await waitFor(() => expect(__diffViewerStatsForTest.created).toBeGreaterThan(0))
 
     const { runCommand } = await import('@/lib/commands')
     await runCommand('diff.nextHunk')
