@@ -23,7 +23,83 @@ mở ứng dụng.
 
 ---
 
-## Cổng Task 0 của 04-05 — **ĐỎ**, và đây là lý do wave 5 dừng
+## Lượt thứ hai (2026-09-22, sau `0633e4e`) — cổng Task 0 **VẪN ĐỎ**
+
+Lượt này được giao với tiền đề *"bốn tệp đã commit và sạch ở HEAD `0633e4e`"*. **Tiền đề
+đó sai**, và đây là số đo:
+
+```console
+$ git show HEAD:src/components/history/CommitList.tsx | grep -c "avatarTuSinh"
+0
+$ grep -c "avatarTuSinh" src/components/history/CommitList.tsx      # trên đĩa
+1
+$ git ls-files src/lib/avatar.ts src/components/Avatar.tsx src/components/icons.tsx
+(rỗng — cả ba vẫn CHƯA ĐƯỢC THEO DÕI)
+```
+
+| Tệp | `git status --porcelain` | Kết luận |
+|---|---|---|
+| `src/App.tsx` | ` M` | **bẩn** — avatar/Gravatar của session khác |
+| `src/components/history/CommitList.tsx` | ` M` | **bẩn** — `avatarTuSinh`, `scrollToCommit`, `maxLane` |
+| `src/styles/app.css` | ` M` | **bẩn** — 5 hunk, chỉ hunk cuối thuộc wave 5 |
+| `src/components/history/CommitList.test.tsx` | *(sạch)* | ✅ tệp **duy nhất** thật sự được giao lại |
+
+🔴 **Vì sao lượt đầu tưởng là sạch.** Phép kiểm mở màn chạy qua `rtk proxy git status
+--porcelain <paths>` và trả **rỗng**. Chạy lại bằng `git` trần trên cùng đường dẫn thì ra
+` M`. Đây đúng lớp lỗi mà CONTEXT.md 3.1 gọi là xanh giả: một cổng trả rỗng **không phân
+biệt được** với "không có gì để báo". Bài học ghi lại: **mọi cổng mà câu trả lời là
+exit-code hoặc một phép đếm phải chạy bằng `git` trần**, không qua rtk.
+
+Thêm một dữ kiện: HEAD **đã chạy trong lúc làm** (`0633e4e` → `b467194` → `69ec3ad`) —
+một session khác commit xen vào. Năm session đang sống trên repo này.
+
+### Việc đã làm được, và nó đang nằm ở đâu
+
+Phần nối dây **đã viết xong và xanh**, nhưng **chưa commit được** vì nó nằm xen kẽ với
+việc của session khác trong cùng ba tệp. Commit nó là commit hộ phần việc không hiểu ý
+định — đúng thứ `<blocking_precondition>` cấm.
+
+| Hạng mục | Trạng thái | Ghi chú |
+|---|---|---|
+| 9 test RED cho hàng WIP | ✅ **đã commit** `b467194` | tệp test sạch nên commit được |
+| `CommitList.tsx` nối hàng WIP | ✅ viết xong, xanh | **chưa commit** — tệp bẩn |
+| `wipCountsFromStatus` (`wipRow.ts`) | ✅ viết xong, xanh | **chưa commit** — `wipRow.ts` cũng bẩn |
+| `WipEdgeRender` + `draw` tham số thứ 3 | ✅ viết xong, xanh | **chưa commit** |
+| `GraphCanvas` truyền `wip` | ✅ viết xong, xanh | **chưa commit** — một mình nó **không biên dịch được** (cần `WipEdgeRender` ở `types.ts`), nên tách ra commit riêng sẽ tạo một commit hỏng |
+| Khối CSS 28px hàng WIP | ✅ viết xong | **chưa commit** — `app.css` bẩn |
+| `App.tsx`: mount watcher + render `ChangeList`/`CommitBox` | ❌ **chưa làm** | `App.tsx` bẩn từ đầu; không đụng vào |
+
+Bản sao của sáu tệp đang làm dở nằm ở `%TEMP%\gsd-04-05-wip\` để không mất khi ai đó
+`git checkout`.
+
+### Số đo lượt này
+
+| Phép đo | Kết quả | Lệnh |
+|---|---|---|
+| Frontend vitest, **trước** | **645 passed, 0 failed** (227 suite) | `rm -f .vitest/json/output.json && npx vitest run --reporter=json --outputFile=…` |
+| Frontend vitest, **sau** | **658 passed, 0 failed** (228 suite) | cùng lệnh; +13 test của hàng WIP |
+| `npx tsc --noEmit` | **sạch** | — |
+| `cargo test --lib` | **309 passed, 0 failed** | `cd src-tauri && cargo test --lib` |
+| `cargo test --lib --tests` | 🔴 **KHÔNG ĐO ĐƯỢC** | `git-plum.exe` (PID 12580) đang chạy → `Access is denied. (os error 5)` lúc cargo relink. **Không suy ra con số 425.** |
+| Cổng `useVirtualizer` | `OK: dung 1 loi goi` | vẫn đúng 1 sau khi sửa |
+| Cổng số học `wipRow.test.ts` | xanh | `CommitList.tsx` gọi `commitRowY(...)`, không tự cộng |
+
+### Bảng đột biến (chứng minh cổng không rỗng)
+
+| # | Đột biến | Kỳ vọng | Kết quả thật |
+|---|---|---|---|
+| M1 | `count: virtualizerCount(total, hasWip)` → `count: total + 1` (cách A qua cửa sau) | đỏ | ✅ **1 đỏ**: *"count của virtualizer === total KỂ CẢ khi có hàng WIP (cách B)"*. Suite vẫn nạp (28 total) nên đỏ là do hành vi, không do import hỏng. |
+| RED | chạy 9 test trước khi viết mã | đỏ | ✅ **9 đỏ / 28 total** — suite **nạp được**, nên đây là thiếu hành vi chứ không phải xanh giả #8 |
+
+M2 (`marginTop: contentOffset(hasWip)` → `0`) **không thu được kết quả dùng được**: một
+`git checkout --` của chính tôi đã hoàn nguyên tệp trước khi đột biến kịp áp, nên 14 đỏ
+quan sát được là của tệp **chưa sửa**, không phải của đột biến. Ghi ra đây thay vì im
+lặng bỏ — *"một đột biến không diễn đạt được khiếm khuyết thì không phải bằng chứng về
+cổng"*, và một đột biến **không áp được** càng không phải.
+
+---
+
+## Cổng Task 0 của 04-05 — **ĐỎ**, và đây là lý do wave 5 dừng (lượt đầu, giữ nguyên)
 
 04-05 mở đầu bằng một `checkpoint:human-action` chặn: bốn tệp mà wave 5 **buộc phải sửa**
 phải sạch trước khi sửa.
@@ -78,7 +154,7 @@ chủ dự án cung cấp, ghi lại ở đây như dữ liệu nhận được 
 | **WORK-08** | Soạn thông điệp và tạo commit | Có mã + test (04-03) | `test tự động`; `chưa kiểm` — `CommitBox` chưa được `App.tsx` render, chưa ai gõ một thông điệp thật |
 | **WORK-09** | Amend, cảnh báo nếu đã push nhưng không chặn | Có mã + test (04-03) | `test tự động`; `chưa kiểm` — chưa ai bấm amend trên repo thật |
 | **WORK-10** | Thay đổi ngoài ứng dụng → tự cập nhật < 1 s | Có mã + 8 test (04-04) | `test tự động`; 🔴 **`noiWatcherVaoStore()` chưa được gọi ở đâu cả** — watcher tồn tại nhưng **không chạy trong ứng dụng**. Tiêu chí "< 1 giây, không bấm gì" **chưa kiểm** |
-| **WORK-11** | Hàng WIP đầu đồ thị, số đếm, bấm mở vùng soạn | Có mã thuần + test (`wipRow.ts`, 04-04) | `test tự động` cho **số học**; 🔴 `chưa kiểm` cho **mọi** khẳng định hiển thị — `CommitList.tsx` chưa tham chiếu `wipRow` một lần nào (`grep -n "wip" CommitList.tsx` → 0 khớp) |
+| **WORK-11** | Hàng WIP đầu đồ thị, số đếm, bấm mở vùng soạn | Mã nối dây **đã viết, 13 test xanh**, nhưng **CHƯA COMMIT được** (tệp bẩn — xem lượt hai) | `test tự động` cho **số học** và cho DOM ở happy-dom; 🔴 `chưa kiểm` cho **mọi** khẳng định hiển thị. Và vì mã chưa vào nhánh, ngay cả `test tự động` cũng **chưa tái lập được từ một lần clone sạch** |
 
 **Không requirement nào đạt mức `mắt người (release)`.** Đó là điều kiện để đóng phase và nó
 chưa được thoả.
