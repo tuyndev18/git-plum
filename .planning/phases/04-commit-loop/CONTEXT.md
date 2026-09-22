@@ -407,6 +407,31 @@ trên test happy-dom. Ghi "có mã, chưa kiểm".
   thì chờ hoặc báo, **đừng kill**. `CARGO_TARGET_DIR` riêng **không** phải lối thoát:
   đã thử, rebuild 292 crate hỏng với `paging file is too small` (os error 1455), và
   đĩa đang 92 % với `target/` 14 GB.
+
+  🔴 **Phân biệt "đang biên dịch" với "đang bị chặn" bằng CPU, KHÔNG bằng thời gian
+  trôi.** Mắc hai lần trong một ngày, lần thứ hai vì tôi đọc một lần rồi coi kết quả
+  còn đúng thay vì đo lại:
+
+  | Trạng thái | Chữ ký |
+  |---|---|
+  | Bị chặn | **0,8 s CPU / 17 phút** trôi (và ca trước: 1 s / 38 phút) |
+  | Làm thật | **16,7 s CPU / 0,3 phút** trôi |
+
+  ```powershell
+  Get-CimInstance Win32_Process -Filter "Name='cargo.exe' OR Name='rustc.exe'" |
+    ForEach-Object { $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
+      [PSCustomObject]@{ PID=$_.ProcessId; CPU=$p.CPU
+        Min=[math]::Round(((Get-Date)-$_.CreationDate).TotalMinutes,1)
+        Cmd=$_.CommandLine } } | Format-Table -AutoSize
+  ```
+
+  **Luôn in `CommandLine`.** Lần thứ hai có ba bên tranh lock, và một tiến trình tôi
+  suýt gán cho mình hoá ra là `cargo run --no-default-features --color always --` —
+  tức `tauri dev` của **chủ dự án**. Giết nhầm nó là cắt đứt việc của người dùng.
+
+  **`cargo test --lib --tests` đã hỏng ba lần vì lý do này** (app giữ binary, hoặc
+  thua tranh lock). Lấy cơ hội khi rảnh, đừng đốt thời gian chờ; báo `--lib` là số đo
+  được và `--lib --tests` là **chưa đo**.
 - **`rtk` lọc đầu ra `cargo test`** nhưng **có** ghi một dòng tổng vào tệp khi
   redirect (`cargo test: 284 passed, 1 ignored`), nên `> tệp` cho tổng số. Muốn **tên
   từng test** thì cần `rtk proxy cargo test`.
