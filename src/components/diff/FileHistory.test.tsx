@@ -127,7 +127,11 @@ describe('hiện danh sách phiên bản', () => {
     getFileHistory.mockResolvedValue(lichSu([phienBan({ authorTime: 1790000000 })]))
     render(<FileHistory repoId={REPO} />)
 
-    await waitFor(() => expect(screen.getByTestId('file-history')).toBeTruthy())
+    // Chờ **hàng phiên bản**, không phải `file-history`: panel ngoài render ngay khi
+    // mở — kể cả lúc còn "Đang đọc lịch sử tệp…" — nên `waitFor` trên nó thoả mãn
+    // tức thì và hai khẳng định dưới chạy trên DOM chưa có dữ liệu. Bản cũ đỏ
+    // khoảng 1/5 lần chạy với `expected '…Đang đọc…' to contain '2026'`.
+    await waitFor(() => expect(screen.getByTestId(`file-version-${'a'.repeat(40)}`)).toBeTruthy())
 
     const panel = screen.getByTestId('file-history')
     expect(panel.textContent).not.toContain('1970')
