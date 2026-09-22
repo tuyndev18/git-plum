@@ -97,9 +97,37 @@ Khi người dùng chọn một tập con các khối, số dòng trong header `
 `--recount` bảo git tính lại từ nội dung thật. Thiếu nó, git từ chối bản vá hoặc — tệ
 hơn — áp sai vị trí.
 
-**Ca kiểm bắt buộc:** chọn khối **thứ hai** trong một tệp có ba khối. Chỉ chọn khối đầu
-thì header tình cờ vẫn đúng và đột biến bỏ `--recount` **không đỏ** — đúng lớp lỗi "hình
-dạng đúng, dữ liệu vô hại" ở mục 4.2.
+> 🔴 **Đính chính 2026-09-22 — bản đầu của mục này SAI, và nó sai theo đúng kiểu nó
+> đang cảnh báo.**
+>
+> Tôi viết: "chọn khối **thứ hai** trong tệp ba khối" thì đột biến bỏ `--recount` sẽ đỏ.
+> Planner đo trên git 2.54.0.windows.1 và bác lại; tôi kiểm chứng độc lập, **planner
+> đúng**:
+>
+> ```text
+> khối 2 NGUYÊN VĂN (header chép y nguyên):
+>   git apply --check --cached --recount h2.patch  -> exit 0
+>   git apply --check --cached           h2.patch  -> exit 0    ← KHÔNG đỏ
+> ```
+>
+> Vì số đếm trong `@@` là **theo từng khối**, không cộng dồn cả tệp. Chép nguyên header
+> khối 2 thì nó vẫn đúng dù bỏ bao nhiêu khối khác. Fixture đó **trông như** kiểm
+> `--recount` mà **không kiểm gì** — đúng lớp lỗi mục 4.2 ở dạng thuần khiết nhất, và
+> tôi vừa tự viết ra một ca của nó trong chính đoạn cảnh báo về nó.
+>
+> **Fixture phân biệt được** là **thân bị cắt, header để nguyên** — đúng thứ một bộ
+> dựng-tập-con sinh ra khi nó cắt dòng ngữ cảnh mà quên sửa `@@`:
+>
+> ```text
+> @@ -12,7 +12,7 @@   (khai 7 dòng, thân chỉ còn 6)
+>   git apply --check --cached --recount h2t.patch  -> exit 0
+>   git apply --check --cached           h2t.patch  -> exit 128
+>                          error: corrupt patch at h2t.patch:12
+> ```
+>
+> **Bài học rộng hơn con số:** tôi suy ra ca kiểm từ *lập luận về cách git hoạt động*
+> thay vì *chạy git*. Đó chính là thứ mục 4.2 cấm. Quy tắc không đổi — **chạy đột biến
+> và xem đỏ** — nhưng lần này nó bác chính tài liệu viết ra nó.
 
 ---
 
