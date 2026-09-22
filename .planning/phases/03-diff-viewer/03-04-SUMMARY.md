@@ -596,3 +596,344 @@ da12f22 feat(03-04): implement diff store, lazy lang loader and DIFF-06 notices
 | `FileList.tsx` → `diffStore.ts` | `runCommand\('diff\.` | ✅ `runCommand('diff.selectFile')` |
 | `DiffViewer.tsx` → `ipc.ts` | `getFileDiff` | ✅ `ipc.getFileDiff(repoId, selectedCommitId, selectedFile)` |
 | `decorations.ts` → `domain/diff.rs` | `Decoration\.(line\|mark)` | ✅ cả hai, dựng từ `Hunk`/`DiffLine`/`Span` |
+
+---
+
+# Checkpoint vòng 2 — năm lỗi chế độ hai cột, sửa bằng đo Chromium thật
+
+**Bối cảnh.** Vòng 1 sửa lỗi "không cuộn được" (`085ccd8`, cho `.cm-mergeView` một
+chiều cao). Người dùng chạy bản release thật, chụp ảnh chế độ **hai cột** trên
+`src/components/DescriptionArea.tsx` và báo:
+
+> *"diff tức là so sánh số dòng của file trước và sau thay đổi chứ nhỉ với lại nó phải
+> full height chứ"*
+
+Rồi gửi thêm hai ảnh tham chiếu (GitKraken) làm đặc tả. Tổng cộng **năm** lỗi, tất cả
+chỉ tồn tại trong chế độ hai cột, tất cả được chẩn đoán bằng **phép đo Chromium** chứ
+không phải suy luận từ đọc CSS.
+
+## Vì sao không test nào trong 367 test bắt được — nguyên nhân chung của cả năm
+
+`MergeView` **chưa bao giờ được render trong một test nào**. happy-dom không có
+`ResizeObserver` → `paneWidth = 0` → `shouldForceUnified(0) === true` → **mọi** test đi
+nhánh **hợp nhất**. Chế độ hai cột là một vùng mã chưa từng chạy trong CI.
+
+Đây cùng lớp lỗi với ba lỗi hiển thị của Phase 2 (qua hết 212 test), và cùng cách phát
+hiện: người dùng mở app thật. Bài học đã ghi ở vòng 1 vẫn đúng, chỉ là chưa đủ sâu.
+
+## Lỗi 1 — số dòng SAI (nghiêm trọng nhất)
+
+**Hiện tượng.** Cả hai gutter đọc `1,2,3,…` giống nhau. Đo bằng Chromium:
+
+| | trước sửa | phải là |
+|---|---|---|
+| gutter trái (phía cũ) | `1,2,3,4,5,6` | `10,11,12,13,14,15` |
+| gutter phải (phía mới) | `1,2,3,4,5,6,7,8` | `10,11,12,13,14,15,16,17` |
+
+**Nguyên nhân gốc.** `extensionsCoDinh()` dùng `lineNumbers()` **mặc định**. Mặc định
+đếm theo **tài liệu của từng editor**, và trong chế độ hai cột hai editor giữ **hai tài
+liệu khác nhau** (phía cũ bỏ dòng `added`, phía mới bỏ dòng `removed`). Nên con số không
+phải số dòng trong tệp của người dùng — một tệp có N dòng xoá ở đầu sẽ lệch N ở **mọi**
+dòng phía sau.
+
+**Dữ liệu đã có sẵn, không cần thêm lệnh git.** `DiffLine` mang `oldLine`/`newLine` từ
+03-02, và `lineMeta` đã truyền chúng xuống tầng vẽ. Doc comment ở `ipc.ts` ghi rõ hai
+trường riêng tồn tại **vì** chế độ hai cột cần. Renderer chỉ chưa bao giờ đọc chúng.
+
+**Cách sửa.** `src/lib/diff-render/gutterNumbers.ts` — hai hàm thuần `soDongThat` và
+`dauThemXoa`; renderer dùng `lineNumbers({ formatNumber })` với `side` tương ứng
+(A ↔ `oldLine`, B ↔ `newLine`), trả **chuỗi rỗng** ở vị trí phía đó không có dòng.
+
+**Quyết định cho chế độ hợp nhất.** Nó dùng **một** editor trên tài liệu phía mới, nên
+gutter hiện `newLine`. Không hiện cả hai cột số vì: (a) `newLine` là hệ số mà tệp trên
+đĩa người dùng mang sau khi commit được áp; (b) hai cột số tốn ~80px ở một panel vốn đã
+hẹp, và chế độ hợp nhất chính là **đường thoát khi panel hẹp**; (c) dòng `removed` có
+`newLine === null` nên gutter để trống, cộng dấu `−` là đã đủ đọc. Lý do ghi tại chỗ gọi.
+
+## Lỗi 2 — chưa full height (hai nguyên nhân độc lập, sửa hai lần)
+
+### 2a. Nhật ký lệnh chiếm 30% chiều cao ngay từ lần mở đầu
+
+Đi ngược cây từ `.cm-mergeView` lên `body`, cửa sổ 1600×900:
+
+| mắt | chiều cao |
+|---|---|
+| `.app` | 900 |
+| `.body` | 831.5 |
+| `.layout` | 831.5 |
+| `[data-panel=top]` `flex: 70 1 0px` | **581.3** ← tụt 250px |
+| `.diff-viewer` | 581.3 |
+
+**Chuỗi CSS không đứt ở đâu cả.** Chỗ tụt 250px là `Panel id="bottom"` — nhật ký lệnh —
+chiếm 30% dọc (đo được **249.2px**) trong khi nội dung nó hiện chỉ là *"Chưa có lệnh nào
+được chạy."* `logVisible` khởi tạo `useState(true)`.
+
+PLAT-08 đòi người dùng **nhìn thấy được** lệnh git đã chạy; nó không đòi panel mở sẵn.
+Đổi mặc định thành ẩn; nút thanh công cụ và `Ctrl+backtick` vẫn mở được nên PLAT-08 trọn.
+
+### 2b. Thanh cuộn ngang nằm GIỮA màn hình — chỉ lộ với tệp NGẮN
+
+Sau khi sửa 2a, người dùng khoanh đỏ: thanh cuộn ngang nằm ngay dưới dòng nội dung cuối
+(~2/3 chiều cao), dưới nó một dải trống lớn.
+
+**Lỗi này chỉ lộ với tệp NGẮN.** Phép đo đầu tiên của tôi dùng tệp dài (60 dòng đệm) —
+nội dung dài tự lấp hết khung nên mọi mắt tình cờ cao bằng cha và lỗi vô hình. Đây là lý
+do harness đo có cờ `?short=1`.
+
+Đo bằng Chromium, tệp NGẮN, 1600×900, **trước** sửa:
+
+| mắt | chiều cao | bottom |
+|---|---|---|
+| `.diff-pane` | 794.5 | 875 |
+| `.cm-mergeView` | 794.5 | 875 |
+| `.cm-mergeViewEditors` | **314** | 394 ← ĐỨT |
+| `.cm-editor` | 314 | 394 |
+| `.cm-scroller` | 314 | **394** |
+
+→ **khoảng hở đáy 481px**, đúng dải trống trong ảnh.
+
+**Nguyên nhân gốc.** Thư viện khai `.cm-mergeViewEditors { display: flex; align-items:
+stretch }` **không kèm height**, và `height: auto !important` cho `.cm-mergeView &`
+(editor) cùng `.cm-scroller`. `align-items: stretch` căng các **con** theo trục ngang
+của một flex-row — nó không cho bản thân phần tử chiều cao. Nên cả chuỗi dưới
+`.cm-mergeView` rơi về `auto` = co theo nội dung.
+
+### 🔴 `min-height`, KHÔNG phải `height` — bẫy tôi đã sa vào một lần
+
+Bản sửa đầu dùng `height: 100%` và nó **làm hỏng việc cuộn dọc**:
+
+| tệp | `height: 100%` | `min-height: 100%` |
+|---|---|---|
+| NGẮN | hở đáy 0px ✅ | hở đáy 0px ✅ |
+| DÀI | `scrollH 795 = clientH 795` → **KHÔNG cuộn**, 1394px nội dung bị **cắt im lặng** 🔴 | `scrollH 1394 > clientH 795`, `scrollTop=300` → cuộn ĐÚNG ✅ |
+
+`.cm-mergeView` là vùng cuộn; nó chỉ biết phải cuộn khi **con** cao hơn nó. Kẹp con về
+đúng 100% thì không bao giờ có overflow — tệ hơn lỗi ban đầu. Có cổng riêng ghim rằng
+`height: 100%` **không được** quay lại.
+
+`min-height` thắng được `height: auto !important` vì chúng là **hai thuộc tính khác
+nhau**: `!important` của `height` không nói gì về `min-height`, và `min-height` luôn
+thắng `height` trong thuật toán tính kích thước. Đó là điều làm bản vá không cần một
+`!important` nào cho chính nó.
+
+**Sau sửa**, cả hai ca đúng:
+
+| | tệp NGẮN | tệp DÀI |
+|---|---|---|
+| `.cm-mergeView` | 794.5 | 794.5 |
+| `.cm-scroller` | 794.5 (bottom 875) | 1394 (bottom 1474) |
+| khoảng hở đáy | **0px** ✅ | −599px (nội dung dài hơn khung — đúng) |
+| cuộn dọc | không cần | `scrollTop=300` ✅ |
+| đồng bộ hai cột | `[80,80]` ✅ | `[80,80]` ✅ |
+
+## Lỗi 3 — màu nền dòng là màu của THƯ VIỆN, không phải của dự án
+
+Đo bằng Chromium:
+
+| phần tử | class thật | backgroundColor đo được | đáng ra |
+|---|---|---|---|
+| dòng xoá phía A | `cm-line diff-line-removed cm-changedLine` | `rgba(160,128,100,.08)` | `var(--danger)` 16% |
+| dòng thêm phía B | `cm-line diff-line-added cm-changedLine` | `rgba(100,160,128,.08)` | `var(--success)` 16% |
+
+Class của dự án **có** được gắn — `decorations.ts` không sai. Sai là **độ cụ thể**.
+
+**Phải đo bằng CDP mới thấy đúng selector.** Đọc mã nguồn thư viện cho
+`"&.cm-merge-b .cm-changedLine"`, nên bản sửa đầu của tôi dùng
+`.diff-line-added.cm-changedLine` (2 class) và **không có tác dụng**.
+`CSS.getMatchedStylesForNode` cho selector **đã sinh**:
+
+```
+.ͼ1.cm-merge-b .cm-changedLine, .ͼ1 .cm-inlineChangedLine
+```
+
+**Ba** class — CodeMirror thay `&` bằng class băm của chính nó. Sửa bằng
+`.cm-merge-a`/`.cm-merge-b` (class mà `MergeView` gắn cho từng phía) để có ba class mà
+không phải viết class băm — nó sinh lúc chạy, không được xuất hiện trong CSS tĩnh. Và
+đặt `background-color`, không phải shorthand `background`: thư viện khai đúng longhand,
+mà longhand cụ thể hơn thắng shorthand cùng mức.
+
+Sau sửa: `color(srgb 0.290196 0.486275 0.278431 / 0.16)` = `--success` 16% ✅
+
+Cũng tắt `.cm-changedText` của thư viện: dự án dùng `spans` từ
+`git diff --word-diff-regex` cho **cả hai** chế độ, và trộn hai nguồn word-level nghĩa là
+người dùng thấy hai kết quả khác nhau cho cùng một dòng.
+
+## Lỗi 4 — vùng căn hàng không có nền sọc chéo
+
+Ảnh tham chiếu hiện một khối gạch chéo cao đúng số dòng thiếu ở chỗ một phía không có
+dòng. Bản của ta để trống trơn.
+
+**Phần khó thư viện đã làm.** Đo được: `@codemirror/merge` tự chèn widget
+`.cm-mergeSpacer` cao đúng bằng số dòng thiếu (**36px** cho hunk 2 dòng, **72px** cho
+hunk 4 dòng — hai lần `line-height` 18px), nhưng để nó **trong suốt**
+(`background-image: none`, `backgroundColor: rgba(0,0,0,0)`). Nên đây chỉ là việc tô nền,
+**không** phải dựng widget. Đo trước tiết kiệm được cả một tầng mã.
+
+Dùng `--border-strong` chứ không phải màu mới: sọc là tín hiệu **cấu trúc** ("không có
+nội dung ở đây"), không phải tín hiệu thêm/xoá.
+
+## Lỗi 5 — thêm dấu `+` / `−` trong gutter
+
+Phân biệt thêm/xoá **không chỉ bằng màu**. Nền dòng của dự án cố ý nhạt (16% alpha) để
+nền word-level đậm hơn còn nổi lên được — nhưng hai nền nhạt đỏ/lục là ca mà người mù màu
+đỏ-lục không phân biệt được, và đây là công cụ mã nguồn mở nên ca đó là ca thật.
+
+Dùng `−` (U+2212 MINUS SIGN), không `-` (U+002D hyphen): trong phông mono dấu trừ thật
+cân bằng thị giác với `+`. Có test ghim ký tự để một lần sửa vô tình không lọt.
+
+## Kiểm mutation — 8 đột biến, tất cả đỏ thật
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| 1 | Renderer quay về `lineNumbers()` mặc định | 🔴 4 test đỏ (cổng đọc nguồn renderer) |
+| 2 | `.cm-mergeViewEditors` dùng `height: 100%` thay `min-height` | 🔴 2 đỏ (gồm cổng chống hồi quy cuộn) |
+| 3 | Bỏ `min-height` của `.cm-mergeView .cm-editor` | 🔴 1 đỏ |
+| 4 | Bỏ `flex-grow: 1` của `.cm-mergeView .cm-scroller` | 🔴 1 đỏ |
+| 5 | Bỏ nền sọc chéo `.cm-mergeSpacer` | 🔴 1 đỏ |
+| 6 | Xoá quy tắc ghi đè màu dòng thêm | 🔴 1 đỏ *(chỉ sau khi sửa cổng — xem dưới)* |
+| 7 | `logVisible` quay về `useState(true)` | 🔴 2 đỏ |
+| 8 | Đổi `−` (U+2212) thành `-` (U+002D) | 🔴 1 đỏ |
+
+### 🔴 Một cổng xanh sai đã tìm ra nhờ chính phép kiểm mutation
+
+Ba cổng màu (lỗi 3) ban đầu tìm trên **nguồn CSS thô**, và doc comment của chính mục đó
+dẫn nguyên văn `cm-line diff-line-added cm-changedLine` trong bảng đo. Nên chúng khớp
+**chú thích của mình** và **vẫn xanh** sau khi xoá hẳn quy tắc ghi đè — cổng tự vô hiệu
+hoá. Đột biến #6 lộ ra điều đó; đã sửa để bỏ chú thích trước khi tìm.
+
+Đây lần thứ tư dự án gặp đúng lớp lỗi này (ba lần trước ghi ở mục "Ba cổng xanh sai" phía
+trên, và `interface-boundary.test.ts` đã ghi bài học cho phía TypeScript). **Mọi cổng đọc
+nguồn trong dự án này phải bỏ chú thích trước khi tìm** — tệp nào cũng có doc comment
+tiếng Việt dày dẫn chiếu chính thứ đang bị cấm.
+
+Cùng lý do, cổng bố cục cũng phải cắt thân quy tắc trên **cùng một chuỗi** đã bỏ chú
+thích: trộn offset của chuỗi đã lọc với chuỗi gốc cho ra một đoạn nằm giữa hai quy tắc
+khác nhau, và cổng báo đỏ vì lý do sai (đã gặp thật).
+
+## Cổng verification
+
+| Cổng | Kết quả |
+|---|---|
+| `npm test` | ✅ **391 passed** (baseline 367 + 24 mới), 32 tệp |
+| `npm run typecheck` | ✅ No errors |
+| `npm run build` | ✅ built in 243ms |
+| `cargo test` | ✅ **257 passed, 1 ignored** — khớp baseline, không hồi quy |
+| `npx tauri build --no-bundle` | ✅ Finished in 2m 02s |
+| Đo Chromium tệp NGẮN | ✅ hở đáy 0px |
+| Đo Chromium tệp DÀI | ✅ cuộn được, `scrollH 1394 > clientH 795` |
+| Đồng bộ hai cột | ✅ `[80,80]` cả hai ca |
+
+## Phép đo trả một phần nợ checkpoint #3 — và nó BÁC BỎ giả định của plan
+
+Nhân dịp dựng harness, tôi đo luôn cái giá của `MergeView` theo số dòng tài liệu — đúng
+câu hỏi mà checkpoint #3 đặt ra và **chưa ai đo** (`docs/09-phase3-diff-decision.md` mục
+7-8). Đo trên đường mã sản phẩm (`hunksToDoc` + `createCodeMirrorRenderer`), Chromium
+thật, viewport 1500×900:
+
+| dòng tài liệu | hai cột TỔNG | hợp nhất TỔNG |
+|---|---|---|
+| 200 | 4.9ms | 2.2ms |
+| 2 000 | 5.6ms | 2.9ms |
+| 10 000 | 18.1ms | 6.2ms |
+| 20 000 | 30.5ms | 8.9ms |
+| 50 000 | 102.1ms | 28.4ms |
+| 100 000 | 179.7ms | 60ms |
+| 200 000 | **229.1ms** | 87.6ms |
+
+**Kết luận: nỗi lo của checkpoint #3 không thành hiện thực.** Giả định là
+`@codemirror/merge` sẽ "diff lại hai bản ~630 KB mỗi lần mở" và có thể phải viết lại toàn
+bộ trình xem theo đường B. Thực tế CodeMirror 6 **ảo hoá** — chi phí theo vùng nhìn, không
+theo tài liệu. 200 nghìn dòng ở chế độ hai cột vẫn dưới 1/4 giây, tức **dưới ngân sách 1
+giây của Core Value**. Cổng `MAX_DIFF_BLOB_BYTES` 5 MB (≈100 nghìn dòng) đã chặn ở mức
+mà phép đo cho 179.7ms.
+
+Đây là bằng chứng nên **giữ đường A**, và nó nên được dùng khi xem lại quyết định A/B.
+Lưu ý phép đo này dùng dòng sinh tổng hợp (~45 byte/dòng, nội dung đều); một tệp thật có
+dòng rất dài có thể khác, nên nó **thu hẹp** chứ chưa đóng hẳn nợ checkpoint #3.
+
+## Bài học quy trình — mọi vòng checkpoint phải kết thúc bằng một lần dựng release
+
+Vòng này mất một lượt qua lại vì người dùng thử bản `git-plum.exe` **cũ hơn bản sửa 32
+phút** (exe 09:21:33, `app.css` 09:53:22). Người dùng kiểm bằng **exe**, không bằng
+`npm run dev` — nên một vòng checkpoint chưa dựng lại release là một vòng chưa kiểm được.
+
+Từ nay: mỗi vòng checkpoint kết thúc bằng `npx tauri build --no-bundle`, và hand-back
+**dán dấu thời gian exe** để đối chiếu. Rẻ, và tránh được hẳn một lượt.
+
+## ⏸️ Vẫn CHƯA kiểm chứng được
+
+- **Chế độ hai cột vẫn không có test tự động nào chạy qua nó.** Tôi **không** vá
+  `ResizeObserver` trong `src/test/setup.ts`. Lý do: một `ResizeObserver` giả trả bề rộng
+  giả sẽ làm test đi nhánh hai cột **mà happy-dom vẫn không tính layout CSS** — tức nó
+  tạo cảm giác an toàn cho đúng thứ mà chỉ layout thật kiểm được (chiều cao, thẳng hàng,
+  thanh cuộn). Nguy hiểm hơn là không có. 24 test mới chia hai loại và **cả hai đều là
+  lưới cấp hai**: hàm thuần (`gutterNumbers.test.ts`) và đọc nguồn CSS
+  (`app.css.test.ts`). Thứ chứng minh bản sửa đúng là **phép đo Chromium** ở trên và
+  **mắt người dùng**.
+- **WebView2 ≠ Chromium headless.** Mọi số đo ở trên là Chromium qua Playwright. WebView2
+  dùng cùng engine nhưng phiên bản và cấu hình khác; `min-height` thắng
+  `height: auto !important` là hành vi CSS chuẩn nên rủi ro thấp, nhưng chưa đo trên
+  WebView2 thật.
+- **Chỉ đo ở 1600×900 và 1280×720.** Chưa đo ở cửa sổ rất hẹp gần `MIN_SPLIT_WIDTH = 720`,
+  nơi JS chuyển về hợp nhất.
+- **`collapseUnchanged` KHÔNG được bật** — đã xác nhận bằng đọc mã: nó chỉ xuất hiện
+  trong một chú thích nói rằng gộp khối là việc của Phase 5. Số dòng "nhảy" mà người dùng
+  thấy đến **hoàn toàn** từ `--unified=3` (git chỉ gửi các khối đổi kèm 3 dòng ngữ cảnh),
+  không từ việc gập đoạn.
+- **Yêu cầu "diff toàn bộ tệp" CHƯA làm.** Xem mục dưới.
+
+## ⏭️ Việc chưa làm: hiện toàn tệp thay vì `--unified=3`
+
+Người dùng nêu (2026-09-22): *"đáng nhẽ nó phải diff toàn bộ file chứ nhỉ đâu chỉ là mỗi
+phần thay đổi đâu"*. Yêu cầu **đúng** và khớp ảnh tham chiếu (số dòng chạy liên tục
+1…69).
+
+**Cố ý chưa làm trong vòng này**, vì nó là thay đổi **hành vi backend** trong khi người
+dùng đang chờ xác nhận bản sửa bố cục — gộp cả hai vào một lần dựng làm mọi lỗi mới không
+phân biệt được đến từ đâu.
+
+Đã đo phần cần cho quyết định:
+
+- `git diff -U3` vs `-U100000` trên `app.css` (1769 dòng): **65ms vs 70ms**, đầu ra
+  10 738 → 56 999 byte (gấp 5.3×). Chi phí phía git không đáng kể.
+- Chi phí `MergeView` theo bảng ở trên: **179.7ms ở 100 nghìn dòng**, tức toàn tệp nằm
+  trong ngân sách kể cả ở mức mà cổng 5 MB cho đi qua.
+
+**Hệ quả cho thiết kế:** phép đo này **bác bỏ** lý do cần một ngưỡng số dòng thủ công.
+Có một bản nháp thêm hằng `UNIFIED_TOAN_TEP = 1_000_000` và `MAX_DONG_TOAN_TEP = 20_000`
+(lưu ở `%TEMP%/diff.rs.wholefile-draft`), nhưng doc comment của nó viện lý do *"ta không
+có con số nào về việc MergeView chịu được bao nhiêu"* — **điều đó nay đã sai**, và một
+ngưỡng 20 000 dòng sẽ lùi về diff rút gọn ở mức mà phép đo cho 30.5ms. Nên bản nháp
+**đã được hoàn nguyên**, không commit.
+
+Khi làm, ba việc bắt buộc:
+
+1. Đổi **cả hai** `--unified=3` (`diff.rs` dòng 333 và 457) sang **một hằng số dùng
+   chung** — comment ở dòng 444 nói rõ hai lệnh phải khớp, lệch thì phép khớp word-level
+   trượt ở biên hunk. Có test ghim hai phía, theo tiền lệ `REF_COL_WIDTH`.
+2. Quyết định ngưỡng **dựa trên bảng đo ở trên**, không dựa trên phỏng đoán. Khả năng cao
+   là **không cần** ngưỡng mới vì `MAX_DIFF_BLOB_BYTES` 5 MB đã chặn ở 179.7ms.
+3. Nếu vẫn thêm ngưỡng thì phải **nói cho người dùng biết** khi nó kích hoạt — im lặng
+   lùi về rút gọn sẽ tái diễn đúng việc vừa xảy ra: người dùng thấy số dòng nhảy rồi
+   tưởng là lỗi.
+
+## Tệp đổi ở vòng 2
+
+| Tệp | Thay đổi |
+|---|---|
+| `src/lib/diff-render/gutterNumbers.ts` | **mới** — `soDongThat`, `dauThemXoa` (hàm thuần) |
+| `src/lib/diff-render/gutterNumbers.test.ts` | **mới** — 14 test, gồm 4 cổng đọc nguồn renderer |
+| `src/lib/diff-render/codemirrorRenderer.ts` | `lineNumbers({ formatNumber })` theo phía; gutter dấu `+`/`−` |
+| `src/styles/app.css` | chuỗi `min-height`; ghi đè màu theo `.cm-merge-a/b`; sọc chéo spacer; `.cm-diffSignGutter` |
+| `src/styles/app.css.test.ts` | +8 test; **sửa 3 cổng tự vô hiệu hoá** |
+| `src/App.tsx` | `logVisible` mặc định `false` |
+| `src/App.test.tsx` | +2 test cho mặc định đó |
+
+```
+97d6d9c fix(03-04): make split view fill the frame and use project colours
+ffb22df feat(03-04): show real per-side line numbers in split view
+085ccd8 fix(03-04): give .cm-mergeView a height so split view can scroll   ← vòng 1
+```
+
+Bản release để người dùng kiểm lại: `src-tauri/target/release/git-plum.exe`,
+dựng **2026-09-22 10:09:49** từ cây làm việc sạch ở `97d6d9c`.
