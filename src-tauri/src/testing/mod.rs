@@ -211,6 +211,48 @@ pub fn require_diff_fixture() -> Option<DiffFixture> {
     Some(DiffFixture { repo, shas })
 }
 
+// --- Repo mẫu cho trạng thái thư mục làm việc (Phase 4) --------------------
+
+/// Lệnh sinh repo mẫu trạng thái. In ra trong thông báo bỏ qua test.
+///
+/// # 🔴 KHÔNG phải [`FIXTURES_COMMAND`]
+///
+/// `status-cases` do một script **riêng** sinh ra, nên `make-fixtures.sh` **không**
+/// dựng nó. In nhầm lệnh ở đây nghĩa là người mới clone repo thấy test bỏ qua, chạy
+/// đúng lệnh được bảo, và test **vẫn** bỏ qua — không có gì nói cho họ biết tại sao.
+/// Cùng lý do [`DIFF_FIXTURES_COMMAND`] tồn tại tách khỏi [`FIXTURES_COMMAND`].
+pub const STATUS_FIXTURES_COMMAND: &str = "bash scripts/fixtures/make-status-fixtures.sh";
+
+/// Thư mục con chứa repo mẫu trạng thái, dưới [`fixture_root`].
+pub const STATUS_FIXTURES_DIR: &str = "status-cases";
+
+/// Lấy repo mẫu trạng thái, hoặc `None` **kèm lời nhắc ra stderr** nếu thiếu.
+///
+/// Repo này khác mọi fixture trước ở một điểm: giá trị của nó nằm ở **thư mục làm việc
+/// bẩn**, không ở lịch sử. Nó mang một tệp đổi tên (`a_old.txt` → `a_new.txt`, bản ghi
+/// dạng `2`) đứng **trước** ít nhất hai bản ghi khác, đúng hình dạng làm lệch nấc một
+/// bộ phân tích tách NUL trơn.
+///
+/// Chạy `git commit`, `git reset` hay `git clean` trong repo đó là **phá fixture**.
+pub fn require_status_fixture() -> Option<PathBuf> {
+    let goc = fixture_root().join(STATUS_FIXTURES_DIR);
+    let repo = goc.join("repo");
+
+    if !repo.is_dir() || !repo.join(".git").exists() {
+        eprintln!(
+            "BỎ QUA TEST: thiếu repo mẫu trạng thái (tìm ở {}).\n  \
+             Sinh lại bằng: {}\n  \
+             Hoặc trỏ tới thư mục khác bằng biến môi trường {}.",
+            repo.display(),
+            STATUS_FIXTURES_COMMAND,
+            FIXTURES_ENV,
+        );
+        return None;
+    }
+
+    Some(repo)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -247,6 +289,31 @@ mod tests {
         assert!(
             fixture_path("khong-he-co-repo-mau-ten-nay").is_none(),
             "tên fixture không tồn tại phải cho None, không phải một đường dẫn"
+        );
+    }
+
+    /// `status-cases` **không** nằm trong [`FIXTURE_NAMES`], và đó là chủ ý.
+    ///
+    /// [`FIXTURE_NAMES`] là danh sách những repo mà [`FIXTURES_COMMAND`]
+    /// (`make-fixtures.sh`) dựng được. `status-cases` do một script riêng dựng, nên nếu
+    /// nó lọt vào danh sách đó thì [`require_fixture`] sẽ in ra lệnh **sai** và người
+    /// mới clone repo chạy đúng lệnh được bảo mà test vẫn bỏ qua — không có gì nói cho
+    /// họ biết tại sao. Test này ghim phân biệt đó để một lần "dọn dẹp" sau này không
+    /// âm thầm gộp chúng lại.
+    #[test]
+    fn status_cases_khong_nam_trong_danh_sach_cua_make_fixtures() {
+        assert!(
+            !FIXTURE_NAMES.contains(&STATUS_FIXTURES_DIR),
+            "'{STATUS_FIXTURES_DIR}' không được nằm trong FIXTURE_NAMES: \
+             make-fixtures.sh KHÔNG dựng nó, nên require_fixture sẽ in lệnh sai"
+        );
+        assert_ne!(
+            STATUS_FIXTURES_COMMAND, FIXTURES_COMMAND,
+            "lệnh sinh status-cases phải khác lệnh sinh bộ fixture Phase 2"
+        );
+        assert!(
+            STATUS_FIXTURES_COMMAND.contains("make-status-fixtures.sh"),
+            "lệnh phải trỏ đúng script sinh status-cases, thấy: {STATUS_FIXTURES_COMMAND}"
         );
     }
 
