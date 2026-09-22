@@ -183,6 +183,143 @@ async fn khop_theo_so_dong_khong_theo_noi_dung_khi_co_dong_trung() {
     );
 }
 
+/// 🔴 **Khớp theo số dòng, trên ca mà khớp-theo-nội-dung THẬT SỰ cho kết quả khác.**
+///
+/// # Vì sao `dup-lines.txt` của 03-02 KHÔNG bắt được lỗi này — đã đo
+///
+/// Plan 03-03 chỉ định `dup-lines.txt` làm fixture cho mutation "khớp theo nội dung".
+/// **Đã chạy mutation đó và nó XANH.** Lý do nằm ở hình dạng thật của fixture:
+///
+/// ```text
+///  start / TRUNG / mid / TRUNG        →  start / TRUNG / mid / TRUNG DA SUA
+///
+/// WordLine phía cũ:  (2, "TRUNG", spans=[])   (4, "TRUNG", spans=[])
+///                                      ↑ CẢ HAI khoảng RỖNG
+/// ```
+///
+/// Git coi thay đổi đó là **thêm** ` DA SUA`, nên phía cũ không có khoảng nào. Khớp
+/// theo nội dung chọn nhầm bản ghi dòng 2 — nhưng bản ghi đó cũng có `spans` rỗng,
+/// nên kết quả **y hệt** và không test nào phân biệt được.
+///
+/// # Hình dạng THẬT SỰ phân biệt được: nội dung trùng, **khoảng khác nhau**
+///
+/// Cần hai dòng **cùng nội dung ở phía được khớp** mà **khoảng khác nhau**. Đạt được
+/// bằng cách cho hai dòng khác nhau ở phía cũ **hội tụ** về cùng một nội dung ở phía
+/// mới, đổi ở **hai vị trí khác nhau trong dòng**:
+///
+/// ```text
+///  X b c / a b X        →     a b c / a b c
+///
+/// WordLine phía mới:  (2, "a b c", spans=[0,1))   (4, "a b c", spans=[4,5))
+///                             ↑ cùng nội dung        ↑ KHÁC khoảng
+/// ```
+///
+/// Khớp theo nội dung gán khoảng `[0,1)` cho **cả hai** dòng, nên dòng 4 tô chữ `a`
+/// đầu dòng thay vì chữ `c` cuối dòng — sai chỗ một cách nhìn thấy được.
+///
+/// Fixture dựng **trong test** bằng `tempfile` chứ không thêm vào
+/// `make-diff-fixtures.sh`: script đó không nằm trong `files_modified` của plan 03-03.
+#[tokio::test]
+async fn khop_theo_so_dong_khi_hai_dong_trung_noi_dung_nhung_khac_khoang() {
+    let Some(_) = require_diff_fixture() else {
+        return;
+    };
+
+    let tmp = tempfile::tempdir().expect("phải tạo được thư mục tạm");
+    let repo_path = tmp.path().to_path_buf();
+
+    let git = |args: &[&str]| {
+        let ra = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&repo_path)
+            .args(args)
+            .output()
+            .expect("phải chạy được git");
+        assert!(
+            ra.status.success(),
+            "git {args:?} thất bại: {}",
+            String::from_utf8_lossy(&ra.stderr)
+        );
+        String::from_utf8_lossy(&ra.stdout).trim().to_owned()
+    };
+
+    git(&["init", "-q", "."]);
+    git(&["config", "user.email", "t@t"]);
+    git(&["config", "user.name", "t"]);
+    git(&["config", "core.autocrlf", "false"]);
+
+    // Hai dòng KHÁC nhau ở phía cũ, đổi ở HAI vị trí khác nhau trong dòng...
+    std::fs::write(repo_path.join("d.txt"), "start\nX b c\nmid\na b X\nend\n")
+        .expect("phải ghi được tệp");
+    git(&["add", "-A"]);
+    git(&["commit", "-q", "-m", "a"]);
+
+    // ...hội tụ về CÙNG một nội dung ở phía mới.
+    std::fs::write(repo_path.join("d.txt"), "start\na b c\nmid\na b c\nend\n")
+        .expect("phải ghi được tệp");
+    git(&["add", "-A"]);
+    git(&["commit", "-q", "-m", "b"]);
+
+    let sha = git(&["rev-parse", "HEAD"]);
+
+    let state = AppState::new();
+    let repo = state.open_repo(&repo_path);
+    let fd = lay_diff_tep(&state, repo, &sha, "d.txt")
+        .await
+        .expect("phải trả Ok");
+
+    let dong = dong_cua(&fd);
+    let them: Vec<&DiffLine> = dong.iter().filter(|l| l.kind == LineKind::Added).collect();
+
+    assert_eq!(
+        them.len(),
+        2,
+        "tiền đề: phải có đúng hai dòng thêm. Các dòng: {:?}",
+        dong.iter()
+            .map(|l| (l.kind, l.content.as_str()))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        them[0].content, them[1].content,
+        "tiền đề: hai dòng thêm phải TRÙNG nội dung, nếu không ca này không phân biệt \
+         được khớp-theo-nội-dung với khớp-theo-số-dòng"
+    );
+
+    let s0 = them[0].spans.first().copied().unwrap_or_else(|| {
+        panic!("dòng thêm thứ nhất phải có khoảng, nhận: {:?}", them[0])
+    });
+    let s1 = them[1].spans.first().copied().unwrap_or_else(|| {
+        panic!("dòng thêm thứ hai phải có khoảng, nhận: {:?}", them[1])
+    });
+
+    assert_eq!(
+        &them[0].content[s0.start..s0.end],
+        "a",
+        "dòng thêm THỨ NHẤT đổi ở ĐẦU dòng (`X b c` → `a b c`), nên khoảng phải trỏ \
+         vào `a`. Nhận [{}, {}) trên {:?}",
+        s0.start,
+        s0.end,
+        them[0].content
+    );
+    assert_eq!(
+        &them[1].content[s1.start..s1.end],
+        "c",
+        "dòng thêm THỨ HAI đổi ở CUỐI dòng (`a b X` → `a b c`), nên khoảng phải trỏ \
+         vào `c`.\n\
+         Nhận `{}` — nếu nó là `a` thì phép khớp đã chọn theo NỘI DUNG và gán khoảng \
+         của dòng thứ nhất cho dòng này: hai dòng cùng nội dung `a b c` nhưng KHÁC \
+         khoảng, và chỉ khớp theo SỐ DÒNG phân biệt được chúng.",
+        &them[1].content[s1.start..s1.end]
+    );
+
+    // Hai khoảng phải THẬT SỰ khác nhau, nếu không hai khẳng định trên vô nghĩa.
+    assert_ne!(
+        (s0.start, s0.end),
+        (s1.start, s1.end),
+        "tiền đề: hai khoảng phải khác nhau để ca này phân biệt được hai phép khớp"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Ba cổng bỏ qua — quan sát bằng CommandLog, không bằng giá trị trả về
 // ---------------------------------------------------------------------------
