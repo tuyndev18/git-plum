@@ -44,6 +44,30 @@ parking_lot = "0.12.5"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Theo dõi thay đổi trong `.git` — WORK-10. Từ Phase 4 ứng dụng **ghi**, và ghi dựa
+# trên trạng thái cũ thì hỏng repo của người dùng; chủ dự án dùng terminal song song
+# nên đây là ca thường, không phải ca biên.
+#
+# `notify-debouncer-full` cho sẵn phép gộp-và-trì-hoãn. Tự viết phép gộp là viết lại
+# một thư viện đã có, và bản có sẵn còn xử lý ca "tệp bị thay bằng rename" — đúng cách
+# git ghi `.git/index` (ghi `index.lock` rồi rename đè).
+#
+# 🔴 **0.6.0, KHÔNG phải 0.7.0.** 0.7.0 đòi rustc 1.85 còn `rust-version` của dự án
+# (ở trên) ghim 1.82, nên cargo **tự lùi**:
+#
+#   warning: ignoring notify-debouncer-full@0.7.0 (which requires rustc 1.85)
+#            to maintain git-plum's rust-version of 1.82
+#
+# Đây **không** phải giới hạn của máy (`rustc --version` là 1.98.1) — nó là
+# `rust-version` của chính dự án. Nâng nó lên 1.85 để lấy 0.7.0 là một quyết định
+# ngoài phạm vi plan 04-04. Ghim 0.6.0 tường minh để lần chạy `cargo add` sau không
+# âm thầm kéo 0.7.0 vào rồi lùi lại kèm một warning không ai đọc.
+#
+# Cặp đã kiểm bằng `cargo tree -i notify`: **một** bản `notify` duy nhất trong cây,
+# cả `git-plum` lẫn `notify-debouncer-full` cùng dùng nó — không trùng lặp.
+notify = "8.2.0"
+notify-debouncer-full = "0.6.0"
+
 [dev-dependencies]
 tempfile = "3.27.0"
 
