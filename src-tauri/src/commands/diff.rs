@@ -1019,6 +1019,179 @@ pub async fn get_file_diff(
     Ok((*fd).clone())
 }
 
+/// Diff của **thư mục làm việc** — WORK-01 tiêu chí 2, plan 04-02.
+///
+/// `staged = true` → `git diff --cached` (index so với HEAD: "thứ sẽ vào commit tới").
+/// `staged = false` → `git diff` (cây làm việc so với index: "thứ chưa stage").
+///
+/// Không revision nào trên dòng lệnh: đó là cả điểm. Người dùng đang xem thay đổi
+/// **chưa commit**, nên không có SHA nào để đặt vào đây.
+///
+/// # 🔴 KHÔNG dùng `DiffCache` — và đây là quyết định chịu lực của hàm này
+///
+/// Cache của Phase 3 đúng vì diff của một commit **lịch sử** là **bất biến** theo
+/// `(sha, path)`: hai lời gọi cho cùng khoá không thể cho hai câu trả lời khác nhau.
+/// Diff của thư mục làm việc **đổi mỗi lần người dùng gõ một ký tự**. Không có khoá
+/// nào ở đây bất biến, nên không có gì để cache.
+///
+/// Và hậu quả không cân xứng, đó là lý do nó được ghi thành doc comment chứ không chỉ
+/// là một chỗ trống trong mã: Phase 4 là phase **đầu tiên** mà dữ liệu cũ **nguy
+/// hiểm** chứ không chỉ sai mắt nhìn (CONTEXT.md 2.2). Trước Phase 4 ứng dụng chỉ
+/// đọc — đọc dữ liệu cũ thì người dùng thấy sai. Từ Phase 4 ứng dụng **ghi**, và
+/// người dùng quyết định stage cái gì **dựa trên diff họ đang xem**. Một diff cũ ở
+/// đây nghĩa là họ commit một thứ khác với thứ họ đã đọc.
+///
+/// Nên: **không** `state.diff_cache.put_diff(...)` và **không** `get_diff(...)` trên
+/// đường này. Đừng "tối ưu" nó — có hai test ghim (`diff_thu_muc_lam_viec_khong_vao_cache`
+/// đo `diff_cache.len()`, và `sua_tep_roi_goi_lai_cho_noi_dung_moi` đo nội dung), cộng
+/// một cổng đọc mã nguồn (`duong_thu_muc_lam_viec_khong_cham_cache`).
+///
+/// # Tái dùng cổng đã có, không viết lại
+///
+/// Cổng nhị phân (`--numstat` cho `-\t-`), bộ phân tích bản vá, và phép chọn
+/// `-U<n>` đều dùng lại nguyên. Chỉ **cổng kích thước** phải khác, vì
+/// [`kich_thuoc_hai_phia`] đọc `cat-file --batch-check` trên `<rev>:<path>` và phía
+/// cây làm việc **không phải một blob** — không có rev nào trỏ tới nó. Ở đây phía đó
+/// đo bằng `std::fs::metadata`, vốn cũng **không đọc nội dung**, nên tính chất quan
+/// trọng của cổng (biết kích thước mà không nạp byte nào — T-03-10) được giữ.
+pub async fn lay_diff_thu_muc_lam_viec(
+    state: &AppState,
+    repo: Arc<RepoHandle>,
+    path: &str,
+    staged: bool,
+) -> Result<FileDiff> {
+    let runner = state.runner(Arc::clone(&repo));
+
+    // --- Bước 1: cổng kích thước, TRƯỚC khi chạy `git diff` ----------------
+    //
+    // Cùng hợp đồng DIFF-06 với `lay_diff_tep`: **không chạy lệnh nào** trên tệp vượt
+    // ngưỡng, thay vì chạy rồi lọc kết quả. Ở thư mục làm việc ca này **dễ gặp hơn**
+    // ở lịch sử — một tệp log đang chạy, một dump cơ sở dữ liệu vừa sinh.
+    //
+    // `metadata` không đọc nội dung, đúng tinh thần `cat-file --batch-check`.
+    let byte_cay_lam_viec = tokio::fs::metadata(repo.path.join(path))
+        .await
+        .map(|m| m.len())
+        .unwrap_or(0);
+
+    if byte_cay_lam_viec > MAX_DIFF_BLOB_BYTES {
+        return Ok(FileDiff {
+            path: path.to_owned(),
+            old_path: None,
+            status: "M".to_owned(),
+            kind: DiffKind::TooLarge {
+                size: byte_cay_lam_viec,
+                limit: MAX_DIFF_BLOB_BYTES,
+            },
+        });
+    }
+
+    // Đối số chung của **cả hai** lệnh bên dưới. Dựng một lần để lệnh `--numstat` và
+    // lệnh diff thật không thể lệch nhau về việc so cái gì với cái gì — lệch thì cổng
+    // nhị phân phán quyết trên một cặp khác cặp được vẽ.
+    let co_cached: &[&str] = if staged { &["--cached"] } else { &[] };
+
+    // --- Bước 2: cổng nhị phân, phán quyết của chính git -------------------
+    //
+    // `--numstat` in `-\t-` cho tệp nhị phân. Tái dùng `la_nhi_phan` của đường lịch
+    // sử — viết lại một phép đoán "có byte 0 trong 8000 byte đầu" ở đây là hai nguồn
+    // sự thật cho cùng một câu hỏi.
+    let ra_numstat = runner
+        .read(
+            GitCommand::new(&repo.path)
+                .args(["-c", "core.quotepath=false", "diff"])
+                .args(co_cached)
+                .args(["--numstat", "-z", "--find-renames"])
+                // `--` NGĂN CÁCH cờ/revision với pathspec (T-02-11, T-03-07). Ở đây
+                // thiếu `--` **im lặng hơn** mọi chỗ khác: `git diff main` là một lệnh
+                // HỢP LỆ so HEAD với nhánh `main`, nên một tệp tên `main` cho một diff
+                // SAI mà không lỗi nào. `path` đến từ webview.
+                .arg("--")
+                .arg(PATHSPEC_SAU_DAU_GACH(path))
+                .timeout(DEFAULT_TIMEOUT),
+        )
+        .await?;
+
+    if ra_numstat.stdout.is_empty() {
+        // Hai phía giống nhau, **hoặc** tệp chưa được theo dõi (`git diff` không thấy
+        // tệp untracked). Ca thứ hai là một giới hạn đã biết, không phải lỗi: giao
+        // diện nói "tệp chưa theo dõi, chưa có gì để so" thay vì hiện trình xem trống.
+        return Ok(FileDiff {
+            path: path.to_owned(),
+            old_path: None,
+            status: "M".to_owned(),
+            kind: DiffKind::Unchanged,
+        });
+    }
+
+    if la_nhi_phan(&ra_numstat.stdout) {
+        return Ok(FileDiff {
+            path: path.to_owned(),
+            old_path: None,
+            status: "M".to_owned(),
+            kind: DiffKind::Binary {
+                old_size: 0,
+                new_size: byte_cay_lam_viec,
+            },
+        });
+    }
+
+    // --- Bước 3: chỉ tới đây mới chạy diff thật ----------------------------
+    let unified = so_dong_ngu_canh(byte_cay_lam_viec);
+    let rut_gon = unified != UNIFIED_TOAN_TEP;
+    let unified_arg = format!("--unified={unified}");
+
+    let ra_diff = runner
+        .read_ok(
+            GitCommand::new(&repo.path)
+                .args(["-c", "core.quotepath=false", "diff"])
+                .args(co_cached)
+                .args([&unified_arg, "--find-renames"])
+                // `--` TRƯỚC pathspec — xem ghi chú ở lệnh `--numstat` phía trên.
+                .arg("--")
+                .arg(PATHSPEC_SAU_DAU_GACH(path))
+                .timeout(DEFAULT_TIMEOUT),
+        )
+        .await?;
+
+    let phan_tich = parse_patch(&ra_diff.stdout);
+
+    if phan_tich.skipped_lines > 0 {
+        // Ghi `repo.id` (mã băm) và **số**, KHÔNG ghi đường dẫn tệp — khuôn T-02-24.
+        tracing::warn!(
+            repo = %repo.id,
+            skipped_lines = phan_tich.skipped_lines,
+            "bộ phân tích bản vá bỏ qua một số dòng khi đọc diff thư mục làm việc"
+        );
+    }
+
+    // 🔴 Trả thẳng, **không** đi qua `ket_thuc`/`ket_thuc_voi_ten_cu`: hai hàm đó
+    // `put_diff` vào cache, và đó đúng là thứ đường này không được làm. Xem doc
+    // comment của hàm.
+    Ok(FileDiff {
+        path: path.to_owned(),
+        old_path: None,
+        status: "M".to_owned(),
+        kind: DiffKind::Text {
+            hunks: phan_tich.hunks,
+            truncated: phan_tich.truncated,
+            context_only: rut_gon,
+        },
+    })
+}
+
+/// Diff của thư mục làm việc — WORK-01. Xem [`lay_diff_thu_muc_lam_viec`].
+#[tauri::command]
+pub async fn get_worktree_diff(
+    repo_id: String,
+    path: String,
+    staged: bool,
+    state: State<'_, AppState>,
+) -> Result<FileDiff> {
+    let repo = repo_cua(&state, &repo_id)?;
+    lay_diff_thu_muc_lam_viec(&state, repo, &path, staged).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1121,13 +1294,19 @@ mod tests {
 
         let so_moc = ma.matches("PATHSPEC_SAU_DAU_GACH").count();
         assert_eq!(
-            so_moc, 5,
-            "năm vị trí pathspec từ `lay_diff_tep` tới hết phần không-test: lệnh \
+            so_moc, 7,
+            "bảy vị trí pathspec từ `lay_diff_tep` tới hết phần không-test: lệnh \
              --numstat, HAI đường dẫn của lệnh diff thật (tên mới cộng tên cũ khi đổi \
-             tên), lệnh --word-diff của bước mức từ (03-03), và lệnh \
-             `log --follow` của `lay_lich_su_tep` (03-05, DIFF-05). Lệnh --name-status \
-             cố ý KHÔNG có pathspec — xem tài liệu của `trang_thai_va_ten_cu`. \
-             Số mốc khác 5 nghĩa là một lệnh mất mốc hoặc có lệnh mới chưa được kiểm"
+             tên), lệnh --word-diff của bước mức từ (03-03), lệnh \
+             `log --follow` của `lay_lich_su_tep` (03-05, DIFF-05), và HAI lệnh của \
+             `lay_diff_thu_muc_lam_viec` (04-02, WORK-01): lệnh --numstat của cổng nhị \
+             phân và lệnh diff thật. Lệnh --name-status cố ý KHÔNG có pathspec — xem \
+             tài liệu của `trang_thai_va_ten_cu`. \
+             Số mốc khác 7 nghĩa là một lệnh mất mốc hoặc có lệnh mới chưa được kiểm.\n\
+             \n\
+             Lịch sử con số này: 5 (hết Phase 3) → 7 (plan 04-02). Cổng cố ý đếm số \
+             TUYỆT ĐỐI để đỏ khi có lệnh mới chưa được kiểm (CONTEXT.md 3.5). Nới nó \
+             thành `>=` là biến một cổng đang có tác dụng thành cổng không thể fail."
         );
 
         // Kiểm **từng lệnh một**, không kiểm cả thân hàm như một khối.
@@ -1181,13 +1360,72 @@ mod tests {
         }
 
         assert_eq!(
-            so_lenh_co_pathspec, 4,
-            "đúng bốn lệnh mang pathspec: `--numstat`, lệnh diff thật, lệnh \
-             `--word-diff` của bước mức từ (03-03), và `log --follow` của \
-             `lay_lich_su_tep` (03-05). Lệnh `--name-status` cố ý không mang (xem \
-             `trang_thai_va_ten_cu`). Con số khác 4 nghĩa là phép cắt theo \
-             `GitCommand::new` đã lệch và vòng lặp trên không còn kiểm đúng thứ nó tưởng"
+            so_lenh_co_pathspec, 6,
+            "đúng SÁU lệnh mang pathspec: `--numstat` và lệnh diff thật của \
+             `lay_diff_tep`, lệnh `--word-diff` của bước mức từ (03-03), \
+             `log --follow` của `lay_lich_su_tep` (03-05), và `--numstat` cộng lệnh \
+             diff thật của `lay_diff_thu_muc_lam_viec` (04-02). Lệnh `--name-status` \
+             cố ý không mang (xem `trang_thai_va_ten_cu`). Con số khác 6 nghĩa là phép \
+             cắt theo `GitCommand::new` đã lệch và vòng lặp trên không còn kiểm đúng \
+             thứ nó tưởng.\n\
+             \n\
+             Lịch sử: 4 (hết Phase 3) → 6 (plan 04-02). Xem ghi chú về việc KHÔNG nới \
+             cổng này thành `>=` ở phép khẳng định `so_moc` phía trên."
         );
+    }
+
+    /// 🔴 **Đường diff thư mục làm việc KHÔNG chạm `DiffCache`** — đột biến M10.
+    ///
+    /// Hai test tích hợp (`diff_thu_muc_lam_viec_khong_vao_cache`,
+    /// `sua_tep_roi_goi_lai_cho_noi_dung_moi`) đo **hành vi** và là cổng chính. Cổng
+    /// này đọc **mã nguồn** và bắt một thứ khác: một lời gọi cache nằm ở nhánh mà hai
+    /// test kia chưa đi qua — ví dụ `put_diff` chỉ ở đường `Binary`, hay một lần
+    /// "dọn dẹp" đổi `Ok(FileDiff { .. })` thành `ket_thuc(...)` cho gọn (hàm đó
+    /// `put_diff` bên trong, và việc đó **không** đọc ra từ tên nó).
+    ///
+    /// Vì sao dữ liệu cũ nguy hiểm ở đây: xem doc comment của
+    /// [`lay_diff_thu_muc_lam_viec`]. Tóm tắt — người dùng quyết định stage cái gì dựa
+    /// trên diff họ đang xem; một diff cũ nghĩa là họ commit một thứ khác thứ đã đọc.
+    #[test]
+    fn duong_thu_muc_lam_viec_khong_cham_cache() {
+        let src = include_str!("diff.rs");
+        let (_, than) = src
+            .split_once("pub async fn lay_diff_thu_muc_lam_viec")
+            .expect("phải có hàm lay_diff_thu_muc_lam_viec");
+
+        // Bỏ dòng chú thích **trước khi tìm**: mọi doc comment của hàm đó nói về
+        // `put_diff` và `DiffCache`, nên đọc nguồn thô sẽ khớp văn xuôi và cổng này
+        // xanh vĩnh viễn — đúng lỗi cổng thứ năm của CONTEXT.md 3.1, nơi grep khớp
+        // một chú thích **do chính mutation sinh ra**.
+        let ma: String = than
+            .lines()
+            .take_while(|l| !l.starts_with("#[cfg(test)]"))
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        // Khẳng định **tiền đề**: không giữ lại được thân hàm thì cổng phải ĐỎ.
+        assert!(
+            ma.contains("GitCommand::new"),
+            "tiền đề: phép lọc phải giữ lại được thân hàm thật, nếu không cổng này \
+             đang kiểm một chuỗi rỗng và luôn xanh"
+        );
+        assert!(
+            ma.contains("DiffKind::Text"),
+            "tiền đề: phải thấy đường trả kết quả văn bản của hàm"
+        );
+
+        for cam in ["put_diff", "get_diff", "DiffKey::new", "ket_thuc"] {
+            assert!(
+                !ma.contains(cam),
+                "🔴 tìm thấy `{cam}` trên đường diff thư mục làm việc. Đường này \
+                 KHÔNG được chạm `DiffCache`: khoá của nó không bất biến (nội dung đổi \
+                 mỗi lần người dùng gõ), và Phase 4 là phase đầu tiên mà dữ liệu cũ \
+                 NGUY HIỂM chứ không chỉ sai mắt nhìn — người dùng stage dựa trên diff \
+                 họ đang xem (CONTEXT.md 2.2). Lưu ý `ket_thuc`/`ket_thuc_voi_ten_cu` \
+                 gọi `put_diff` BÊN TRONG; tên chúng không nói ra điều đó."
+            );
+        }
     }
 
     /// Chọn bản ghi `--name-status -z` khớp `path`, trên đúng byte git in ra.

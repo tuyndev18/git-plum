@@ -47,6 +47,7 @@ pub fn run() {
             commands::search_commits,
             commands::get_file_diff,
             commands::get_file_history,
+            commands::get_worktree_diff,
             commands::get_status,
             commands::stage_files,
             commands::unstage_files,
