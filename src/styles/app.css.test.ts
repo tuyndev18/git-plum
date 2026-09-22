@@ -530,3 +530,59 @@ describe('MIN_SPLIT_WIDTH phải khớp giữa DiffViewer.tsx và app.css', () =
     )
   })
 })
+
+/*
+ * 🔴 Lỗi người dùng báo ở checkpoint 11 bước của plan 03-04: bật chế độ **hai
+ * cột** thì nội dung bị cắt, không cuộn được.
+ *
+ * Nguyên nhân: `@codemirror/merge` ghi đè theme của dự án bằng `!important`
+ * (`node_modules/@codemirror/merge/dist/index.js`):
+ *
+ *   ".cm-mergeView & .cm-scroller, .cm-mergeView &": {
+ *       height: "auto !important", overflowY: "visible !important" }
+ *
+ * nên `height: 100%` và `.cm-scroller { overflow: auto }` mà
+ * `diff-render/theme.ts` đặt **bị vô hiệu** trong chế độ hai cột. Thư viện dồn
+ * việc cuộn về `.cm-mergeView` (`overflowY: auto`) để hai phía cuộn cùng nhau —
+ * nhưng phần tử đó nằm trong `.diff-host { overflow: hidden }` và **không nhận
+ * chiều cao từ đâu**, nên nó cao theo nội dung rồi bị cha cắt cứng.
+ *
+ * Vì sao 365 test tự động không bắt được: `MergeView` **chưa bao giờ được render
+ * trong một test nào** — happy-dom không có `ResizeObserver`, `paneWidth = 0`,
+ * mọi test chạy nhánh hợp nhất. Cùng lớp lỗi với ba lỗi bố cục của Phase 2, và
+ * cùng cách phát hiện: người dùng mở app thật.
+ *
+ * Hai test dưới đây là lưới an toàn cấp hai (đọc nguồn CSS, không đo layout).
+ * Chúng **không** thay thế việc kiểm bằng mắt trên WebView2 — xem doc comment
+ * đầu tệp này.
+ */
+describe('chế độ hai cột — .cm-mergeView phải là vùng cuộn thật', () => {
+  it('.cm-mergeView có chiều cao xác định, nếu không overflowY:auto của thư viện không kích hoạt', () => {
+    const start = css.indexOf('.cm-mergeView {')
+    expect(
+      start,
+      'phải có quy tắc .cm-mergeView — thiếu nó thì hai cột bị cắt, không cuộn được',
+    ).toBeGreaterThan(-1)
+    const block = css.slice(start, css.indexOf('}', start))
+
+    expect(
+      block,
+      '.cm-mergeView phải có chiều cao xác định. Nó nằm trong .diff-host{overflow:hidden} ' +
+        'nên không có chiều cao thì nó cao theo nội dung rồi bị cắt, và overflowY:auto mà ' +
+        '@codemirror/merge đặt không bao giờ kích hoạt.',
+    ).toMatch(/height:\s*100%/)
+  })
+
+  it('.cm-mergeViewEditor có min-width: 0 để dòng dài không đẩy cột kia hẹp lại', () => {
+    const start = css.indexOf('.cm-mergeViewEditor {')
+    expect(start, 'phải có quy tắc .cm-mergeViewEditor').toBeGreaterThan(-1)
+    const block = css.slice(start, css.indexOf('}', start))
+
+    // Flex item mặc định `min-width: auto` → không co dưới bề rộng nội dung.
+    expect(
+      block,
+      '.cm-mergeViewEditor là flex item (thư viện đặt flexGrow/flexBasis); thiếu ' +
+        'min-width: 0 thì một dòng dài đẩy cột kia hẹp lại thay vì cuộn ngang trong cột của nó',
+    ).toContain('min-width: 0')
+  })
+})

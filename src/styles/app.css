@@ -1453,6 +1453,50 @@ button:disabled {
   min-width: var(--min-split-width);
 }
 
+/*
+ * 🔴 Chế độ hai cột: `@codemirror/merge` GHI ĐÈ theme của ta bằng `!important`.
+ *
+ * Lỗi người dùng báo: bật hai cột thì nội dung bị cắt, không cuộn được. Nguyên
+ * nhân nằm trong `node_modules/@codemirror/merge/dist/index.js`:
+ *
+ *   ".cm-mergeView": { overflowY: "auto" }
+ *   ".cm-mergeView & .cm-scroller, .cm-mergeView &": {
+ *       height: "auto !important",
+ *       overflowY: "visible !important"
+ *   }
+ *
+ * Nên trong chế độ hai cột, `height: 100%` và `.cm-scroller { overflow: auto }`
+ * mà `diff-render/theme.ts` đặt **bị vô hiệu hoá**: mỗi editor cao theo nội
+ * dung, và việc cuộn dồn hết về `.cm-mergeView`. Đó là thiết kế của thư viện —
+ * hai cột phải cuộn cùng nhau, nên chỉ một vùng cuộn mới giữ được hai phía
+ * thẳng hàng.
+ *
+ * Nhưng `.cm-mergeView` **không nhận chiều cao từ đâu cả**: nó là con của
+ * `.diff-host { overflow: hidden }`, nên nó cao theo nội dung rồi bị cha cắt
+ * cứng — `overflowY: auto` của nó không bao giờ kích hoạt vì nó chưa từng bị
+ * giới hạn. Ba tầng `overflow: hidden` phía trên (`.diff-viewer` →
+ * `.diff-pane` → `.diff-host`) khi đó thành ba tầng cắt, không tầng nào cuộn.
+ *
+ * Sửa: cho `.cm-mergeView` chiều cao xác định. Nó thành vùng cuộn thật, và
+ * `overflowY: auto` của thư viện làm đúng việc.
+ *
+ * `min-width: 0` cho `.cm-mergeViewEditor` là cần: chúng là flex item, mà flex
+ * item mặc định `min-width: auto` nên không co dưới bề rộng nội dung — dòng dài
+ * sẽ đẩy cột kia hẹp lại thay vì cuộn ngang trong cột của mình.
+ *
+ * Vì sao không có test tự động cho việc này: `MergeView` **chưa bao giờ được
+ * render trong một test nào** — happy-dom không có `ResizeObserver`, nên
+ * `paneWidth = 0` và mọi test chạy nhánh hợp nhất. Đây là lỗi chỉ thấy được
+ * trên WebView2 thật, và người dùng tìm ra ở checkpoint 11 bước.
+ */
+.cm-mergeView {
+  height: 100%;
+}
+
+.cm-mergeViewEditor {
+  min-width: 0;
+}
+
 .diff-loading {
   align-items: center;
   justify-content: center;
