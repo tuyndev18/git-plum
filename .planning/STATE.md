@@ -61,7 +61,7 @@ progress:
 |---|---|
 | **Phase** | 2 — Lịch sử và đồ thị nhánh |
 | **Plan** | **7 / 7 đã thực thi**; hai checkpoint người kiểm CHƯA CHẠY nên 7/11 requirement còn Pending |
-| **Status** | Mã của cả 7 plan đã xong: **212 test frontend + 149 test Rust (+1 ignored)**, `typecheck`/`build`/`tauri build --release` đều xanh. Còn **hai việc nợ, cả hai cần người chạy app**: (1) **checkpoint 12 bước của 02-06** — vòng 1 bị từ chối với BA nguyên nhân độc lập, cả ba đã sửa (`7596e63` containment chiều cao Grid; `5ac43ef`/`970e31c` nhãn ref và chữ message tranh cùng cột grid, tái hiện bằng số đo Segoe UI thật 258px vs 144px → chữ hiện 0%; `60a0caa` cạnh `outEdges` vẽ tràn nửa hàng), chờ vòng 2; (2) **checkpoint #1 của 02-07** — đo hiệu năng repo 100k, **bị bỏ qua** theo quyết định chủ dự án nên HIST-05 còn Pending và Core Value chưa kiểm chứng đầu-tới-cuối. Phía Rust đã đo hai lần độc lập: **749.7ms / 762.2ms** (mốc 1000ms), `git log` chiếm **84%**. Checkpoint #4 **hoãn** (giữ JSON) vì cần phần dư IPC từ checkpoint #1. Xem `VERIFICATION.md` cho bằng chứng từng requirement. |
+| **Status** | Mã của cả 7 plan đã xong: **212 test frontend + 149 test Rust (+1 ignored)** *(số lúc đóng Phase 2; nay là 435 frontend + 284 Rust sau Phase 3)*, `typecheck`/`build`/`tauri build --release` đều xanh. Còn **hai việc nợ, cả hai cần người chạy app**: (1) **checkpoint 12 bước của 02-06** — vòng 1 bị từ chối với BA nguyên nhân độc lập, cả ba đã sửa (`7596e63` containment chiều cao Grid; `5ac43ef`/`970e31c` nhãn ref và chữ message tranh cùng cột grid, tái hiện bằng số đo Segoe UI thật 258px vs 144px → chữ hiện 0%; `60a0caa` cạnh `outEdges` vẽ tràn nửa hàng), chờ vòng 2; (2) **checkpoint #1 của 02-07** — đo hiệu năng repo 100k. Phần **đo được bằng máy đã chạy xong** 2026-09-22 (`9e5d113`): `cargo bench --bench graph` trên repo 100 007 commit **thật** cho `parse_log` **87.9ms** và `assign_lanes` **64.4ms** (trung bình 100 mẫu; cao hơn 20–39% so với hai lần đo một-phát 749.7ms/762.2ms, vì criterion tính cả phương sai — không phải hồi quy). Tổng đường nóng Rust bảo thủ: **787.0ms** / mốc 1000ms, `git log` chiếm **80.5%**. Nhưng ba phép đo nói về thứ **người dùng nhìn thấy** (vẽ lần đầu, FPS cuộn, thẳng hàng ở 100k) vẫn thiếu, nên HIST-05 và tiêu chí thành công 1 **vẫn Pending** — số Rust không đóng được checkpoint này. Checkpoint #4 **hoãn** (giữ JSON) vì cần phần dư IPC từ checkpoint #1. Xem `VERIFICATION.md` cho bằng chứng từng requirement. |
 | **Progress** | Phase 1/8 · Phase 2: 7/7 plan đã thực thi, 2 checkpoint người kiểm còn nợ |
 
 ```
@@ -90,7 +90,7 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 |---|---|
 | Phases completed | 1 / 8 (có nợ) — Phase 3 có đủ mã cho DIFF-01..06 nhưng **0 requirement nào có bằng chứng từ mắt người** |
 | Plans completed | 16 (mã đã thực thi; **Phase 2 VÀ Phase 3 đều chưa đóng** — 5 cổng người-kiểm còn nợ, xem Session Continuity) |
-| v1 requirements delivered | 12 / 59 đã kiểm chứng (thêm HIST-01, HIST-02, HIST-04, HIST-11 ở plan 02-05, checkpoint #2 người dùng chấp thuận) · 2 nữa có mã nhưng chưa kiểm thật (PLAT-07, PLAT-09) · PLAT-01 và REL-04 đạt ở mức yếu hơn ROADMAP |
+| v1 requirements delivered | 12 / 60 đã kiểm chứng (thêm HIST-01, HIST-02, HIST-04, HIST-11 ở plan 02-05, checkpoint #2 người dùng chấp thuận) · 2 nữa có mã nhưng chưa kiểm thật (PLAT-07, PLAT-09) · PLAT-01 và REL-04 đạt ở mức yếu hơn ROADMAP |
 
 | Plan | Thời lượng | Tasks | Files |
 |---|---|---|---|
@@ -200,6 +200,29 @@ nào cũng được. Chi tiết đầy đủ ở `.planning/phases/01-platform-g
 
 ### Vướng mắc
 
+**🔴 Hai lỗi tìm được 2026-09-22 ngoài mọi cổng, cả hai CHƯA SỬA, cả hai là nợ phase cũ:**
+
+1. **Hạ cap lane 20→13 làm chồng cột tăng 28 lần** (`9e5d113`, chi tiết ở
+   `docs/04-phase2-degraded-graph.md` mục 2.3). Đo bằng `src-tauri/src/bin/lanedist.rs`
+   trên repo 100 007 commit thật: **19 995 hàng = 19,99 %** có `lane >= 13`, nên `laneX`
+   clamp chúng về cột 12 — tám lane khác nhau vẽ đè cùng một cột, và **không có chỉ báo
+   nào** (chỉ báo `+N` chỉ dành cho `truncated_parents`, 0,67 %). Ở cap 20 tỉ lệ là
+   **0,71 %**. Phát hiện khi chạy checkpoint #1 và thấy benchmark in `lane lớn nhất 20`
+   trong khi cap là 13. **Không sửa**: cap 13 suy từ `LANE_WIDTH` 22 px đo từ ảnh tham
+   chiếu mà chủ dự án yêu cầu khớp, nên chọn giữa "13 lane thoáng + 20 % chồng" và
+   "20 lane chật + 0,7 % chồng" là quyết định **thiết kế**, không phải lỗi có đáp án
+   đúng. Ba đường đi đã ghi ở mục 2.3. `docs/04` mục 2 cũng đã lạc hậu từ `544ae5f`
+   (còn kể cap 20 và `LANE_WIDTH` 14 px) — đã sửa trong cùng commit.
+
+2. **Repo bị git từ chối báo sai "Không phải một repository git"** (`c9f3e09`, ca kiểm
+   KB-4b ở `docs/03-phase1-qa-windows.md`). Nhiều repo trong `D:/MyCompanyProjects/`
+   thuộc SID Windows khác → `git rev-parse` exit 128 kèm `dubious ownership`.
+   `open_repository` (`src-tauri/src/commands/repo.rs:41`) rẽ **mọi** `!is_success()`
+   sang `GitError::NotARepository`, biến thể chỉ mang `path` **không** mang `stderr`,
+   nên câu `git config --global --add safe.directory …` — thứ duy nhất giúp sửa —
+   không tới giao diện. Nợ **PLAT-10** của Phase 1. KB-4 hiện có **không** bắt được vì
+   nó chỉ kiểm thư mục không-phải-repo và coi thông báo đó là đúng.
+
 **Đang chờ: checkpoint Task 4 của plan 02-06 (`gate=blocking`) — VÒNG 1 BỊ TỪ CHỐI, đã sửa,
 chờ vòng 2.** Người dùng tự chạy app thật (WebView2/Windows), báo ba lỗi cụ thể ở bước 6 kèm
 ảnh chụp thật: (1) hàng có nhiều badge ref cao hơn hàng thường, (2) chấm đồ thị lệch khỏi tâm
@@ -296,7 +319,7 @@ Toolchain đã đủ:
 | # | Phase | Câu hỏi |
 |---|---|---|
 | ~~7~~ | 1 | **ĐẠT MỘT PHẦN** — quyết định của chủ dự án 2026-09-21. Chi tiết bên dưới. |
-| 1 | 2 | Đồ thị có mở dưới 1s và cuộn 60fps trên repo 50k–100k commit thật không? |
+| 1 | 2 | Đồ thị có mở dưới 1s và cuộn 60fps trên repo 50k–100k commit thật không? — **phần Rust đã đo xong** (787.0ms/1000ms, `9e5d113`); còn thiếu vẽ lần đầu, FPS cuộn, thẳng hàng 100k, cả ba đều cần người chạy app |
 | ~~2~~ | 2 | **CHỐT: CANVAS** — plan 02-05, người dùng chấp thuận qua app thật ở checkpoint vòng 2 (vòng 1 bị từ chối vì lỗi CSS cột subject, đã sửa). `interface GraphRenderer` vẫn giữ làm đường lùi. Chi tiết ở `02-05-SUMMARY.md`. |
 | 4 | 2 | JSON có chiếm phần lớn profile IPC cho dữ liệu lane không? (ship JSON trước rồi đo) |
 | 3 | 3 | `@codemirror/merge` tự tính diff từ hai tài liệu đầy đủ — có đủ nhanh với tệp lớn không? |
