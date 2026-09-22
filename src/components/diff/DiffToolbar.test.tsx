@@ -181,7 +181,7 @@ describe('DiffNotice — năm dạng, NĂM thông báo khác nhau (DIFF-06)', ()
 
   it('text: DiffNotice trả null — nội dung do DiffViewer dựng, không phải thông báo', () => {
     const { container } = render(
-      <DiffNotice kind={{ kind: 'text', hunks: [], truncated: false }} />,
+      <DiffNotice kind={{ kind: 'text', hunks: [], truncated: false, contextOnly: false }} />,
     )
     expect(container.textContent).toBe('')
   })
@@ -210,7 +210,7 @@ describe('DiffNotice — năm dạng, NĂM thông báo khác nhau (DIFF-06)', ()
 
 describe('băng cảnh báo truncated — hiện CÙNG nội dung, không thay nó', () => {
   it('truncated: true → có băng cảnh báo', () => {
-    render(<DiffNotice kind={{ kind: 'text', hunks: [], truncated: true }} />)
+    render(<DiffNotice kind={{ kind: 'text', hunks: [], truncated: true, contextOnly: false }} />)
     // `DiffNotice` cho `text` không dựng thông báo chính, nhưng băng `truncated`
     // là ngoại lệ: người dùng đang xem MỘT PHẦN và phải biết điều đó.
     const el = screen.getByTestId('diff-truncated')
@@ -218,7 +218,93 @@ describe('băng cảnh báo truncated — hiện CÙNG nội dung, không thay n
   })
 
   it('truncated: false → KHÔNG có băng', () => {
-    render(<DiffNotice kind={{ kind: 'text', hunks: [], truncated: false }} />)
+    render(<DiffNotice kind={{ kind: 'text', hunks: [], truncated: false, contextOnly: false }} />)
     expect(screen.queryByTestId('diff-truncated')).toBeNull()
+  })
+})
+
+/*
+ * 🔴 `contextOnly` — cờ "đang xem dạng rút gọn", thêm cùng việc hiện TOÀN TỆP.
+ *
+ * Backend mặc định gửi `--unified=1000000` (toàn tệp) nhưng lùi về `--unified=3`
+ * khi tệp vượt `MAX_BYTE_TOAN_TEP` (512 KB), và đặt `contextOnly: true` khi lùi.
+ *
+ * # Vì sao cờ này BẮT BUỘC phải hiện ra
+ *
+ * Im lặng lùi về rút gọn chính là việc đã xảy ra ngày 2026-09-22: người dùng
+ * thấy số dòng nhảy (5 → 24 → 37), tưởng trình xem lỗi, và **báo hai lần**. Một
+ * cờ đúng ở backend mà giao diện bỏ qua thì không sửa được gì — nó chỉ chuyển
+ * lỗi im lặng từ tầng này sang tầng khác.
+ *
+ * # `contextOnly` KHÁC `truncated` — hai câu khác nhau
+ *
+ * | cờ | nghĩa | người dùng mất gì |
+ * |---|---|---|
+ * | `truncated` | bản vá **bị cắt** | **có** mất thay đổi |
+ * | `contextOnly` | thấy đủ mọi thay đổi, thiếu ngữ cảnh giữa | **không** mất gì |
+ *
+ * Nên `contextOnly` **không** được dùng chữ "bị cắt" và không được dùng `⚠️`:
+ * một cảnh báo sai cho tệp 600 KB hoàn toàn bình thường làm người dùng mất tin
+ * vào trình xem. Có test ghim đúng điều đó.
+ */
+describe('băng contextOnly — nói rõ đang xem rút gọn, KHÔNG gọi là "bị cắt"', () => {
+  it('contextOnly: true → có băng riêng, testid riêng', () => {
+    render(
+      <DiffNotice kind={{ kind: 'text', hunks: [], truncated: false, contextOnly: true }} />,
+    )
+
+    const el = screen.getByTestId('diff-context-only')
+    expect(
+      el,
+      'thiếu băng này thì việc lùi về rút gọn là IM LẶNG — đúng lỗi người dùng đã ' +
+        'báo hai lần ngày 2026-09-22',
+    ).toBeTruthy()
+  })
+
+  it('contextOnly: false → KHÔNG có băng', () => {
+    render(
+      <DiffNotice kind={{ kind: 'text', hunks: [], truncated: false, contextOnly: false }} />,
+    )
+
+    expect(screen.queryByTestId('diff-context-only')).toBeNull()
+  })
+
+  it('🔴 KHÔNG dùng chữ "cắt" — người dùng không mất thay đổi nào', () => {
+    render(
+      <DiffNotice kind={{ kind: 'text', hunks: [], truncated: false, contextOnly: true }} />,
+    )
+
+    const chu = screen.getByTestId('diff-context-only').textContent ?? ''
+    expect(
+      chu,
+      'contextOnly nghĩa là thấy ĐỦ mọi thay đổi, chỉ thiếu ngữ cảnh không đổi. ' +
+        'Gọi nó là "bị cắt" là một cảnh báo SAI cho một tệp hoàn toàn bình thường.',
+    ).not.toMatch(/bị cắt|cắt bớt/)
+  })
+
+  it('nói rõ LÝ DO (tệp lớn) để người dùng biết đây không phải lỗi', () => {
+    render(
+      <DiffNotice kind={{ kind: 'text', hunks: [], truncated: false, contextOnly: true }} />,
+    )
+
+    const chu = screen.getByTestId('diff-context-only').textContent ?? ''
+    expect(
+      chu,
+      'không nói lý do thì người dùng vẫn phải tự đoán vì sao số dòng nhảy — ' +
+        'đúng chỗ họ đã đoán sai một lần',
+    ).toMatch(/lớn|dung lượng|kích thước/i)
+  })
+
+  it('hai cờ ĐỘC LẬP: cùng true thì hiện CẢ HAI băng', () => {
+    /*
+     * Một tệp lớn **và** có quá nhiều khối đổi là ca thật, và hai câu nói hai
+     * điều khác nhau. Gộp hoặc cho một cờ đè cờ kia sẽ giấu mất một nửa sự thật.
+     */
+    render(
+      <DiffNotice kind={{ kind: 'text', hunks: [], truncated: true, contextOnly: true }} />,
+    )
+
+    expect(screen.getByTestId('diff-truncated')).toBeTruthy()
+    expect(screen.getByTestId('diff-context-only')).toBeTruthy()
   })
 })

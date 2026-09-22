@@ -155,12 +155,49 @@ export function DiffToolbar({ onNextHunk, onPrevHunk }: ToolbarProps = {}) {
  */
 export function DiffNotice({ kind }: { kind: DiffKind }) {
   if (kind.kind === 'text') {
-    if (!kind.truncated) return null
+    /*
+     * Hai cờ **độc lập**, và cùng `true` thì hiện **cả hai** băng.
+     *
+     * Chúng nói hai điều khác nhau: `truncated` = mất nội dung; `contextOnly` =
+     * thấy đủ thay đổi, thiếu ngữ cảnh giữa. Một tệp vừa lớn vừa có quá nhiều
+     * khối đổi là ca thật, và cho cờ này đè cờ kia sẽ giấu mất một nửa sự thật.
+     */
+    if (!kind.truncated && !kind.contextOnly) return null
     return (
-      <div className="diff-notice diff-notice-truncated" data-testid="diff-truncated" role="status">
-        ⚠️ Diff đã bị cắt vì tệp này có quá nhiều khối thay đổi — bạn đang xem{' '}
-        <strong>một phần</strong> nội dung.
-      </div>
+      <>
+        {kind.truncated && (
+          <div
+            className="diff-notice diff-notice-truncated"
+            data-testid="diff-truncated"
+            role="status"
+          >
+            ⚠️ Diff đã bị cắt vì tệp này có quá nhiều khối thay đổi — bạn đang xem{' '}
+            <strong>một phần</strong> nội dung.
+          </div>
+        )}
+        {kind.contextOnly && (
+          /*
+           * 🔴 KHÔNG dùng `⚠️` và KHÔNG dùng chữ "bị cắt".
+           *
+           * Người dùng **không mất thay đổi nào** ở đây — mọi dòng thêm/xoá đều
+           * có mặt, chỉ các đoạn không đổi ở giữa là bị lược. Một cảnh báo kiểu
+           * "diff bị cắt" cho một tệp 600 KB hoàn toàn bình thường làm người
+           * dùng mất tin vào trình xem, và có test ghim điều đó.
+           *
+           * Nhưng nó **phải** hiện ra: im lặng lùi về rút gọn đúng là việc làm
+           * người dùng tưởng số dòng nhảy là lỗi và báo hai lần (2026-09-22).
+           */
+          <div
+            className="diff-notice diff-notice-degraded"
+            data-testid="diff-context-only"
+            role="status"
+          >
+            Tệp lớn nên đang hiện <strong>các khối thay đổi</strong> kèm 3 dòng ngữ cảnh,
+            không phải toàn tệp. Mọi thay đổi đều có mặt — số dòng nhảy là vì các đoạn
+            không đổi được lược bớt.
+          </div>
+        )}
+      </>
     )
   }
 

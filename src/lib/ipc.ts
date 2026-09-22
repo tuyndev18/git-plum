@@ -281,7 +281,27 @@ export interface Hunk {
  * (T-03-13), không ở một nhánh `if` mà người sau có thể xoá.
  */
 export type DiffKind =
-  | { kind: 'text'; hunks: Hunk[]; truncated: boolean }
+  /**
+   * `truncated` và `contextOnly` là **hai cờ độc lập** mang hai nghĩa khác nhau,
+   * và giao diện phải nói hai câu khác nhau:
+   *
+   * | cờ | nghĩa | người dùng mất gì |
+   * |---|---|---|
+   * | `truncated` | bản vá **bị cắt mất nội dung** | **có** — không thấy hết thay đổi |
+   * | `contextOnly` | thấy **đủ mọi thay đổi**, chỉ thiếu ngữ cảnh không đổi ở giữa | **không** mất gì |
+   *
+   * `contextOnly: true` nghĩa là backend đã lùi về `--unified=3` thay vì hiện
+   * toàn tệp, vì tệp vượt `MAX_BYTE_TOAN_TEP` (512 KB) — xem
+   * `commands::diff::so_dong_ngu_canh`.
+   *
+   * 🔴 Cờ này **phải** được hiển thị khi `true`. Im lặng lùi về rút gọn chính là
+   * việc đã xảy ra ngày 2026-09-22: người dùng thấy số dòng nhảy (5 → 24 → 37),
+   * tưởng trình xem lỗi, và báo **hai lần**. Một cờ đúng ở backend mà giao diện
+   * bỏ qua thì không sửa được gì — nó chỉ chuyển lỗi im lặng sang tầng khác.
+   * `DiffToolbar.test.tsx` có test ghim cả băng thông báo lẫn việc nó **không**
+   * dùng chữ "bị cắt".
+   */
+  | { kind: 'text'; hunks: Hunk[]; truncated: boolean; contextOnly: boolean }
   | { kind: 'binary'; oldSize: number; newSize: number }
   /** `limit` là ngưỡng đang áp (5 MB). Hiện cả hai số để người dùng biết vượt bao nhiêu. */
   | { kind: 'tooLarge'; size: number; limit: number }

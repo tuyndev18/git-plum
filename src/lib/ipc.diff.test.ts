@@ -88,8 +88,8 @@ describe('DiffKind là discriminated union theo khoá kind', () => {
   }
 
   it('đọc được trường riêng của cả năm dạng', () => {
-    expect(moTa({ kind: 'text', hunks: [], truncated: false })).toBe('0 hunk')
-    expect(moTa({ kind: 'text', hunks: [], truncated: true })).toBe('0 hunk (đã cắt)')
+    expect(moTa({ kind: 'text', hunks: [], truncated: false, contextOnly: false })).toBe('0 hunk')
+    expect(moTa({ kind: 'text', hunks: [], truncated: true, contextOnly: false })).toBe('0 hunk (đã cắt)')
     expect(moTa({ kind: 'binary', oldSize: 10, newSize: 20 })).toBe('nhị phân 10 → 20')
     expect(moTa({ kind: 'tooLarge', size: 9_000_000, limit: 5_242_880 })).toBe(
       '9000000 vượt ngưỡng 5242880',

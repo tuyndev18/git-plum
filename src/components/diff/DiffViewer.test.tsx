@@ -60,6 +60,7 @@ function textDiff(path: string, content: string): FileDiff {
     kind: {
       kind: 'text',
       truncated: false,
+      contextOnly: false,
       hunks: [
         {
           oldStart: 1,
