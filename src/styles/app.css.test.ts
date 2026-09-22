@@ -48,6 +48,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+import { MIN_SPLIT_WIDTH } from '@/components/diff/DiffViewer'
 import { REF_COL_WIDTH } from '@/lib/graph-render/geometry'
 
 const cssPath = path.join(process.cwd(), 'src', 'styles', 'app.css')
@@ -368,5 +369,164 @@ describe('.graph-canvas không định vị bằng margin phần trăm', () => {
       'canvas phải `position: absolute` để không chiếm chỗ trong luồng — `sticky` chiếm ' +
         'chỗ nên lại cần margin âm bù lại, đúng cái bẫy vừa sửa',
     ).toMatch(/position:\s*absolute/)
+  })
+})
+
+/*
+ * ============================================================================
+ * Bất biến bố cục của trình xem diff — plan 03-04.
+ * ============================================================================
+ *
+ * Bốn test dưới đây là **lưới an toàn cấp hai**, cùng khuôn với các test ở trên:
+ * đọc thẳng nguồn CSS, chặn đúng một kiểu hồi quy. Chúng **không** thay thế việc
+ * đo bằng trình duyệt thật — happy-dom không tính layout CSS, và ba lỗi hiển thị
+ * của Phase 2 qua hết 212 test tự động.
+ *
+ * Mỗi test đã được **kiểm là có thể đỏ**: đổi CSS cho vi phạm từng điều, xác
+ * nhận đúng test đó đỏ, rồi hoàn nguyên. Số đo dán trong `03-04-SUMMARY.md`.
+ */
+describe('.diff-viewer containment cứng — grid/flex item không được tự giãn', () => {
+  function ruleBody(selector: string): string {
+    const marker = `${selector} {`
+    const start = css.indexOf(marker)
+    expect(start, `phải tìm thấy quy tắc \`${selector}\` trong app.css`).toBeGreaterThan(-1)
+    return css.slice(start + marker.length, css.indexOf('}', start))
+  }
+
+  it('.diff-viewer có overflow: hidden VÀ min-height: 0', () => {
+    // Bài học `.commit-row` sau checkpoint vòng 1: grid/flex item mặc định có
+    // `min-height: auto`, KHÔNG phải `0` — nên nội dung con ép track cao lên
+    // bất kể `overflow: hidden` ở phần tử con. `DiffViewer` chứa một
+    // `EditorView` có thể cao hàng nghìn px; thiếu containment thì nó đẩy cả
+    // panel giãn ra thay vì tự cuộn bên trong.
+    const body = ruleBody('.diff-viewer')
+    expect(body, '.diff-viewer phải có overflow: hidden').toContain('overflow: hidden')
+    expect(body, '.diff-viewer phải có min-height: 0').toContain('min-height: 0')
+  })
+
+  it('.diff-pane cũng có min-height: 0 — containment phải đi hết chuỗi cha-con', () => {
+    // `min-height: 0` trên đúng một cấp là vô dụng nếu cấp dưới lại `auto`:
+    // chuỗi containment hỏng ở bất kỳ mắt nào là hỏng cả chuỗi.
+    const body = ruleBody('.diff-pane')
+    expect(body).toContain('min-height: 0')
+    expect(body).toContain('overflow')
+  })
+})
+
+describe('cột nội dung diff dùng sàn px cứng, KHÔNG minmax(0, ...)', () => {
+  it('không có chuỗi `minmax(0,` trong bất kỳ quy tắc .diff-* nào', () => {
+    /*
+     * `minmax(0, 2fr)` là chuỗi CHÍNH XÁC đã gây lỗi checkpoint vòng 1 của
+     * plan 02-05: `0` là sàn hợp lệ, và ở cửa sổ hẹp cột co về ĐÚNG 0px — chữ
+     * hiển thị 0% trong khi DOM vẫn có `textContent` đúng
+     * (`getBoundingClientRect().width === 0`, đo bằng Chromium thật).
+     *
+     * `DiffViewer` nằm trong một `Panel` KÉO ĐƯỢC nên bề rộng có thể nhỏ tuỳ ý
+     * — đúng điều kiện đã kích hoạt lỗi đó.
+     *
+     * Lọc chú thích trước khi tìm: khối CSS của diff CÓ nhắc `minmax(0, ...)`
+     * trong phần giải thích vì sao không dùng nó, và một test đọc CSS thô sẽ
+     * khớp nhầm chính đoạn văn đó (đúng lỗi `.graph-canvas` ở trên).
+     */
+    const khongChuThich = css.replace(/\/\*[\s\S]*?\*\//g, '')
+
+    // Cắt lấy mọi quy tắc có selector bắt đầu bằng `.diff-`.
+    const khoiDiff: string[] = []
+    const re = /(^|\n)\s*(\.diff-[^{]*)\{([^}]*)\}/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(khongChuThich)) !== null) {
+      khoiDiff.push(`${m[2]}{${m[3]}}`)
+    }
+
+    expect(
+      khoiDiff.length,
+      'tiền đề: phải tìm thấy ít nhất một quy tắc .diff-* sau khi lọc chú thích — ' +
+        'nếu 0 thì cổng này tự vô hiệu hoá',
+    ).toBeGreaterThan(0)
+
+    for (const khoi of khoiDiff) {
+      expect(khoi, `quy tắc diff dùng minmax(0, ...) — sàn 0 làm cột co mất chữ:\n${khoi}`).not.toContain(
+        'minmax(0,',
+      )
+    }
+  })
+})
+
+describe('.diff-word-changed là LỚP PHỦ, không nền đục', () => {
+  it('dùng nền có alpha, không dùng var(--bg*) làm nền đặc', () => {
+    /*
+     * `.diff-word-changed` nằm TRÊN nền dòng thêm/xoá. Một nền đục xoá mất tín
+     * hiệu "dòng này đã thêm" — cùng lớp lỗi với `.commit-row:hover` dùng
+     * `var(--bg-inset)` và xoá sạch đoạn đồ thị canvas của hàng đó (vệt đen
+     * ngang khi hover, đã sửa ở Phase 2).
+     */
+    const start = css.indexOf('.diff-word-changed {')
+    expect(start, 'phải tìm thấy .diff-word-changed trong app.css').toBeGreaterThan(-1)
+    const body = css.slice(start + '.diff-word-changed {'.length, css.indexOf('}', start))
+
+    const background = body
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.startsWith('background'))
+    expect(background, '.diff-word-changed phải khai background').toBeTruthy()
+
+    // `color-mix(... transparent)` hoặc `rgb(... / ...)` — cả hai cho alpha.
+    const coAlpha =
+      (background ?? '').includes('transparent') || /rgba?\([^)]*\//.test(background ?? '')
+    expect(
+      coAlpha,
+      `.diff-word-changed có nền \`${background}\` — nền đục phủ mất nền dòng ` +
+        `thêm/xoá bên dưới, xoá tín hiệu "dòng này đã thêm". Phải trộn với ` +
+        `\`transparent\` hoặc dùng cú pháp alpha.`,
+    ).toBe(true)
+
+    for (const opaque of ['var(--bg-inset)', 'var(--bg-raised)', 'var(--bg)']) {
+      expect(
+        background,
+        `.diff-word-changed không được dùng ${opaque} làm nền đặc`,
+      ).not.toContain(`${opaque};`)
+    }
+  })
+})
+
+/*
+ * `MIN_SPLIT_WIDTH` sống ở HAI nơi — `DiffViewer.tsx` (quyết định có tự chuyển
+ * về hợp nhất) và biến `--min-split-width` trong `app.css` (sàn bề rộng của
+ * vùng hai cột) — và phải bằng nhau.
+ *
+ * Lệch hai phía là **lỗi im lặng**: mỗi phía tự nó vẫn nhất quán, nhưng có một
+ * DẢI bề rộng mà JS nói "hai cột" trong khi CSS đã co cột xuống dưới mức đọc
+ * được (hoặc ngược lại, CSS giữ sàn trong khi JS đã chuyển về hợp nhất và sàn
+ * thành một dải trống).
+ *
+ * Đúng tiền lệ `REF_COL_WIDTH` (geometry.ts + app.css) và `MAX_VISIBLE_LANES`
+ * (Rust + TS) của Phase 2 — cả hai giờ đều có test đọc thẳng file kia. Đây là
+ * cổng 12 của `<verification>`.
+ */
+describe('MIN_SPLIT_WIDTH phải khớp giữa DiffViewer.tsx và app.css', () => {
+  it('--min-split-width trong CSS bằng MIN_SPLIT_WIDTH trong DiffViewer.tsx', () => {
+    const match = css.match(/--min-split-width:\s*(\d+)px/)
+    const cssValue = match?.[1]
+    expect(cssValue, 'phải tìm thấy --min-split-width trong app.css').toBeDefined()
+
+    expect(
+      Number(cssValue),
+      `CSS có --min-split-width: ${cssValue}px nhưng DiffViewer.tsx có ` +
+        `MIN_SPLIT_WIDTH = ${MIN_SPLIT_WIDTH}. JS quyết định "hai cột hay hợp nhất" ` +
+        `theo con số TS, còn CSS đặt sàn cột theo con số CSS — lệch nhau thì có một ` +
+        `dải bề rộng mà JS hiện hai cột trong khi CSS đã co cột xuống dưới mức đọc được.`,
+    ).toBe(MIN_SPLIT_WIDTH)
+  })
+
+  it('vùng hai cột thật sự DÙNG biến đó, không dán số cứng ở chỗ khác', () => {
+    // Một biến khai mà không ai dùng làm test trên thành vô nghĩa — cùng bài
+    // học `--row-height: 26px` từng tồn tại song song `ROW_HEIGHT = 28` và chỉ
+    // vô hại vì không chỗ nào dùng tới nó.
+    const start = css.indexOf('.diff-split {')
+    expect(start, 'phải tìm thấy .diff-split — vùng hai cột').toBeGreaterThan(-1)
+    const body = css.slice(start, css.indexOf('}', start))
+    expect(body, '.diff-split phải dùng var(--min-split-width)').toContain(
+      'var(--min-split-width)',
+    )
   })
 })
