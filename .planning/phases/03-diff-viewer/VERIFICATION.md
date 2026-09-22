@@ -177,6 +177,31 @@ có test tự động, nhưng **chưa ai thấy danh sách trên màn hình**.
 - Cổng chống đua (T-03-37): mutation bỏ → **1 đỏ**. `authorTime` là **giây**; test
   khẳng định không hiện 1970 **và** khẳng định `new Date(giây)` *sẽ* cho 1970 — thiếu
   khẳng định thứ hai thì khẳng định thứ nhất không chứng minh gì.
+- 🔴 **Cổng xanh sai thứ SÁU của phase — lần đầu ở tầng giao diện, và nó chờ sai phần
+  tử** (`a1b6993`). Test 1970 chờ `file-history`, tức **vỏ panel ngoài**, vốn render
+  ngay khi panel mở — kể cả lúc còn "Đang đọc lịch sử tệp…". `waitFor` thoả mãn tức
+  thì, nên hai khẳng định dưới nó đọc một DOM chưa có dữ liệu. Sai này **không phải
+  luôn xanh**: nó đỏ khoảng **1/5 lần chạy**, nên nó sống qua wave 5 vì suite chỉ
+  được chạy một lần.
+
+  ```
+  AssertionError: expected 'Lịch sử của a.txtĐóng lịch sửĐang đọc…' to contain '2026'
+  ```
+
+  Phát hiện khi orchestrator chạy suite **lặp lại** (1 đỏ trong 5 lần), không phải khi
+  chạy một lần. Sửa: chờ `file-version-<sha>` — phần tử chỉ tồn tại **sau** khi promise
+  IPC resolve, đúng cách 24 test còn lại trong tệp đang làm.
+
+  Đã kiểm sửa **không** làm cổng yếu đi: bỏ `* 1000` khỏi `formatVersionTime` thì test
+  vẫn đỏ, và nay đỏ trên **dữ liệu thật** —
+  `expected "…Jan 22, 1970…" not to contain "1970"` — chứ không phải trên chỗ giữ chỗ
+  đang nạp. Sau sửa: 6/6 lần chạy tệp xanh, 3/3 lần chạy full suite **435/435**.
+
+  Bài học khác bốn ca trước: cổng này **không** đọc nguồn thô và **không** khớp chú
+  thích. Nó sai vì `waitFor` được neo vào một phần tử có mặt ở **mọi** trạng thái, kể
+  cả trạng thái sai. Quy tắc rút ra: **`waitFor` phải neo vào phần tử chỉ tồn tại ở
+  trạng thái đang kiểm**, và một suite có test bất đồng bộ cần chạy **nhiều lần** —
+  một lần xanh không chứng minh ổn định.
 - Lệnh qua sổ đăng ký (PLAT-04) và **gỡ khi unmount**; mutation bỏ `unregisterCommand`
   → **1 đỏ** (test mount hai lần).
 
