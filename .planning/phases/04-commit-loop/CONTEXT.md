@@ -176,12 +176,41 @@ HEAD thật sự: hàng 19, lane 19 -> cạnh hàng WIP BỊ CLAMP, sẽ vẽ sa
 HEAD thật nằm ở lane 19 — người dùng thấy hàng WIP nối vào **một commit khác**. Đây
 không phải suy giảm nhìn-là-thấy; nó là một đồ thị **vẽ sai một cách tự tin**.
 
-**Điều kiện xảy ra:** ≥ 14 nhánh sống song song **và** HEAD không phải nhánh mới nhất
-theo topo. Repo nhiều nhánh feature là ca thường, không dị biệt.
+**Điều kiện xảy ra:** ≥ `MAX_VISIBLE_LANES + 1` nhánh sống song song **và** HEAD không
+phải nhánh mới nhất theo topo. Repo nhiều nhánh feature là ca thường, không dị biệt.
 
-**Bắt buộc với plan:** phải có test ghim ca này — ít nhất 14 lane đồng thời, HEAD ở
-lane ≥ 13, và khẳng định cạnh hàng WIP **không** vẽ vào cột 12 khi HEAD không ở lane 12.
-Đo bằng `cargo run --release --bin lanedist <repo>`, đã in sẵn lane của HEAD.
+**Bắt buộc với plan:** phải có test ghim ca này — ít nhất `CAP + 1` lane đồng thời,
+HEAD ở lane ≥ `CAP`, và khẳng định cạnh hàng WIP **không** vẽ vào cột `CAP - 1` khi
+HEAD không ở lane `CAP - 1`. Đo bằng `cargo run --release --bin lanedist <repo>`, đã
+in sẵn lane của HEAD.
+
+> 🔴 **Cập nhật 2026-09-22 chiều — cap đổi 13 → 20, số cụ thể ở trên đã lạc hậu.**
+>
+> Chủ dự án quyết sau khi thấy 19,99 % so với 0,71 %. Một session khác sửa `types.rs`
+> (`MAX_VISIBLE_LANES` **20**, `LANE_COLORS` **20**) và `geometry.ts` (**20**), hai
+> phía khớp, **chưa commit**. Kéo theo cả hình học pixel vì cap suy từ nó:
+>
+> | Hằng | Cũ | Mới |
+> |---|---:|---:|
+> | `LANE_WIDTH` | 22 | **14** |
+> | `MAX_VISIBLE_LANES` | 13 | **20** |
+> | `LANE_COLORS` | 13 | **20** |
+> | `NODE_RADIUS` | 7 | **4** |
+> | `MERGE_NODE_RADIUS` | 8 | **5** |
+> | `EDGE_WIDTH` | 2 | **1.5** |
+>
+> (Chấm cộng quầng sáng không được vượt một lane, nếu không quầng xoá mất đường của
+> lane bên cạnh — đó là lý do bán kính co theo `LANE_WIDTH`.)
+>
+> **Tỉ lệ clamp tính lại** từ histogram đã đo, không cần chạy lại: **cap 13 → 19 995
+> hàng (19,99 %)**, **cap 20 → 711 hàng (0,71 %)**.
+>
+> **Lỗi cạnh WIP KHÔNG biến mất, chỉ dịch ngưỡng.** `laneX` vẫn clamp vô điều kiện và
+> cạnh WIP vẫn không có đường thoát. Bản tái hiện 20 nhánh ở trên không còn kích hoạt
+> được (lane 19 < cap 20); cần **21+ nhánh**. Vẫn là repo thường, chỉ rộng hơn.
+>
+> **Vì vậy mọi ngưỡng trong tài liệu và test phải viết theo `MAX_VISIBLE_LANES`, không
+> viết số.** Đây là lần thứ hai cap đổi trong hai ngày; lần sau sẽ lại đổi.
 
 Số đếm (tệp sửa / tệp mới) lấy từ **cùng** lời gọi `git status --porcelain=v2` của
 WORK-01. **Không** thêm lệnh git thứ hai chỉ để đếm.
@@ -364,6 +393,20 @@ trên test happy-dom. Ghi "có mã, chưa kiểm".
   **Không kill tiến trình đó** nếu nó không phải của mình — có thể là app chủ dự án đang
   dùng để chạy cổng dogfood. Ghi con số `--lib` và ghi `--lib --tests` là **chưa đo**,
   đừng suy ra tổng rồi báo như đã đo.
+
+  **Đây không phải lock chập chờn, đây là ràng buộc cứng suốt kỳ dogfood.** Test tích
+  hợp cần relink `git-plum.exe`, mà cổng thoát Phase 3 và Phase 4 đều đòi chủ dự án
+  **mở ứng dụng nhiều ngày**. Báo "chưa đo" tốt hơn tranh lock.
+- 🔴 **Ba phiên cùng chạy `cargo` đã khoá nhau 40 phút** (2026-09-22). Cả ba dùng
+  **chung một** `target/`, nên mọi lời gọi cargo nối đuôi nhau trên
+  `target/debug/.cargo-lock` kể cả khi công việc không liên quan. Năm tiến trình của
+  tôi treo 40 phút với **CPU ~0 giây** — dấu hiệu bị chặn, không phải đang biên dịch —
+  và chặn luôn `tauri dev` của chủ dự án.
+
+  **Quy tắc: kiểm `tasklist | grep git-plum` trước khi chạy cargo.** Có app đang chạy
+  thì chờ hoặc báo, **đừng kill**. `CARGO_TARGET_DIR` riêng **không** phải lối thoát:
+  đã thử, rebuild 292 crate hỏng với `paging file is too small` (os error 1455), và
+  đĩa đang 92 % với `target/` 14 GB.
 - **`rtk` lọc đầu ra `cargo test`** nhưng **có** ghi một dòng tổng vào tệp khi
   redirect (`cargo test: 284 passed, 1 ignored`), nên `> tệp` cho tổng số. Muốn **tên
   từng test** thì cần `rtk proxy cargo test`.
