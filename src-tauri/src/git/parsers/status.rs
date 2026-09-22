@@ -1022,24 +1022,60 @@ mod tests {
         let st = parse_status(&ra.stdout);
         let dem = st.wip_counts();
 
-        // Fixture: 1 đổi tên + 2 tệp sửa = 3 tệp sửa; 3 tệp chưa theo dõi
-        // (z_untracked.txt, `z with space.txt`, và tệp tên Latin-1 mà trên
-        // Windows/NTFS thành `b_café.txt`). Khẳng định theo cách đếm được từ chính
-        // `entries` để test không vỡ khi script thêm một tệp.
+        // Fixture: 1 đổi tên + 2 tệp sửa đã stage + 1 tệp `MM` = 4 ĐƯỜNG DẪN sửa;
+        // 3 tệp chưa theo dõi (z_untracked.txt, `z with space.txt`, và tệp tên
+        // Latin-1 mà trên Windows/NTFS thành `b_café.txt`).
+        //
+        // 🔴 Cả hai con số suy ra từ chính `entries`, **không** viết cứng.
+        //
+        // Bản đầu viết cứng `modified == 3` — và nó đỏ ngay khi plan 04-02 thêm
+        // `p_mm.txt` vào fixture để lấp nhóm `Unstaged` đang thiếu, dù `wip_counts`
+        // hoàn toàn đúng. Chú thích của chính nó đã nói ý định là "đếm được từ chính
+        // `entries` để test không vỡ khi script thêm một tệp"; phép khẳng định thứ hai
+        // thì không làm vậy. Một test vỡ vì dữ liệu fixture đổi, trong khi thứ nó kiểm
+        // vẫn đúng, dạy người đọc sửa con số cho hết đỏ — và lần sau một lỗi thật cũng
+        // sẽ được "sửa" như vậy.
+        //
+        // Suy ra từ `entries` **không** làm cổng yếu đi, vì thứ nó kiểm là phép
+        // **khử trùng lặp theo đường dẫn** (đột biến M8 của plan 04-01): `p_mm.txt`
+        // có HAI phần tử và phải đếm MỘT. Đếm `entries.len()` sẽ cho 5, không phải 4.
         let so_chua_theo_doi = st
             .entries
             .iter()
             .filter(|e| e.group == StatusGroup::Untracked)
             .count() as u32;
 
+        let duong_dan_sua: std::collections::HashSet<&str> = st
+            .entries
+            .iter()
+            .filter(|e| e.group != StatusGroup::Untracked && !e.xy.contains('A'))
+            .map(|e| e.path.as_str())
+            .collect();
+
         assert_eq!(
             dem.added, so_chua_theo_doi,
             "repo mẫu không có tệp `A` đã stage, nên `added` phải bằng số tệp chưa theo dõi"
         );
         assert_eq!(
-            dem.modified, 3,
-            "1 đổi tên + 2 tệp sửa = 3 tệp sửa. Được {}: {:?}",
             dem.modified,
+            duong_dan_sua.len() as u32,
+            "`modified` phải đếm ĐƯỜNG DẪN DUY NHẤT, không đếm phần tử. Được {}: {:?}",
+            dem.modified,
+            st.entries.iter().map(|e| (&e.path, &e.xy)).collect::<Vec<_>>()
+        );
+
+        // Và khẳng định fixture thật sự mang ca chịu lực: một tệp có HAI phần tử.
+        // Thiếu phép này thì hai con số trên khớp nhau một cách vô nghĩa trên một
+        // fixture không có tệp nào xuất hiện hai lần — đúng lỗi #7 của CONTEXT.md 3.1
+        // (hình dạng đúng, dữ liệu vô hại).
+        assert!(
+            duong_dan_sua.len()
+                < st.entries
+                    .iter()
+                    .filter(|e| e.group != StatusGroup::Untracked)
+                    .count(),
+            "tiền đề: fixture phải có ÍT NHẤT một tệp xuất hiện ở hai nhóm (XY=MM), \
+             nếu không phép khử trùng lặp không được kiểm gì cả. Đọc được: {:?}",
             st.entries.iter().map(|e| (&e.path, &e.xy)).collect::<Vec<_>>()
         );
     }
