@@ -2,6 +2,7 @@
 
 pub mod exec;
 pub mod parsers;
+pub mod patch_build;
 pub mod runner;
 
 pub use exec::{GitCommand, GitOutput, DEFAULT_TIMEOUT, NETWORK_TIMEOUT};

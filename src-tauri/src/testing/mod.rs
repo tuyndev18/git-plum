@@ -296,6 +296,71 @@ pub fn require_hook_fixture(ten: &str) -> Option<PathBuf> {
     Some(repo)
 }
 
+// --- Repo mẫu cho staging theo khối (Phase 5) ------------------------------
+
+/// Lệnh sinh repo mẫu hunk. In ra trong thông báo bỏ qua test.
+///
+/// # 🔴 KHÔNG phải [`FIXTURES_COMMAND`] và cũng không phải [`STATUS_FIXTURES_COMMAND`]
+///
+/// Lý do giống hệt hai hằng trước nó: `hunk-cases` do một script **riêng** sinh ra. In
+/// nhầm lệnh ở đây nghĩa là người mới clone repo thấy test bỏ qua, chạy đúng lệnh được
+/// bảo, và test **vẫn** bỏ qua — không có gì nói cho họ biết tại sao.
+pub const HUNK_FIXTURES_COMMAND: &str = "bash scripts/fixtures/make-hunk-fixtures.sh";
+
+/// Thư mục con chứa repo mẫu hunk, dưới [`fixture_root`].
+pub const HUNK_FIXTURES_DIR: &str = "hunk-cases";
+
+/// Lấy repo mẫu hunk, hoặc `None` **kèm lời nhắc ra stderr** nếu thiếu.
+///
+/// Cùng hợp đồng với [`require_status_fixture`]: **không panic**, in nhắc rồi trả
+/// `None` để test `return` sớm. Xem ghi chú đầu module.
+///
+/// # Repo này mang gì
+///
+/// Bốn tệp, mỗi tệp một hình dạng làm vỡ một bộ **dựng bản vá con**:
+///
+/// | Tệp | Hình dạng | Vì sao |
+/// |---|---|---|
+/// | `ba-khoi.txt` | 26 dòng LF, sửa dòng 2/13/25 → **đúng 3** hunk ở `-U3` | ca tách hunk cơ bản |
+/// | `crlf-khong-dong-cuoi.txt` | 30 dòng CRLF, **không** `\n` cuối, byte `0xE9` dòng 6 | WORK-04, ba lớp một tệp |
+/// | `nhi-phan.bin` | có byte NUL | R7 — phải từ chối rõ ràng |
+/// | `doi-ten-va-sua.txt` | `git mv` rồi sửa nội dung | ca ROADMAP "vừa đổi tên vừa sửa" |
+///
+/// # 🔴 `core.autocrlf` của repo này là `true`, KHÔNG phải `false`
+///
+/// Khác **cả ba** bộ fixture trước, vốn đặt `false` để đầu ra tất định. Ở đây `true` là
+/// cả điểm: mặc định trên Windows là `true` và đó là máy chủ dự án, nên một fixture đặt
+/// `false` sẽ né mất chính ca R2 (CRLF bị chuẩn hoá mất) mà nó tồn tại để kiểm.
+///
+/// **Hệ quả đã đo, và nó đổi cách viết test:** với `autocrlf=true`, `git diff` in bản
+/// vá bằng **LF thuần** — clean filter bỏ `\r` trước khi git so sánh. Bản vá từ repo
+/// này **không chứa byte `\r` nào**. Đó là đúng, không phải lỗi. Nên ca "CRLF không bị
+/// trim khi tách hunk" **không dựng được** từ repo này; nó phải là test **byte-literal**
+/// trong `git::patch_build`.
+///
+/// # Repo để BẨN có chủ ý
+///
+/// Giá trị nằm ở thư mục làm việc, không ở lịch sử. Chạy `git commit`, `git reset` hay
+/// `git clean` trong đó là **phá fixture**.
+pub fn require_hunk_fixture() -> Option<PathBuf> {
+    let goc = fixture_root().join(HUNK_FIXTURES_DIR);
+    let repo = goc.join("repo");
+
+    if !repo.is_dir() || !repo.join(".git").exists() {
+        eprintln!(
+            "BỎ QUA TEST: thiếu repo mẫu hunk (tìm ở {}).\n  \
+             Sinh lại bằng: {}\n  \
+             Hoặc trỏ tới thư mục khác bằng biến môi trường {}.",
+            repo.display(),
+            HUNK_FIXTURES_COMMAND,
+            FIXTURES_ENV,
+        );
+        return None;
+    }
+
+    Some(repo)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -357,6 +422,38 @@ mod tests {
         assert!(
             STATUS_FIXTURES_COMMAND.contains("make-status-fixtures.sh"),
             "lệnh phải trỏ đúng script sinh status-cases, thấy: {STATUS_FIXTURES_COMMAND}"
+        );
+    }
+
+    /// `hunk-cases` cũng **không** nằm trong [`FIXTURE_NAMES`], cùng lý do với
+    /// `status-cases`, và lệnh sinh nó phải **khác cả hai** lệnh đã có.
+    ///
+    /// Test này tồn tại vì đây là lần thứ **ba** dự án thêm một bộ fixture có script
+    /// riêng. Hai lần trước đều phải thêm một hằng `*_FIXTURES_COMMAND` tách biệt; một
+    /// lần "dọn dẹp" sau này gộp chúng lại sẽ làm [`require_hunk_fixture`] in ra lệnh
+    /// sai, và người chạy đúng lệnh được bảo vẫn thấy test bỏ qua — im lặng.
+    #[test]
+    fn hunk_cases_co_lenh_sinh_rieng_va_khong_nam_trong_make_fixtures() {
+        assert!(
+            !FIXTURE_NAMES.contains(&HUNK_FIXTURES_DIR),
+            "'{HUNK_FIXTURES_DIR}' không được nằm trong FIXTURE_NAMES: \
+             make-fixtures.sh KHÔNG dựng nó, nên require_fixture sẽ in lệnh sai"
+        );
+        assert_ne!(
+            HUNK_FIXTURES_COMMAND, FIXTURES_COMMAND,
+            "lệnh sinh hunk-cases phải khác lệnh sinh bộ fixture Phase 2"
+        );
+        assert_ne!(
+            HUNK_FIXTURES_COMMAND, STATUS_FIXTURES_COMMAND,
+            "lệnh sinh hunk-cases phải khác lệnh sinh status-cases"
+        );
+        assert!(
+            HUNK_FIXTURES_COMMAND.contains("make-hunk-fixtures.sh"),
+            "lệnh phải trỏ đúng script sinh hunk-cases, thấy: {HUNK_FIXTURES_COMMAND}"
+        );
+        assert_ne!(
+            HUNK_FIXTURES_DIR, STATUS_FIXTURES_DIR,
+            "hai bộ fixture không được dùng chung một thư mục"
         );
     }
 
