@@ -76,7 +76,7 @@ const GIAN_CACH_MS: &[u64] = &[50, 150, 450];
 /// repo **đã mở** qua `open_repository`, nên một `repo_id` bịa từ webview cho
 /// [`GitError::UnknownRepository`] chứ không mở được thư mục tuỳ ý. Đường dẫn không
 /// bao giờ đến từ webview.
-fn repo_cua(state: &AppState, repo_id: &str) -> Result<Arc<RepoHandle>> {
+pub(crate) fn repo_cua(state: &AppState, repo_id: &str) -> Result<Arc<RepoHandle>> {
     state
         .get_repo(repo_id)
         .ok_or_else(|| GitError::UnknownRepository(repo_id.to_owned()))
@@ -149,10 +149,42 @@ fn stderr_noi_ve_index_lock(stderr: &str) -> bool {
 /// # Thất bại vì lock cho [`GitError::IndexLocked`], không phải `CommandFailed`
 ///
 /// Xem tài liệu của variant đó về lý do.
-async fn chay_lenh_ghi_co_thu_lai(
+pub(crate) async fn chay_lenh_ghi_co_thu_lai(
     state: &AppState,
     repo: &Arc<RepoHandle>,
     dung_lenh: impl Fn() -> GitCommand,
+) -> Result<GitOutput> {
+    chay_lenh_ghi_co_thu_lai_phan_loai(state, repo, dung_lenh, |args, out| {
+        GitError::CommandFailed {
+            args,
+            status: out.status,
+            stderr: out.stderr_lossy(),
+        }
+    })
+    .await
+}
+
+/// Như [`chay_lenh_ghi_co_thu_lai`], nhưng người gọi tự **phân loại** thất bại.
+///
+/// # Vì sao tham số này tồn tại — plan 04-03
+///
+/// Phép thử lại `index.lock` và phép **phân loại lỗi** là hai việc khác nhau, và bản
+/// đầu của hàm này trộn chúng: nó tự trả [`GitError::CommandFailed`] cho **mọi** thất
+/// bại không phải lock. Với `git add` thì đúng — exit khác 0 ở đó gần như chỉ có một
+/// nghĩa. Với `git commit` thì **sai**: exit 1 ở đó là hook từ chối, hoặc không có gì
+/// để commit, hoặc thông điệp rỗng — ba thông báo hoàn toàn khác nhau cho người dùng.
+///
+/// 🔴 Đây đúng là khuôn lỗi KB-4b của `open_repository` (gán **một** nguyên nhân cho
+/// **mọi** exit khác 0), và nó được phát hiện bằng một test đỏ chứ không bằng suy luận:
+/// `create_commit` trả `command_failed` trong khi test đòi `hook_rejected`.
+///
+/// Đường thử lại **không** bị sao chép — plan nói rõ *"dùng cùng hàm thử-lại của 04-02,
+/// không viết lại"*. Chỉ phép phân loại được tiêm vào.
+pub(crate) async fn chay_lenh_ghi_co_thu_lai_phan_loai(
+    state: &AppState,
+    repo: &Arc<RepoHandle>,
+    dung_lenh: impl Fn() -> GitCommand,
+    phan_loai: impl Fn(Vec<String>, &GitOutput) -> GitError,
 ) -> Result<GitOutput> {
     let runner = state.runner(Arc::clone(repo));
 
@@ -170,15 +202,20 @@ async fn chay_lenh_ghi_co_thu_lai(
             return Ok(out);
         }
 
+        // 🔴 Nhận biết lock phải đọc **cả hai** luồng, không chỉ stderr.
+        //
+        // `git commit` in một số thông báo ra **stdout** (đo được: "nothing to commit"),
+        // và tuy câu lock của git nằm ở stderr, phép ghép hai luồng ở đây làm phép nhận
+        // biết không phụ thuộc vào việc lệnh con chọn luồng nào — thứ không có gì bảo
+        // đảm là bất biến qua các lệnh git và các phiên bản.
         let stderr = out.stderr_lossy();
-        if !stderr_noi_ve_index_lock(&stderr) {
+        let stdout_loi = String::from_utf8_lossy(&out.stdout);
+        let la_lock = stderr_noi_ve_index_lock(&stderr) || stderr_noi_ve_index_lock(&stdout_loi);
+
+        if !la_lock {
             // Không phải ca lock: thất bại ngay, đừng thử lại. Thử lại một lệnh sai
             // tham số chỉ làm người dùng chờ 650 ms để nhận cùng một lỗi.
-            return Err(GitError::CommandFailed {
-                args,
-                status: out.status,
-                stderr,
-            });
+            return Err(phan_loai(args, &out));
         }
 
         match GIAN_CACH_MS.get(lan) {
@@ -574,9 +611,7 @@ mod tests {
             "thư mục không phải repo KHÔNG phải ca lock"
         );
         assert!(
-            !stderr_noi_ve_index_lock(
-                "fatal: detected dubious ownership in repository at '/r'"
-            ),
+            !stderr_noi_ve_index_lock("fatal: detected dubious ownership in repository at '/r'"),
             "🔴 `dubious ownership` KHÔNG phải ca lock — gộp chúng lại là lặp lại đúng \
              lỗi KB-4b của open_repository"
         );
@@ -767,7 +802,10 @@ mod tests {
             status: 128,
         };
 
-        assert_eq!(phan_loai_loi_status("C:/tmp", &ra).code(), "not_a_repository");
+        assert_eq!(
+            phan_loai_loi_status("C:/tmp", &ra).code(),
+            "not_a_repository"
+        );
     }
 
     /// Phân loại lỗi status: lock trong lúc **đọc** cũng cho mã `index_locked`.
@@ -818,7 +856,12 @@ mod tests {
     fn lenh_ghi_tra_repostatus_khong_tra_unit() {
         let ma = ma_khong_chu_thich();
 
-        for ten in ["stage_duong_dan", "unstage_duong_dan", "stage_files", "unstage_files"] {
+        for ten in [
+            "stage_duong_dan",
+            "unstage_duong_dan",
+            "stage_files",
+            "unstage_files",
+        ] {
             let (_, sau) = ma
                 .split_once(&format!("fn {ten}("))
                 .unwrap_or_else(|| panic!("phải có hàm {ten}"));

@@ -53,6 +53,58 @@ pub enum GitError {
     )]
     IndexLocked { args: Vec<String>, stderr: String },
 
+    /// Thông điệp commit rỗng hoặc chỉ khoảng trắng — WORK-08, rủi ro R5.
+    ///
+    /// # Vì sao ca này có mã riêng và bị chặn TRƯỚC khi chạy git
+    ///
+    /// git cũng từ chối thông điệp rỗng, nên variant này trông như thừa. Nó không thừa:
+    /// trên một repo có hook, `commit-msg` chạy **trước** phép kiểm rỗng của git, nên
+    /// người dùng nhận đầu ra của hook thay vì câu "thông điệp rỗng" và đi sửa nhầm
+    /// chỗ. Cộng thêm: chạy `pre-commit` (thường là linter cả cây, hàng chục giây) cho
+    /// một lệnh chắc chắn thất bại là lãng phí rất thật.
+    ///
+    /// 🔴 **Không tự sửa thông điệp** (R5). Ứng dụng không sinh một subject mặc định,
+    /// không thêm nội dung. Nó nói cho người dùng biết và dừng lại.
+    #[error("Thông điệp commit không được để trống.")]
+    EmptyCommitMessage,
+
+    /// Không có gì ở index để commit — WORK-08.
+    ///
+    /// Tách khỏi [`GitError::CommandFailed`] vì với người dùng đây **không phải một
+    /// lỗi**: họ chỉ chưa chọn tệp nào. Thông báo phải nói việc cần làm ("chọn tệp để
+    /// stage"), không phải "git thoát với mã 1".
+    ///
+    /// 🔴 Câu này git in ra **stdout**, không phải stderr — đã đo. Nên `output` mang
+    /// **cả hai** luồng; đọc một luồng là mất ca này im lặng.
+    #[error("Không có thay đổi nào đã stage để commit. Chọn tệp để stage trước.\n\n{output}")]
+    NothingToCommit { output: String },
+
+    /// `git commit` bị từ chối — hook, hoặc một nguyên nhân chưa phân loại được.
+    ///
+    /// # `output` mang NGUYÊN VĂN đầu ra, và đó là cả điểm
+    ///
+    /// Rủi ro R5 của `CONTEXT.md`: *"Không tự sửa thông điệp; hiện nguyên văn lỗi
+    /// hook."* Đầu ra của một `pre-commit` hook là thứ **duy nhất** nói cho người dùng
+    /// biết phải sửa gì — nó là tên tệp, số dòng, luật linter bị vi phạm. Thay nó bằng
+    /// một câu chung ("commit thất bại") là vứt đi toàn bộ thông tin có ích, đúng lúc
+    /// người ta cần đọc nó nhất. Đột biến M5 của plan ghim điều này.
+    ///
+    /// # Vì sao KHÔNG cố tách "hook" khỏi "chưa biết"
+    ///
+    /// Đầu ra hook là chuỗi **tuỳ ý do người dùng viết** — không có dấu hiệu ổn định
+    /// nào để nhận ra nó, và mọi phép đoán sẽ sai ở một repo nào đó. Gộp hai ca là
+    /// trung thực: *"git từ chối, đây là nguyên văn nó nói"*. Cố đoán rồi đoán sai là
+    /// đúng khuôn lỗi KB-4b của `open_repository`.
+    ///
+    /// 🔴 `output` gộp **cả stdout lẫn stderr**: đã đo rằng git chuyển tiếp **cả hai**
+    /// luồng của hook vào **stderr** của chính nó, trong khi các ca khác dùng stdout.
+    #[error("git từ chối tạo commit (mã {status}):\n\n{output}")]
+    HookRejected {
+        args: Vec<String>,
+        status: i32,
+        output: String,
+    },
+
     #[error("Chưa mở repository nào")]
     NoRepositoryOpen,
 
@@ -76,6 +128,9 @@ impl GitError {
             Self::CommandFailed { .. } => "command_failed",
             Self::NotARepository { .. } => "not_a_repository",
             Self::IndexLocked { .. } => "index_locked",
+            Self::EmptyCommitMessage => "empty_commit_message",
+            Self::NothingToCommit { .. } => "nothing_to_commit",
+            Self::HookRejected { .. } => "hook_rejected",
             Self::NoRepositoryOpen => "no_repository_open",
             Self::UnknownRepository(_) => "unknown_repository",
             Self::ParseFailed(_) => "parse_failed",
@@ -91,7 +146,8 @@ impl GitError {
             Self::SpawnFailed { args, .. }
             | Self::Timeout { args, .. }
             | Self::CommandFailed { args, .. }
-            | Self::IndexLocked { args, .. } => Some(args),
+            | Self::IndexLocked { args, .. }
+            | Self::HookRejected { args, .. } => Some(args),
             _ => None,
         }
     }
@@ -209,6 +265,15 @@ mod tests {
                 args: vec![],
                 stderr: String::new(),
             },
+            GitError::EmptyCommitMessage,
+            GitError::NothingToCommit {
+                output: String::new(),
+            },
+            GitError::HookRejected {
+                args: vec![],
+                status: 1,
+                output: String::new(),
+            },
             GitError::NoRepositoryOpen,
             GitError::UnknownRepository(String::new()),
             GitError::ParseFailed(String::new()),
@@ -224,7 +289,71 @@ mod tests {
             so_luong,
             "có hai variant dùng cùng một mã lỗi: {ma:?}"
         );
-        assert_eq!(so_luong, 10, "mười variant; thêm variant phải cập nhật test này");
+        assert_eq!(
+            so_luong, 13,
+            "mười ba variant; thêm variant phải cập nhật test này. Lịch sử con số: \
+             10 (hết 04-02) → 13 (04-03 thêm EmptyCommitMessage, NothingToCommit, \
+             HookRejected cho vòng commit của WORK-08). Cập nhật con số là ĐÚNG khi \
+             thêm variant thật; nới nó thành `>=` thì KHÔNG — phép so bằng tuyệt đối \
+             là thứ bắt được một variant thêm vào mà quên khai mã lỗi"
+        );
+    }
+
+    /// Ba variant của vòng commit giữ **nguyên văn** đầu ra git — đột biến M5.
+    ///
+    /// 🔴 Đây là cổng bảo vệ công sức người dùng. Đầu ra của một `pre-commit` hook là
+    /// thứ **duy nhất** nói cho họ biết phải sửa gì (tên tệp, số dòng, luật bị vi
+    /// phạm); thay nó bằng "commit thất bại" là vứt đi toàn bộ thông tin có ích đúng
+    /// lúc họ cần nhất.
+    #[test]
+    fn loi_vong_commit_giu_nguyen_van_dau_ra_hook() {
+        let err = GitError::HookRejected {
+            args: vec!["commit".into(), "--cleanup=whitespace".into()],
+            status: 1,
+            output: "HOOK-PRE-COMMIT-REJECTED (stdout)\nHOOK-PRE-COMMIT-REJECTED (stderr)".into(),
+        };
+        let json = serde_json::to_value(&err).unwrap();
+
+        assert_eq!(json["code"], "hook_rejected");
+        assert_ne!(
+            json["code"], "command_failed",
+            "hook từ chối KHÔNG được gộp vào command_failed: với người dùng đó là một \
+             thông báo cần ĐỌC, không phải một lỗi của ứng dụng"
+        );
+
+        let msg = json["message"].as_str().unwrap();
+        assert!(
+            msg.contains("HOOK-PRE-COMMIT-REJECTED"),
+            "🔴 NGUYÊN VĂN đầu ra hook phải đi tới người dùng (R5, đột biến M5): {msg:?}"
+        );
+        assert!(
+            msg.contains("(stdout)") && msg.contains("(stderr)"),
+            "🔴 CẢ HAI luồng của hook phải tới nơi. git gộp stdout lẫn stderr của hook \
+             vào stderr của chính nó — đã đo — nên mất một dòng nghĩa là phép gộp luồng \
+             đang bỏ sót: {msg:?}"
+        );
+
+        // Ca "không có gì để commit" nói VIỆC CẦN LÀM, không nói mã thoát.
+        let khong_co_gi = GitError::NothingToCommit {
+            output: "nothing to commit, working tree clean".into(),
+        };
+        let msg2 = khong_co_gi.to_string();
+        assert!(
+            msg2.contains("stage"),
+            "thông báo phải nói việc cần làm (chọn tệp để stage), không phải 'git \
+             thoát với mã 1' — với người dùng đây không phải một lỗi: {msg2:?}"
+        );
+        assert_eq!(khong_co_gi.code(), "nothing_to_commit");
+
+        // Thông điệp rỗng KHÔNG mang lệnh git: nó bị chặn TRƯỚC khi chạy git.
+        let rong = GitError::EmptyCommitMessage;
+        assert_eq!(rong.code(), "empty_commit_message");
+        assert!(
+            rong.command_args().is_none(),
+            "🔴 ca thông điệp rỗng phải bị chặn TRƯỚC khi sinh lệnh git, nên nó không \
+             có lệnh để hiện. Có lệnh ở đây nghĩa là git đã chạy — tức hook pre-commit \
+             (thường là linter cả cây) vừa chạy cho một lệnh chắc chắn thất bại"
+        );
     }
 
     #[test]
