@@ -3,7 +3,7 @@
 **Ngày:** 2026-09-22
 **Trạng thái phase:** 4/5 wave đã thực thi (03-01..03-04). **Checkpoint 11 bước của 03-04
 CHƯA CHẠY**, và **checkpoint #3 của 03-01 BỊ BỎ QUA** — nên năm requirement (DIFF-01, 02, 03,
-04, 06) còn ở mức "Có mã, chưa kiểm". **DIFF-05 chưa được cài ở wave nào** — xem mục riêng;
+04, 06) còn ở mức "Có mã, chưa kiểm". **DIFF-05 chưa có mã vì wave 5 chưa chạy** (plan `03-05` đã nhận nó);
 đó là một lỗ trong kế hoạch phase, không phải một ô chưa kiểm.
 
 Tài liệu này nêu **bằng chứng** cho từng requirement, không nêu ý kiến. Ba mức, **đúng ba mức
@@ -31,12 +31,12 @@ về thứ nhìn thấy được.
 | DIFF-02 | **Có mã, chưa kiểm** | `viewMode` không-theo-repo + mutation #2 (5 đỏ). **Hai cột chưa bao giờ được render** — `ResizeObserver` không có trong happy-dom |
 | DIFF-03 | **Có mã, chưa kiểm** | `nextHunkLine`/`prevHunkLine` trả `null` khi hết + mutation #6 (2 đỏ). Chưa ai bấm thử |
 | DIFF-04 | **Có mã, chưa kiểm** | `Compartment` + mutation #9 (1 đỏ, cùng instance `EditorView`). **Vị trí cuộn chưa kiểm được** — không có cuộn thật |
-| DIFF-05 | 🔴 **Chưa cài** | Thuộc Phase 3 (tiêu chí thành công số 3) nhưng **không wave nào** đã cài. Không có mã. Xem chi tiết |
+| DIFF-05 | **Chưa cài — theo kế hoạch** | Là việc của **wave 5** (`03-05-PLAN.md`, `requirements: [DIFF-05]`, có `file_history.rs` + `FileHistory.tsx`). Chưa chạy, nên chưa có mã. **Không** phải lỗ kế hoạch — xem đính chính ở `03-04-SUMMARY.md` |
 | DIFF-06 | **Có mã, chưa kiểm** | Năm thông báo khác nhau + 21 test; backend có test tích hợp chạy git thật (03-02). Giao diện chưa ai mở |
 | Word-level | **Có mã, chưa kiểm** | `spanToUtf16` + mutation #5 (**4 đỏ**, tiếng Việt và emoji). **Tô đúng chỗ về pixel chưa kiểm** |
 | Hiệu năng diff | **Chưa đo** | Checkpoint #3 **bị bỏ qua**. `MergeView` trên tệp 630 KB: **không có con số nào** |
 
-**Đạt: 0** · **Có mã, chưa kiểm: 6** · **Chưa đo: 1** (hiệu năng) · 🔴 **Chưa cài: 1** (DIFF-05)
+**Đạt: 0** · **Có mã, chưa kiểm: 6** · **Chưa đo: 1** (hiệu năng) · **Chưa tới lượt: 1** (DIFF-05, wave 5)
 
 Con số này **sẽ đổi** sau checkpoint 11 bước. Trước đó nó là trạng thái thật.
 
@@ -118,11 +118,16 @@ thiếu tính năng. Bước 7 hỏi rõ điều này.
 
 ---
 
-### DIFF-05 — lịch sử thay đổi của riêng một tệp · **Chưa cài**
+### DIFF-05 — lịch sử thay đổi của riêng một tệp · **Chưa cài, theo kế hoạch**
 
-DIFF-05 **thuộc Phase 3** (ROADMAP: `Requirements: DIFF-01..DIFF-06`, và tiêu chí thành công
-số 3: *"Người dùng mở lịch sử thay đổi của riêng một tệp và lần theo được các phiên bản của
-nó"*), nhưng **không** nằm trong wave nào đã thực thi tới nay:
+> **Đính chính 2026-09-22.** Bản đầu của mục này kết luận DIFF-05 là một **lỗ kế hoạch**.
+> Sai. Orchestrator kiểm lại: `03-05-PLAN.md` nhận nó tường minh và có đủ tệp. Executor của
+> 03-04 ghi "03-05 chưa lập kế hoạch chi tiết" trong khi plan đã tồn tại từ vòng lập kế hoạch
+> ban đầu (`8d59856`, sửa ở `48d9944`/`857aee9`) — nó đọc thiếu.
+
+DIFF-05 thuộc Phase 3 (ROADMAP: `Requirements: DIFF-01..DIFF-06`, tiêu chí thành công số 3:
+*"Người dùng mở lịch sử thay đổi của riêng một tệp và lần theo được các phiên bản của nó"*)
+và **đã được giao cho wave 5**:
 
 | Wave | Phạm vi | DIFF-05? |
 |---|---|---|
@@ -130,15 +135,19 @@ nó"*), nhưng **không** nằm trong wave nào đã thực thi tới nay:
 | 03-02 | backend diff, cổng DIFF-06 | không |
 | 03-03 | word-level diff | không |
 | 03-04 | giao diện DIFF-01..04, 06 | không (`requirements: [DIFF-01, DIFF-02, DIFF-03, DIFF-04, DIFF-06]`) |
-| 03-05 | exit gate dogfood | **chưa lập kế hoạch chi tiết** |
+| 03-05 | **DIFF-05** + exit gate dogfood | ✅ **CÓ** — `requirements: [DIFF-05]` |
 
-**Không có mã nào cho DIFF-05.** Không có lệnh `git log --follow -- <path>` ở phía Rust, không
-có component nào ở phía TS.
+Tệp mà `03-05` sẽ tạo: `src-tauri/src/git/parsers/file_history.rs`,
+`src/components/diff/FileHistory.tsx`, cộng command và kiểu TS.
 
-🔴 **Đây là một lỗ trong kế hoạch phase, không phải một ô chưa kiểm** — và nó là điều
-`03-05` phải xử lý (hoặc phải có một quyết định tường minh hoãn DIFF-05 sang sau, như ROADMAP
-đã làm với minimap/Blame). Ghi ra ở đây để nó không lọt qua exit gate trong im lặng: tiêu chí
-thành công số 3 của phase **không thể đạt** với mã hiện có.
+**Hiện chưa có mã** — không `git log --follow -- <path>` ở Rust, không component ở TS. Đúng
+như kế hoạch: wave 5 chưa chạy. Đây là một ô **chưa tới lượt**, không phải ô bị bỏ sót.
+
+Ghi chú thiết kế đã có sẵn trong `03-05-PLAN.md`: giới hạn một-đường-dẫn của `--follow`
+**khớp chính xác** phạm vi DIFF-05 ("lịch sử của riêng **một** tệp"), nên nó không phải đánh
+đổi mà là sự trùng khớp. Chi phí chặn bằng `--max-count=200`; timeout 30s riêng, không mượn
+120s của `git log --all`; **không cache** vì lịch sử tệp phụ thuộc HEAD mà watcher chỉ tới ở
+Phase 4.
 
 ---
 

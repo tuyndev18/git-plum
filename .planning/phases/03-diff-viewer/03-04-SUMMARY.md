@@ -181,19 +181,41 @@ DIFF-05 (*"mở lịch sử thay đổi của riêng một tệp và lần theo 
 thuộc Phase 3 theo ROADMAP (`Requirements: DIFF-01..DIFF-06`) và là **tiêu chí thành công số
 3** của phase. Nhưng không wave nào nhận nó:
 
+> 🔴 **MỤC NÀY SAI — đính chính 2026-09-22.** Tôi (orchestrator) kiểm lại và **DIFF-05 KHÔNG
+> bị bỏ sót**. `03-05-PLAN.md` tồn tại (29 KB) và nhận nó tường minh:
+>
+> ```
+> requirements: [DIFF-05]
+> files_modified:
+>   - src-tauri/src/git/parsers/file_history.rs
+>   - src-tauri/src/commands/diff.rs
+>   - src/components/diff/FileHistory.tsx
+>   - src/lib/ipc.ts  ...
+> ```
+>
+> Wave 5 làm **hai** việc: cài DIFF-05 **rồi** chạy exit gate dogfood. Executor của 03-04 đọc
+> thiếu — nó ghi "03-05 chưa lập kế hoạch chi tiết" trong khi plan đã có từ vòng lập kế hoạch
+> ban đầu (commit `8d59856`, sửa ở `48d9944`/`857aee9`).
+>
+> Phần đúng và đáng giữ của mục này: **hiện tại chưa có mã cho DIFF-05** — không
+> `git log --follow` ở Rust, không component ở TS. Đó là đúng, và đúng theo kế hoạch: nó là
+> việc của wave 5, chưa chạy.
+>
+> Bảng dưới đây giữ nguyên để thấy executor đã kết luận gì, kèm hàng cuối đã sửa.
+
 | Wave | DIFF-05? |
 |---|---|
 | 03-01 spike A/B | không |
 | 03-02 backend diff | không |
 | 03-03 word-level | không |
 | 03-04 (plan này) | không — `requirements: [DIFF-01, DIFF-02, DIFF-03, DIFF-04, DIFF-06]` |
-| 03-05 exit gate | chưa lập kế hoạch chi tiết |
+| 03-05 | ✅ **CÓ** — `requirements: [DIFF-05]`, cộng exit gate dogfood |
 
-Không có `git log --follow -- <path>` ở phía Rust, không có component nào ở phía TS. Tiêu chí
-thành công số 3 của phase **không thể đạt** với mã hiện có.
+Không có `git log --follow -- <path>` ở phía Rust, không có component nào ở phía TS **tại thời
+điểm kết thúc wave 4**. Đúng như kế hoạch: wave 5 cài nó.
 
-`03-05` phải xử lý — hoặc phải có một quyết định **tường minh** hoãn DIFF-05, như ROADMAP đã
-làm với minimap/Blame. Ghi ở đây và trong `STATE.md` để nó không lọt qua exit gate trong im
+~~`03-05` phải xử lý — hoặc phải có một quyết định **tường minh** hoãn DIFF-05, như ROADMAP đã
+làm với minimap/Blame.~~ Không cần quyết định gì: `03-05` đã nhận. Ghi ở đây và trong `STATE.md` để nó không lọt qua exit gate trong im
 lặng.
 
 ### 4. `await Promise.resolve()` KHÔNG flush render của React 19
