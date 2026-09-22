@@ -23,7 +23,7 @@ export const ROW_HEIGHT = 28
  * Đổi số này **đổi cả cap lane**: xem `MAX_VISIBLE_LANES` bên dưới và
  * `docs/04-phase2-degraded-graph.md` mục 2.1.
  */
-export const LANE_WIDTH = 22
+export const LANE_WIDTH = 14
 
 /** Lề trái của cột đồ thị trước lane 0. */
 export const GRAPH_PADDING_LEFT = 12
@@ -31,16 +31,26 @@ export const GRAPH_PADDING_LEFT = 12
 /**
  * Bán kính nút commit.
  *
- * Tham chiếu vẽ nút là vòng tròn có viền, **nhỏ so với chiều cao hàng**: nút
- * ngồi trên đường lane chứ không lấp kín ô. Bán kính 5px + viền 2px cho đường
- * kính ngoài 12px trong ô cao `ROW_HEIGHT` = 28px — còn 8px khoảng trống trên
- * và dưới nút, nên đoạn lane nối giữa hai hàng vẫn nhìn thấy rõ.
+ * Nút ngồi **trên** đường lane chứ không lấp kín ô — nhỏ so với chiều cao hàng,
+ * to so với độ dày đường.
  *
- * Bản trước dùng 7px + viền 2.5px (đường kính ngoài 17px): nút của hai hàng kề
- * nhau chỉ còn cách nhau 11px, đoạn lane giữa chúng gần như biến mất và đồ thị
- * trông như một chuỗi vòng tròn rời rạc thay vì một cái cây.
+ * # Ràng buộc cứng: nút + quầng KHÔNG được rộng hơn một lane
+ *
+ * ```text
+ *   nút thường  r=4 + NODE_HALO_WIDTH 2  → đường kính 12px, lane 14px → khe 2px
+ *   nút merge   r=5 + NODE_HALO_WIDTH 2  → đường kính 14px, lane 14px → khít
+ * ```
+ *
+ * Vượt con số này thì quầng nền của một nút **xoá mất đường lane bên cạnh** —
+ * quầng tô bằng màu nền, nên nó không chỉ chồng lên mà cắt hẳn. Ở mật độ cao,
+ * hai nhánh song song sát nhau sẽ có một nhánh đứt quãng tại mỗi hàng nhánh
+ * kia có commit. Đây là lý do `NODE_RADIUS` giảm 5 → 4 và `MERGE_NODE_RADIUS`
+ * 6 → 5 khi `LANE_WIDTH` xuống 22 → 14px: hai bộ số phải đi cùng nhau.
+ *
+ * Theo chiều dọc vẫn thoáng: đường kính 12px trong ô cao `ROW_HEIGHT` 28px còn
+ * 16px trống trên dưới, nên đoạn lane giữa hai hàng vẫn thấy rõ.
  */
-export const NODE_RADIUS = 5
+export const NODE_RADIUS = 4
 
 /** Độ dày viền nút commit — chỉ dùng cho nút nét đứt của hàng `terminates`. */
 export const NODE_STROKE_WIDTH = 2
@@ -63,7 +73,7 @@ export const NODE_HALO_WIDTH = 2
  * Bán kính nút của merge commit — lớn hơn nút thường một chút để merge nổi bật
  * khi lần theo lịch sử, đúng cách tham chiếu phân biệt hai loại.
  */
-export const MERGE_NODE_RADIUS = 6
+export const MERGE_NODE_RADIUS = 5
 
 /**
  * Màu tô tâm nút commit — phải trùng **nền của hàng phía sau nút**, không phải
@@ -88,10 +98,22 @@ export const NODE_FILL_VAR = '--graph-node-fill'
 export const SELECTION_RING = '#e6edf3'
 
 /**
- * Độ dày đường lane. Tham chiếu vẽ lane đủ đậm để phân biệt màu ở tỉ lệ 100%;
- * đường 1px mặc định bị mảnh và nhoè khi nhiều lane cạnh nhau.
+ * Độ dày đường lane.
+ *
+ * **Giảm 2 → 1,5px cùng lúc với `LANE_WIDTH` 22 → 14px** (2026-09-22). Hai con
+ * số phải đi cùng nhau: đường 2px trong lane 14px chiếm 14% bề rộng lane, so
+ * với 9% ở lane 22px — đường dày trong lane hẹp làm khoảng trắng giữa hai lane
+ * cạnh nhau co lại và đồ thị đọc như một khối sọc đặc.
+ *
+ * Tỉ lệ nhắm tới là **đường mảnh, nút to** — đọc từ ảnh tham chiếu người dùng
+ * gửi: đường lane gần như sợi chỉ, còn nút commit nổi hẳn lên. Tương phản đó
+ * là thứ cho mắt bám vào nút trước rồi mới lần theo đường, thay vì phải tách
+ * nút khỏi một đường cùng độ dày.
+ *
+ * Không xuống 1px: WebView2 vẽ đường 1px ở `devicePixelRatio` lẻ (125% scale,
+ * mặc định trên nhiều máy Windows) bị nhoè sang hai pixel và mất màu.
  */
-export const EDGE_WIDTH = 2
+export const EDGE_WIDTH = 1.5
 
 /**
  * Bề rộng cột nhãn nhánh/tag, px — **cố định**, không theo nội dung.
@@ -119,30 +141,41 @@ export const REF_COL_WIDTH = 132
  *   × ngân sách cột đồ thị     × 40%     60% còn lại cho thông điệp commit
  *   = cột đồ thị              ≈ 300 px
  *   − GRAPH_PADDING_LEFT       −  12 px
- *   ÷ LANE_WIDTH               ÷  22 px
- *   = 13,1                    →  13 lane
+ *   ÷ LANE_WIDTH               ÷  14 px
+ *   = 20,6                    →  20 lane
  * ```
  *
- * Giảm từ 20 xuống 13 khi `LANE_WIDTH` tăng 14→22px cho khớp ảnh tham chiếu.
- * Đây là đánh đổi có chủ ý: lane thoáng hơn, đọc dễ hơn, nhưng số nhánh vẽ
- * được đồng thời ít hơn — phần vượt cap hiện bằng chỉ báo `+N` (HIST-03).
+ * **Đổi 13 → 20 ngày 2026-09-22, có số đo.** Cap 13 làm **19,99%** hàng của
+ * repo perf 100 007 commit bị gập vào cột cuối — tới tám lane vẽ chung một cột,
+ * không chỉ báo gì. Cap 20 cho **0,71%**. Xem doc comment dài ở
+ * `src-tauri/src/graph/types.rs` cho cả hai ca đo được và lý do chốt.
+ *
+ * Phần vượt cap vẫn hiện bằng chỉ báo `+N` (HIST-03).
  *
  * **PHẢI khớp `MAX_VISIBLE_LANES` ở `src-tauri/src/graph/types.rs`.** Lệch hai
  * phía là lỗi im lặng: backend cấp lane 19 mà frontend chỉ vẽ tới 13 thì hai
  * nhánh khác nhau bị vẽ đè lên cùng một cột. Có test hai phía ghim con số này.
  */
-export const MAX_VISIBLE_LANES = 13
+export const MAX_VISIBLE_LANES = 20
 
 /**
- * Bảng màu lane — **đo từ ảnh tham chiếu**, xem `docs/06-graph-render-model.md`
- * mục 3.
+ * Bảng màu lane — **sinh bằng công thức giãn đều hue**, không chọn tay.
  *
- * Bảng cũ là dải pastel kiểu One Dark (`#e06c75 #61afef #98c379 …`). Đo pixel
- * đường lane của tham chiếu cho thấy nó dùng dải **bão hoà cao** hẳn, và
- * không dùng vàng/xanh lá — hai màu khó tách khỏi nhau và khỏi cam trên nền
- * tối `#16161a` khi đường chỉ dày 2px. Ở mật độ 13 lane cùng lúc (ảnh người
- * dùng gửi), chênh lệch này là khác biệt giữa "lần theo được một nhánh" và
- * "một mớ sọc".
+ * # Vì sao bỏ bảng đo-từ-ảnh-tham-chiếu
+ *
+ * Bảng trước có 13 màu: bảy đo pixel từ `docs/screenshots/`, sáu bù thêm vào
+ * các khoảng hue tham chiếu bỏ trống. Nó chết theo cap: cap lên 20 thì cần 20
+ * màu, và "bù thêm bảy màu nữa vào chỗ trống" là cách chọn màu không có đáy —
+ * mỗi màu thêm vào làm khoảng trống còn lại hẹp đi, nên bảy màu cuối chắc chắn
+ * là bảy màu khó phân biệt nhất.
+ *
+ * Người dùng đã báo chính điều đó ở 13 màu ("màu lane khó phân biệt"), nên nhân
+ * đôi cách làm cũ là nhân đôi vấn đề. Công thức dưới đây cho khoảng cách hue
+ * **đều nhau theo định nghĩa**, không phụ thuộc mắt ai chọn.
+ *
+ * Mất gì: bảng không còn khớp GitKraken nữa. Đó là đánh đổi có ý thức — khớp
+ * tham chiếu về màu có giá trị khi số lane ít; ở 20 lane cùng lúc, phân biệt
+ * được nhau quan trọng hơn giống một công cụ khác.
  *
  * Bảng **phải có đúng `MAX_VISIBLE_LANES` màu** và khớp `LANE_COLORS` bên Rust
  * (`src-tauri/src/graph/types.rs`), vì `GraphRow.color` đến từ backend đã là
@@ -150,23 +183,40 @@ export const MAX_VISIBLE_LANES = 13
  * được cùng lúc lại trùng màu — đúng lỗi vừa sửa. Có test ghim hai phía.
  */
 export const LANE_COLORS: readonly string[] = [
-  // Bảy màu đo trực tiếp từ ảnh tham chiếu.
-  '#15a0bf', // xanh ngọc
-  '#0669f7', // xanh dương
-  '#8e00c2', // tím
-  '#c517b6', // hồng tím
-  '#d90171', // hồng sen
-  '#cd0101', // đỏ
-  '#f25d2e', // cam
-  // Sáu màu bù, chèn vào các khoảng hue mà tham chiếu bỏ trống, để đủ
-  // MAX_VISIBLE_LANES màu phân biệt. Giữ cùng mức bão hoà với bảy màu trên,
-  // nếu không lane 7..12 sẽ trông "nhạt hơn" và đọc như một lớp thứ cấp.
-  '#e8a002', // hổ phách
-  '#7cb342', // xanh lá
-  '#00897b', // xanh lục lam
-  '#5c6bc0', // chàm
-  '#a1887f', // nâu
-  '#ec407a', // hồng đào
+  // Sinh bằng công thức, KHÔNG chọn tay từng màu — xem doc comment trên.
+  //
+  //   hue  = ((i * 9) % 20) * 18 + 9      bước nhảy 9, nguyên tố cùng nhau với 20
+  //   sat  = 74%                          cố định
+  //   light = i chẵn ? 60% : 50%          lệch sáng xen kẽ
+  //
+  // Bước nhảy 9 làm **lane liền kề cách nhau đúng 162° hue** — gần đối xứng
+  // trên vòng màu, tức khoảng cách lớn nhất có thể giữ đều được. Đi tuần tự
+  // (18° mỗi bước) sẽ cho lane 0 và lane 1 gần như cùng màu, mà lane cạnh nhau
+  // mới chính là cặp người dùng phải phân biệt.
+  //
+  // Lệch sáng xen kẽ là lớp tách thứ hai: hai màu rơi vào cùng vùng hue vẫn
+  // khác nhau về độ sáng. Quan trọng cho người mù màu, vốn không đọc được
+  // khoảng cách hue nhưng đọc được độ sáng.
+  '#e4644e', // lane 0:  9°  L60
+  '#21dec2', // lane 1:  171° L50
+  '#e44e91', // lane 2:  333° L60
+  '#21de50', // lane 3:  135° L50
+  '#dd4ee4', // lane 4:  297° L60
+  '#63de21', // lane 5:  99°  L50
+  '#824ee4', // lane 6:  261° L60
+  '#d4de21', // lane 7:  63°  L50
+  '#4e73e4', // lane 8:  225° L60
+  '#de7621', // lane 9:  27°  L50
+  '#4ecee4', // lane 10: 189° L60
+  '#de213d', // lane 11: 351° L50
+  '#4ee4a1', // lane 12: 153° L60
+  '#de21af', // lane 13: 315° L50
+  '#55e44e', // lane 14: 117° L60
+  '#9c21de', // lane 15: 279° L50
+  '#b0e44e', // lane 16: 81°  L60
+  '#2b21de', // lane 17: 243° L50
+  '#e4bf4e', // lane 18: 45°  L60
+  '#2189de', // lane 19: 207° L50
 ]
 
 /** Toạ độ Y (px) của hàng thứ `index`. Nguồn duy nhất — xem doc comment đầu tệp. */

@@ -31,7 +31,7 @@ use serde::Serialize;
 /// Bảng màu thật nằm ở phía giao diện (`src/lib/graph-render/geometry.ts`); ở đây chỉ
 /// là số lượng, để Rust và React đồng ý về cùng một phép chia dư. Bảng phía giao diện
 /// **phải có đủ 13 màu** — có test ghim hai phía.
-pub const LANE_COLORS: u8 = 13;
+pub const LANE_COLORS: u8 = 20;
 
 /// Số lane tối đa được vẽ trước khi chuyển sang **cách vẽ suy giảm có chủ ý**.
 ///
@@ -46,14 +46,29 @@ pub const LANE_COLORS: u8 = 13;
 ///   × ngân sách cột đồ thị             × 40%     (60% còn lại cho thông điệp commit)
 ///   = cột đồ thị                       ≈ 300 px
 ///   − lề trái GRAPH_PADDING_LEFT       −  12 px
-///   ÷ LANE_WIDTH                       ÷  22 px  (đo từ ảnh tham chiếu)
-///   = 13,1                             → 13 lane
+///   ÷ LANE_WIDTH                       ÷  14 px
+///   = 20,6                             → 20 lane
 /// ```
 ///
-/// **Đã giảm 20 → 13** khi `LANE_WIDTH` tăng 14 → 22px cho khớp
-/// `docs/screenshots/`: lane 14px quá chật, nút commit sát nhau và đường rẽ gần
-/// như trùng hướng đường dọc bên cạnh. Đánh đổi có chủ ý — thoáng hơn, đọc dễ
-/// hơn, nhưng vẽ được ít nhánh đồng thời hơn; phần vượt cap hiện bằng chỉ báo
+/// # Lịch sử con số này — đọc trước khi đổi lần nữa
+///
+/// `20 → 13` (`544ae5f`) khi `LANE_WIDTH` tăng 14 → 22px cho khớp
+/// `docs/screenshots/`. Rồi **`13 → 20` ngày 2026-09-22, có số đo**: cap 13 làm
+/// **19,99%** hàng của repo perf 100 007 commit bị gập vào cột 12 — tới tám lane
+/// khác nhau vẽ chung một cột, **không chỉ báo gì** (badge `+N` chỉ phủ
+/// `truncated_parents`, 0,67%). Cap 20 cho **0,71%**. Gấp 28 lần.
+///
+/// Điều làm nó nghiêm trọng hơn một khiếm khuyết thẩm mỹ: đồ thị vẽ **sai một
+/// cách tự tin** thay vì suy giảm thấy được. Ca thứ hai đo được cùng lúc: cạnh
+/// của hàng WIP (Phase 4, `WORK-11`) nối xuống HEAD, và nếu HEAD ở lane ≥ cap
+/// thì cạnh đó bị gập vào cột cuối và **chỉ sang commit khác**. Điều kiện kích
+/// hoạt là 14+ lane song song với HEAD không ở nhánh mới nhất theo topo — một
+/// repo feature-branch bình thường.
+///
+/// Đánh đổi nhận lại: lane 14px chật hơn 22px, khác ảnh tham chiếu. Chủ dự án
+/// chốt 2026-09-22 sau khi thấy cả hai số.
+///
+/// Phần vượt cap vẫn hiện bằng chỉ báo
 /// `+N` qua [`GraphRow::truncated_parents`].
 ///
 /// **PHẢI khớp `MAX_VISIBLE_LANES` ở `src/lib/graph-render/geometry.ts`.** Lệch
@@ -76,7 +91,7 @@ pub const LANE_COLORS: u8 = 13;
 /// một lane thật, dù lane đó vượt con số này. Bất biến `rows.len() == commits.len()` là
 /// HIST-04 ở tầng dữ liệu và không được phụ thuộc vào một hằng số *hiển thị*. Việc gập
 /// lane vượt giới hạn vào cột cuối là của frontend (plan 02-05).
-pub const MAX_VISIBLE_LANES: u16 = 13;
+pub const MAX_VISIBLE_LANES: u16 = 20;
 
 /// Một đường nối giữa hai lane trên một dòng.
 ///
