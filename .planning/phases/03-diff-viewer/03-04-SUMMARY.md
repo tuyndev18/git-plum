@@ -937,3 +937,88 @@ ffb22df feat(03-04): show real per-side line numbers in split view
 
 Bản release để người dùng kiểm lại: `src-tauri/target/release/git-plum.exe`,
 dựng **2026-09-22 10:09:49** từ cây làm việc sạch ở `97d6d9c`.
+
+---
+
+## Bổ sung vòng 2 — giao diện cho `contextOnly` (toàn tệp đã làm)
+
+Mục "⏭️ Việc chưa làm" ở trên **đã lỗi thời**: phần backend của việc hiện toàn tệp được
+làm song song trong cùng vòng này. Ghi lại phân chia để sau này truy được lỗi nào từ đâu.
+
+### Backend (không phải phần tôi làm)
+
+`UNIFIED_TOAN_TEP = 1_000_000` là mặc định; lùi về `--unified=3` khi tệp vượt
+`MAX_BYTE_TOAN_TEP = 512 * 1024`, và đặt `context_only: true` khi lùi. Quyết định nằm
+trong **một** hàm `so_dong_ngu_canh(byte_lon_nhat)` mà **cả hai** lệnh git đọc — đúng
+cảnh báo ở comment dòng 398 rằng hai lệnh lệch nhau thì phép khớp word-level trượt ở biên
+hunk. Ngưỡng đo bằng **byte**, không phải dòng, vì `cat-file --batch-check` ở cổng 5 MB đã
+lấy sẵn số byte nên không thêm lệnh git nào.
+
+Ngưỡng 512 KB **là phỏng đoán có căn cứ, không phải kết quả đo** (đã ghi trong doc
+comment). Đối chiếu với bảng đo `MergeView` ở mục trên: 512 KB ≈ 10 nghìn dòng, mức mà
+phép đo cho **18.1ms** ở chế độ hai cột — tức ngưỡng này **an toàn hơn nhiều** so với mức
+mà phép đo cho thấy là chịu được (200 nghìn dòng / 229ms). Nếu người dùng thấy `yarn.lock`
+632 KB bị rút gọn mà muốn toàn tệp, bảng đo đó là căn cứ để nâng ngưỡng.
+
+### Giao diện (phần tôi làm) — và vì sao nó BẮT BUỘC
+
+Một cờ đúng ở backend mà giao diện **bỏ qua** thì không sửa được gì: nó chỉ chuyển lỗi im
+lặng từ tầng này sang tầng khác. Trước khi sửa, `DiffKind` phía TS **không có** trường
+`contextOnly`, nên JSON mang cờ đó về và bị **ném đi không một tiếng** — `npm test` và
+`typecheck` đều xanh. Đó đúng lớp lỗi mà 03-02 đã trả giá một lần (`old_size` vs `oldSize`,
+không bên nào lỗi biên dịch).
+
+Thêm trường vào `DiffKind` làm TypeScript lộ ra **6 chỗ dựng `kind: 'text'`** trong test
+fixture mà trước đó nó vẫn nhận — bằng chứng rằng cái kiểu này giờ mới thật sự ghim.
+
+**Hai băng thông báo, ĐỘC LẬP, cùng `true` thì hiện cả hai:**
+
+| cờ | chữ dùng | `⚠️`? | vì sao |
+|---|---|---|---|
+| `truncated` | "đã bị cắt… một phần nội dung" | có | người dùng **thật sự** mất thay đổi |
+| `contextOnly` | "Tệp lớn nên đang hiện các khối thay đổi…" | **không** | người dùng **không mất gì** |
+
+`contextOnly` cố ý **không** dùng chữ "bị cắt" và **không** dùng `⚠️`: nói với người dùng
+rằng một tệp 600 KB hoàn toàn bình thường có "diff bị cắt" là một cảnh báo **sai**, và nó
+làm họ mất tin vào trình xem. Nhưng nó **phải** hiện ra, kèm **lý do** — vì im lặng lùi về
+rút gọn chính là việc làm họ tưởng số dòng nhảy là lỗi và báo hai lần.
+
+Băng này cũng nói thẳng *"số dòng nhảy là vì các đoạn không đổi được lược bớt"*, tức trả
+lời trước đúng câu hỏi mà người dùng đã hỏi hai lần.
+
+**Năm test mới** ghim: có băng khi `true`, không băng khi `false`, **không** dùng chữ
+"cắt", **có** nêu lý do, và hai cờ không đè nhau.
+
+### Mutation cho phần này
+
+| # | Đột biến | Kết quả |
+|---|---|---|
+| 9 | Giao diện bỏ qua `contextOnly` (quay về `if (!kind.truncated)`) | 🔴 3 đỏ |
+| 10 | Đổi chữ băng `contextOnly` thành "Diff đã bị cắt" | 🔴 2 đỏ |
+
+### Cổng verification sau khi gộp cả hai phần
+
+| Cổng | Kết quả |
+|---|---|
+| `npm test` | ✅ **396 passed** (367 baseline + 24 bố cục/gutter + 5 `contextOnly`) |
+| `npm run typecheck` | ✅ No errors |
+| `cargo test` | ✅ **261 passed, 1 ignored** (257 baseline + 4 của backend toàn tệp) |
+| `npx tauri build --no-bundle` | ✅ Finished in 2m 02s |
+| Đo Chromium, tệp NGẮN + DÀI | ✅ cả năm lỗi vòng 2 vẫn đúng sau khi gộp |
+
+**Lưu ý về `cargo test`:** ba lần chạy đầu cho kết quả nhiễu (5 lỗi "crate không ở dạng
+rlib", rồi 2 doctest đỏ) vì có tiến trình khác biên dịch song song và `target/debug/
+git-plum.exe` bị khoá. Chạy `--lib --tests` và `--doc` riêng đều xanh, và lần chạy sạch
+cuối cùng cho **261 passed**. Con số nhiễu **không** phản ánh trạng thái mã.
+
+### Bản release cuối
+
+`src-tauri/target/release/git-plum.exe` — dựng **2026-09-22 10:24:51**, gồm **cả** phần
+giao diện (đã commit, `2a71e41`) và phần backend toàn tệp (lúc dựng vẫn chưa commit).
+
+Nếu người dùng báo lỗi mới trên bản này thì phân vùng như sau:
+
+- **số dòng, chiều cao, cuộn, màu, sọc chéo, dấu `+`/`−`** → phần vòng 2 của tôi
+  (`ffb22df`, `97d6d9c`)
+- **thiếu ngữ cảnh / băng "Tệp lớn"** → ngưỡng `MAX_BYTE_TOAN_TEP` 512 KB của backend
+- **số dòng vẫn nhảy trên tệp nhỏ** → phép khớp `unified` giữa hai lệnh git
