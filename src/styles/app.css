@@ -668,6 +668,41 @@ button:disabled {
 }
 
 /*
+ * Dải nền ám MÀU NHÁNH, trải suốt bề ngang hàng.
+ *
+ * # Vì sao cần, sau khi cap lane lên 20
+ *
+ * Lần theo *một* nhánh bằng cách bám sợi đường 1,5px trong cột đồ thị là việc
+ * khó ở 20 lane — mắt phải giữ một đường mảnh qua hàng chục hàng, và các đường
+ * cạnh nhau chỉ cách 14px. Dải nền cho mắt một mỏ neo rộng hơn nhiều, và nó
+ * chạy sang tận cột thông điệp nên đọc tới hàng nào cũng biết hàng đó thuộc
+ * nhánh nào mà không phải liếc ngược về cột đồ thị. Đây là thứ ảnh tham chiếu
+ * người dùng gửi làm (vùng teal và đỏ trầm trải ngang các hàng).
+ *
+ * # 🔴 Alpha phải RẤT thấp, và đây không phải chuyện thẩm mỹ
+ *
+ * Nền hàng nằm **TRÊN** canvas đồ thị (`.graph-canvas` có `z-index: 0`, các
+ * hàng đến sau trong DOM). Mọi phần đục sẽ **xoá** đường lane phía sau. Đó
+ * đúng là lỗi `.commit-row:hover` từng mắc với `--bg-inset` đục — rê chuột qua
+ * một hàng làm cả đoạn đồ thị của hàng đó biến mất thành vệt đen ngang.
+ *
+ * 7% là mức đo được: đủ để phân biệt hai nhánh cạnh nhau khi nhìn cả trang,
+ * vẫn để nguyên đường lane xuyên qua. Tăng con số này là quay lại lỗi cũ.
+ *
+ * `--lane-color` do `CommitList` đặt inline từ `colorFor(graphRow.color)`.
+ * Hàng chưa nạp dữ liệu đồ thị không có biến này, nên `color-mix` sẽ hỏng —
+ * `@supports` không cứu được ca đó, vì thế dùng `var(--lane-color, transparent)`
+ * để giá trị thiếu suy biến thành "không tô gì" thay vì thành màu rác.
+ */
+.commit-row {
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--lane-color, transparent) 7%, transparent),
+    color-mix(in srgb, var(--lane-color, transparent) 7%, transparent)
+  );
+}
+
+/*
  * Nền hàng PHẢI trong suốt một phần — canvas đồ thị nằm DƯỚI các hàng
  * (`.graph-canvas` có `z-index: 0`, các hàng đến sau trong DOM), nên bất kỳ
  * nền **đục** nào cũng xoá sạch đồ thị trên đúng hàng đó.
@@ -999,6 +1034,54 @@ button:disabled {
   font-size: 11px;
 }
 
+/* Avatar + tên trên một dòng, avatar không co khi tên dài. */
+.commit-detail-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/*
+ * Avatar tác giả — vòng tròn chữ cái đầu, hoặc ảnh Gravatar phủ lên.
+ *
+ * Kích thước đến từ inline style (`co` prop), không từ đây: cùng component
+ * dùng ở panel chi tiết (20px) và có thể ở chỗ khác sau này với cỡ khác. CSS
+ * chỉ lo hình dạng và cách chữ nằm giữa.
+ *
+ * `flex: 0 0 auto` là bắt buộc trong `.commit-detail-author`: thiếu nó thì
+ * flexbox co avatar thành hình bầu dục khi tên tác giả dài — và nó co *chỉ*
+ * theo chiều ngang, nên lỗi trông như "avatar méo" chứ không như "thiếu chỗ".
+ */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  /*
+   * Chữ trắng trên mọi màu nền của bảng.
+   *
+   * Bảng `MAU_NEN` trong `src/lib/avatar.ts` cố ý giữ độ sáng quanh 45-55% để
+   * một màu chữ **duy nhất** đọc được trên cả 16 màu. Đổi bảng đó mà không giữ
+   * ràng buộc này sẽ cho vài avatar chữ mờ không đọc nổi — và vì nó chỉ xảy ra
+   * với một phần tác giả, nó dễ lọt qua mọi lần thử.
+   */
+  color: #fff;
+  /* Không cho người dùng bôi đen được một chữ cái đơn lẻ khi kéo chọn tên. */
+  user-select: none;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .commit-detail-sha {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -1129,6 +1212,24 @@ button:disabled {
   margin: 0;
   color: var(--danger);
   font-size: 11px;
+}
+
+/*
+ * "Đã chọn nhưng không cuộn tới được" — **không phải lỗi**, nên không dùng
+ * `--danger` như hai quy tắc trên. Người dùng không làm gì sai và không có gì
+ * hỏng: commit vẫn được chọn, chỉ là nó nằm ngoài 1000 dòng lịch sử đã nạp.
+ * Nền trung tính `--bg-raised` cộng chữ `--text-dim` đặt nó đúng bậc "thông
+ * tin", để màu đỏ còn giữ nghĩa cho detached HEAD và lỗi nạp ref thật.
+ */
+.ref-sidebar-notice {
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim);
 }
 
 .ref-sidebar-group h3 {
@@ -1645,10 +1746,27 @@ button:disabled {
  * — xem doc comment đầu `codemirrorRenderer.ts`. Để cả hai nguồn cùng chạy
  * nghĩa là người dùng thấy hai kết quả word-level khác nhau cho cùng một dòng,
  * vì thư viện tự tìm biên từ còn git dùng biên đã kiểm bằng byte thật.
+ *
+ * 🔴 **Vì sao class bị lặp ba lần.** Lần viết đầu dùng `.cm-merge-b
+ * .cm-changedText` (HAI class) và nó **không có tác dụng** — gạch chân xanh vẫn
+ * hiện dưới mỗi đoạn chữ. Cùng bẫy độ cụ thể mà khối `.cm-changedLine` ở trên
+ * đã mắc, chỉ tệ hơn một bậc: quy tắc gạch chân của thư viện khai với `&light`/
+ * `&dark`, nên selector nó sinh ra mang **bốn** class:
+ *
+ *   mã nguồn thư viện:  "&dark.cm-merge-b .cm-changedText"
+ *   selector đã sinh:   ".ͼ1.ͼo.cm-merge-b .cm-changedText"   ← BỐN class
+ *
+ * Lặp class trên cùng một phần tử là cách hợp lệ để cộng độ cụ thể mà không
+ * dùng `!important` và không viết `.ͼ1` (class băm sinh lúc chạy, đổi khi số
+ * theme đổi — không được phép nằm trong CSS tĩnh). Ba lần `.cm-merge-b` cộng
+ * `.cm-mergeView` cộng `.cm-changedText` = NĂM class, thắng chắc cả nhánh sáng
+ * lẫn nhánh tối của thư viện.
  */
-.cm-merge-a .cm-changedText,
-.cm-merge-b .cm-changedText,
-.cm-deletedChunk .cm-deletedText {
+.cm-mergeView .cm-merge-a.cm-merge-a.cm-merge-a .cm-changedText,
+.cm-mergeView .cm-merge-b.cm-merge-b.cm-merge-b .cm-changedText,
+.cm-mergeView .cm-merge-a.cm-merge-a.cm-merge-a .cm-deletedText,
+.cm-mergeView .cm-merge-b.cm-merge-b.cm-merge-b .cm-deletedText,
+.cm-mergeView .cm-deletedChunk.cm-deletedChunk.cm-deletedChunk .cm-deletedText {
   background: none;
 }
 
@@ -1884,4 +2002,550 @@ button:disabled {
 .file-version-rename {
   flex: 0 0 auto;
   color: var(--accent);
+}
+
+/* --- Vùng soạn commit (WORK-08, WORK-09) --------------------------------- */
+/*
+ * ⚠️ Bố cục ở khối này CHƯA KIỂM CHỨNG.
+ *
+ * happy-dom không tính CSS layout (CONTEXT.md 3.4), nên không test nào chứng minh
+ * được textarea đủ cao để soạn thông điệp nhiều dòng, khối <pre> lỗi hook không đẩy
+ * nút ra khỏi khung, hay vùng soạn không tràn. Việc kiểm mắt người nằm ở checkpoint
+ * 04-05, và SUMMARY ghi các mục này là "có mã, chưa kiểm".
+ */
+.commit-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  /* Vùng soạn không được co về 0 khi danh sách tệp phía trên dài. */
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border, #333);
+}
+
+.commit-message {
+  /*
+   * "resize: vertical" chứ không "none": thông điệp dài là ca thường, và người dùng
+   * phải kéo cao lên được mà không kéo rộng ra làm vỡ bố cục ba cột.
+   */
+  resize: vertical;
+  min-height: 64px;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  /*
+   * "min-width: 0" trên một flex item — nếu không, textarea đẩy cả cột rộng ra theo
+   * thuộc tính "cols" mặc định. Đúng loại luật mà happy-dom không tính được.
+   */
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.commit-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.commit-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/*
+ * Cảnh báo amend — một dòng chữ, KHÔNG phải hộp thoại chặn đường (ROADMAP: cảnh báo,
+ * không chặn). Nên nó nằm trong luồng bố cục bình thường, không "position: fixed",
+ * không lớp phủ, và không có gì chặn con trỏ tới nút bên dưới.
+ */
+.commit-warning {
+  margin: 0;
+  padding: 5px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  border-left: 3px solid #d9a441;
+  background: rgba(217, 164, 65, 0.12);
+}
+
+/*
+ * 🔴 Lỗi hook giữ NGUYÊN VĂN xuống dòng và thụt lề — đầu ra hook có cấu trúc mang
+ * nghĩa (ví dụ "src/a.ts:12  thiếu dấu chấm phẩy"). "pre-wrap" giữ chúng mà vẫn ngắt
+ * dòng dài thay vì tràn ngang; "overflow-wrap: anywhere" xử lý đường dẫn dài không
+ * có dấu cách.
+ */
+.commit-hook-error {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 160px;
+  overflow-y: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-left: 3px solid #e05252;
+  background: rgba(224, 82, 82, 0.1);
+}
+
+.commit-error {
+  margin: 0;
+  padding: 5px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  border-left: 3px solid #e05252;
+  background: rgba(224, 82, 82, 0.1);
+}
+
+.commit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/*
+ * Lý do vô hiệu đứng CẠNH nút, không phải tooltip: một nút xám không rõ vì sao là một
+ * người dùng bị kẹt, và tooltip chỉ hiện khi người ta đã biết phải rê chuột vào đâu.
+ */
+.commit-disabled-reason {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.commit-button {
+  flex: 0 0 auto;
+  padding: 4px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.commit-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* --- Thanh cuộn ---------------------------------------------------------- */
+
+/*
+ * Thanh cuộn mặc định của WebView2 là thanh cuộn Windows: dải xám `#c1c1c1`
+ * trên rãnh `#f0f0f0`, rộng 17px, kèm hai nút mũi tên ở hai đầu. Trên nền
+ * `--bg: #16161a` nó là một dải sáng chạy dọc mép — thứ sáng nhất màn hình ở
+ * chế độ tối, và nó **không** đổi theo theme của dự án vì nó là widget hệ điều
+ * hành, không phải phần tử có thể tô bằng biến CSS.
+ *
+ * # Vì sao `::-webkit-scrollbar` chứ không phải `scrollbar-color`
+ *
+ * Cả hai đều khai dưới đây, nhưng chúng **không** làm cùng một việc:
+ *
+ * - `scrollbar-width`/`scrollbar-color` là chuẩn, nhưng chỉ cho đổi **hai màu**
+ *   (ngón và rãnh) và **ba mức rộng** (`auto`/`thin`/`none`). Không bo góc, không
+ *   trạng thái hover, không bỏ nút mũi tên.
+ * - `::-webkit-scrollbar` không chuẩn nhưng cho toàn quyền, và WebView2 **là**
+ *   Chromium nên nó chạy trên cả ba nền tảng mục tiêu.
+ *
+ * Chromium ưu tiên `scrollbar-color` khi cả hai cùng khai trên một phần tử, nên
+ * hai khối dưới đây cố ý **không** chồng nhau: pseudo-element cho tất cả, còn
+ * cặp chuẩn chỉ đặt ở `:root` làm lưới an toàn cho engine không phải Chromium
+ * (một bản Linux dựng với WebKitGTK cũ, hay devtools chạy ngoài).
+ *
+ * # Vì sao `--border-strong` chứ không phải một màu mới
+ *
+ * Thanh cuộn là **chi tiết máy móc**, không phải tín hiệu nội dung. Nó phải
+ * đứng dưới mọi thứ đang nói điều gì đó — nhãn nhánh, dòng thêm/xoá, hàng đang
+ * chọn. `--border-strong` đã là màu "đường kẻ thấy được nhưng không giành chú
+ * ý" của dự án và nó có sẵn nhánh theme sáng, nên dùng lại nó giữ đúng một bảng
+ * màu thay vì mở thêm một mã màu thứ hai phải nhớ đồng bộ.
+ */
+:root {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/*
+ * Rãnh trong suốt, không phải tô màu.
+ *
+ * Nền của vùng cuộn đã đúng rồi — `.commit-list` có dải xen kẽ, `.diff-viewer`
+ * có nền riêng. Tô rãnh bằng một màu cứng sẽ vẽ một vệt dọc **khác màu** cạnh
+ * mép nội dung ở đúng những chỗ đó. Trong suốt cho nền thật chạy tới sát mép.
+ */
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/*
+ * Ngón cuộn: nền bo góc, cộng viền trong suốt cắt bằng `background-clip`.
+ *
+ * `border: 2px solid transparent` + `background-clip: padding-box` là cách tạo
+ * khoảng đệm quanh ngón mà **không** cần một phần tử thứ hai: viền trong suốt
+ * chiếm chỗ nhưng không vẽ gì, và `padding-box` bảo nền dừng lại trước viền.
+ * Kết quả là ngón rộng 6px nằm giữa rãnh 10px — mảnh như thanh cuộn của trình
+ * soạn thảo, mà vùng bấm trúng vẫn đủ 10px.
+ */
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border-strong) 55%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+
+/*
+ * Ngón **mờ khi nghỉ, rõ khi trỏ vào vùng cuộn** — không chỉ khi trỏ đúng ngón.
+ *
+ * Vòng một để ngón ở 85% alpha mọi lúc và người dùng vẫn thấy xấu: một thanh
+ * cuộn luôn-rõ là một đường kẻ dọc thường trực cạnh mép nội dung, và ở
+ * `.commit-list` nó chạy ngay cạnh cột thông điệp nên mắt đọc bị nó níu.
+ *
+ * `:hover > ::-webkit-scrollbar-thumb` là điểm mấu chốt: chọn theo **phần tử
+ * cuộn** đang được trỏ, không theo ngón. Trỏ vào bất cứ đâu trong danh sách →
+ * thanh cuộn hiện rõ; đưa chuột ra → nó lui về nền. Đây là hành vi của VS Code
+ * và của overlay scrollbar trên macOS, và nó giải quyết đúng cái người dùng
+ * than: thanh cuộn không được là thứ nổi nhất trên màn hình lúc đang đọc.
+ *
+ * Không dùng `scrollbar-gutter: stable` kèm ẩn hẳn: ẩn rồi hiện làm nội dung
+ * nhảy ngang 8px, mà `CommitList` có canvas đồ thị căn theo pixel — một cú nhảy
+ * ngang ở đó là lệch cột, đúng lớp lỗi Phase 2 đã dính hai lần. Giữ ngón luôn
+ * **chiếm chỗ**, chỉ đổi độ đậm.
+ */
+*:hover > ::-webkit-scrollbar-thumb,
+*:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border-strong) 95%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-faint) 90%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/*
+ * Đang kéo thì đậm hơn hover. Ba mức (nghỉ → trỏ → kéo) cho người dùng biết
+ * thao tác đã "bắt" — thanh cuộn mặc định của Windows cũng làm vậy và bỏ đi thì
+ * cảm giác kéo bị mất phản hồi.
+ */
+::-webkit-scrollbar-thumb:active {
+  background: var(--text-dim);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/*
+ * Bỏ hai nút mũi tên ở đầu/cuối rãnh.
+ *
+ * Mặc định của Chromium trên Windows là **có** chúng. Chúng chiếm 17px mỗi đầu,
+ * không hợp với thanh cuộn 10px, và không một công cụ nào trong nhóm tham chiếu
+ * (VS Code, GitKraken, Fork) hiện chúng.
+ */
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+/*
+ * Góc nơi thanh dọc gặp thanh ngang — mặc định là một ô xám đặc, lộ rõ ở
+ * `.diff-viewer` khi tệp vừa dài vừa rộng.
+ */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* --- Nút icon ------------------------------------------------------------ */
+
+/*
+ * Nút chỉ có icon — thanh công cụ trên (`App.tsx`) và thanh công cụ diff
+ * (`DiffToolbar.tsx`) dùng chung lớp này.
+ *
+ * # Vì sao ô vuông 28px chứ không phải để nút tự co theo icon
+ *
+ * Icon 16px trong một nút tự co sẽ cho vùng bấm ~20px — nhỏ hơn mức dùng thoải
+ * mái bằng chuột, và tệ hơn là **mỗi nút một cỡ** khi icon có bounding box khác
+ * nhau (mũi tên hẹp hơn thư mục). Ô vuông cố định cho một hàng nút đều nhau,
+ * và 28px khớp `ROW_HEIGHT` của danh sách commit nên hai thanh công cụ cao bằng
+ * đúng một hàng.
+ *
+ * # `color` chứ không phải `fill`/`stroke`
+ *
+ * `icons.tsx` vẽ bằng `stroke="currentColor"`, nên màu icon **là** `color` của
+ * nút. Nghĩa là `:hover`, `:disabled`, `[aria-pressed]` bên dưới chỉ cần đổi
+ * `color` một lần và icon theo ngay — không quy tắc nào phải biết tới SVG.
+ */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--bg-raised);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.icon-button:active:not(:disabled) {
+  background: var(--bg-inset);
+}
+
+/*
+ * Trạng thái BẬT — nút có `aria-pressed="true"`.
+ *
+ * Neo vào chính thuộc tính ARIA thay vì một class riêng: trạng thái bật đã phải
+ * khai ở đó cho trình đọc màn hình rồi (nút chỉ có icon, không còn nguồn chữ
+ * nào khác), nên thêm một class song song là hai nguồn sự thật cho cùng một
+ * điều — và cái sai sẽ là cái vô hình: giao diện trông đúng trong khi trình đọc
+ * màn hình nói ngược lại.
+ */
+.icon-button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
+.icon-button:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+/*
+ * Viền focus PHẢI giữ.
+ *
+ * `.diff-viewer` cố ý bỏ outline vì nó là vùng chỉ-đọc không tương tác được.
+ * Nút thì ngược lại: bỏ outline ở đây là cắt hẳn đường dùng bàn phím, và nút
+ * chỉ có icon vốn đã khó định vị hơn nút có chữ.
+ */
+.icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/*
+ * Vòng quay của `IconSpinner`.
+ *
+ * `prefers-reduced-motion` không phải tuỳ chọn lịch sự: chuyển động quay liên
+ * tục gây khó chịu thật cho một số người dùng, và ở đây nó dễ bỏ — icon đứng
+ * yên vẫn nói đúng "đang mở", vì nút đã `disabled` và tooltip đã ghi "Đang mở…".
+ */
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.icon-spin {
+  animation: icon-spin 700ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-spin {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+ * Danh sách thay đổi thư mục làm việc — WORK-01, WORK-02 (plan 04-02).
+ *
+ * Khối này được THÊM ở cuối tệp có chủ ý: `app.css` đang có thay đổi chưa commit
+ * của một session khác, nên mọi luật phía trên phải giữ nguyên vị trí và nội dung.
+ *
+ * ⚠️ Bố cục ở đây CHƯA KIỂM CHỨNG. happy-dom không tính CSS layout và không có cuộn
+ * thật (CONTEXT.md 3.4), nên "ba nhóm không tràn", "chiều cao hàng", "nút không đè
+ * lên tên tệp dài" là **có mã, chưa kiểm** cho tới checkpoint 04-05 trên Chromium.
+ * ========================================================================== */
+
+.change-list {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.change-list-error {
+  padding: 8px 12px;
+  border-left: 3px solid var(--color-danger, #d9534f);
+  background: var(--color-danger-bg, rgba(217, 83, 79, 0.12));
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.change-list-empty,
+.change-list-loading {
+  padding: 12px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.change-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.change-group-heading {
+  position: sticky;
+  top: 0;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--color-bg-subtle, #1c1c1c);
+  opacity: 0.85;
+}
+
+.change-group-count {
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+.change-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.change-row:hover {
+  background: var(--color-row-hover, rgba(255, 255, 255, 0.05));
+}
+
+.change-row-selected {
+  background: var(--color-row-selected, rgba(90, 140, 255, 0.18));
+}
+
+.change-status {
+  flex: 0 0 auto;
+  min-width: 56px;
+  opacity: 0.7;
+}
+
+/*
+ * `min-width: 0` là bắt buộc để `text-overflow` hoạt động trong flex: mặc định một
+ * flex item không co nhỏ hơn nội dung của nó, nên một tên tệp dài sẽ ĐẨY nút stage
+ * ra ngoài khung thay vì bị cắt. Đây đúng là một trong những khẳng định bố cục mà
+ * happy-dom không kiểm được.
+ */
+.change-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-old-path {
+  opacity: 0.55;
+}
+
+.change-stage-button {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* --- Hàng WIP (WORK-11, plan 04-05) ------------------------------------- */
+
+/*
+ * Hàng "thay đổi chưa commit" ghim ở đầu vùng cuộn.
+ *
+ * # 🔴 Chiều cao PHẢI đúng ROW_HEIGHT (28px) và không được vượt
+ *
+ * Đây là chỗ Phase 2 đã hỏng HAI lần: badge ref làm chiều cao hàng vỡ, và đồ
+ * thị lệch khỏi văn bản đúng một hàng. Cột đồ thị đọc `commitRowY(...,
+ * hasWip)`, vốn cộng đúng `WIP_ROW_HEIGHT = ROW_HEIGHT`; nếu hàng này cao hơn
+ * 28px trên màn hình thật thì chỗ trống nó chiếm và độ lệch canvas không còn
+ * khớp, và mọi hàng commit lệch đúng phần chênh đó.
+ *
+ * Nên: chiều cao đến từ inline style (`WIP_ROW_HEIGHT`, một nguồn duy nhất),
+ * `box-sizing: border-box`, `padding` CHỈ theo chiều ngang, và **không**
+ * `border-top`/`border-bottom` nào. Phân tách với danh sách bên dưới làm bằng
+ * `box-shadow` — nó không chiếm chỗ trong hộp.
+ *
+ * ⚠️ happy-dom không tính CSS layout, nên quy tắc này KHÔNG được test tự động
+ * nào chứng minh. Bước 5 của checkpoint 04-05 Task 3 là bằng chứng duy nhất.
+ *
+ * # `sticky`, và hệ quả đã ghi nhận
+ *
+ * Hàng WIP không cuộn đi cùng danh sách — nó là chỗ vào vùng soạn commit nên
+ * luôn phải bấm được. Đó là hệ quả CHẤP NHẬN của cách B (xem `wipRow.ts`), và
+ * nó nằm trong checkpoint để chủ dự án xác nhận chứ không phải để lặng lẽ sửa.
+ *
+ * `z-index: 2` đặt nó trên canvas đồ thị (`z-index: 0`) và trên các hàng
+ * commit, nếu không canvas vẽ đè lên chữ của chính hàng này.
+ */
+.wip-row {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  display: grid;
+  /* Bốn ô, ba ô đầu thẳng cột với `.commit-row`: nhãn, đồ thị, thông điệp.
+     Ô thứ tư (số đếm) thế chỗ ba cột tác giả/thời gian/sha của hàng commit. */
+  grid-template-columns: var(--ref-col-width) max-content minmax(120px, 1fr) max-content;
+  align-items: center;
+  gap: 10px;
+  /* 🔴 Padding CHỈ theo chiều ngang. Padding dọc cộng vào chiều cao hộp kể cả
+     với `border-box` khi nội dung ép hộp cao ra — và ở đây chiều cao là cố
+     định nên padding dọc chỉ bóp nội dung. Giữ 0 cho rõ ràng. */
+  padding: 0 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  /* Phân tách bằng bóng chứ không bằng border: border cộng vào chiều cao. */
+  box-shadow: inset 0 -1px 0 var(--border);
+  background: color-mix(in srgb, var(--row-highlight) 8%, var(--bg));
+}
+
+.wip-row:hover {
+  background: color-mix(in srgb, var(--row-highlight) 16%, var(--bg));
+}
+
+.wip-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+/* Chỉ báo suy giảm: HEAD ngoài tầm cột đồ thị, hoặc chưa nạp tới HEAD. Nói ra
+   thay vì để một chấm trôi không cạnh trông như lỗi vẽ. */
+.wip-degraded {
+  opacity: 0.6;
+  font-style: normal;
+  font-size: 11px;
+}
+
+.wip-counts {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wip-count-modified {
+  color: var(--warn, #d29922);
+}
+
+.wip-count-added {
+  color: var(--ok, #3fb950);
 }

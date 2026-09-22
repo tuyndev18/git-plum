@@ -963,3 +963,77 @@ describe('lịch sử tệp — containment cứng và sàn px, không minmax(0,
     expect(block).toMatch(/color-mix|rgba|\/\s*\d/)
   })
 })
+
+/*
+ * Thanh cuộn — chặn quay về widget mặc định của Windows.
+ *
+ * Người dùng báo "scrollbar hơi xấu": WebView2 vẽ thanh cuộn Windows (dải xám
+ * `#c1c1c1` trên rãnh `#f0f0f0`, 17px, có nút mũi tên). Trên `--bg: #16161a` nó
+ * là thứ sáng nhất màn hình, và nó **không** theo theme vì là widget hệ điều
+ * hành chứ không phải phần tử tô được bằng biến CSS.
+ *
+ * Đây là lưới an toàn cấp hai như các khối test khác trong tệp: đọc thẳng nguồn
+ * CSS. happy-dom không dựng thanh cuộn nên không có test DOM-level nào bắt được
+ * hồi quy này, và nó là loại hồi quy **im lặng** — xoá khối CSS đi thì giao diện
+ * vẫn chạy, chỉ là thanh cuộn xám quay lại mà không test nào đỏ.
+ */
+describe('thanh cuộn', () => {
+  const cssTruiCommentSb = css.replace(/\/\*[\s\S]*?\*\//g, '')
+
+  it('có tạo kiểu ::-webkit-scrollbar — không để mặc định WebView2', () => {
+    expect(
+      cssTruiCommentSb,
+      'thiếu quy tắc ::-webkit-scrollbar thì WebView2 vẽ thanh cuộn Windows xám sáng ' +
+        'trên nền tối, và nó không đổi theo theme của dự án',
+    ).toMatch(/::-webkit-scrollbar\s*\{/)
+  })
+
+  it('ngón cuộn và rãnh dùng BIẾN CSS, không phải mã màu cứng', () => {
+    /*
+     * Ràng buộc chung của tệp này (xem doc comment `theme.ts`): màu đặt bằng mã
+     * cứng không đi qua nhánh `@media (prefers-color-scheme: light)`, nên thanh
+     * cuộn sẽ giữ màu tối khi cả giao diện đã sang sáng.
+     */
+    const start = cssTruiCommentSb.indexOf('::-webkit-scrollbar-thumb {')
+    expect(start, 'phải có quy tắc ::-webkit-scrollbar-thumb').toBeGreaterThan(-1)
+    const block = cssTruiCommentSb.slice(start, cssTruiCommentSb.indexOf('}', start))
+
+    expect(block, 'ngón cuộn phải tô bằng var(--…) để theo được theme sáng').toMatch(
+      /var\(--[a-z-]+\)/,
+    )
+    expect(block, 'không được dùng mã màu hex cứng cho ngón cuộn').not.toMatch(/#[0-9a-fA-F]{3,8}/)
+  })
+
+  it('rãnh và góc trong suốt — không tô đè nền thật của vùng cuộn', () => {
+    // `.commit-list` có dải xen kẽ, `.diff-viewer` có nền riêng. Tô rãnh bằng
+    // màu cứng vẽ một vệt dọc khác màu cạnh mép nội dung ở đúng những chỗ đó.
+    for (const sel of ['::-webkit-scrollbar-track', '::-webkit-scrollbar-corner']) {
+      const start = cssTruiCommentSb.indexOf(`${sel} {`)
+      expect(start, `phải có quy tắc ${sel}`).toBeGreaterThan(-1)
+      const block = cssTruiCommentSb.slice(start, cssTruiCommentSb.indexOf('}', start))
+      expect(block, `${sel} phải trong suốt`).toMatch(/background:\s*transparent/)
+    }
+  })
+
+  it('bỏ nút mũi tên ở hai đầu rãnh', () => {
+    // Mặc định Chromium/Windows là CÓ. Chúng chiếm 17px mỗi đầu, lệch hẳn với
+    // thanh cuộn 10px, và không công cụ tham chiếu nào hiện chúng.
+    const start = cssTruiCommentSb.indexOf('::-webkit-scrollbar-button {')
+    expect(start, 'phải có quy tắc ::-webkit-scrollbar-button').toBeGreaterThan(-1)
+    const block = cssTruiCommentSb.slice(start, cssTruiCommentSb.indexOf('}', start))
+    expect(block).toMatch(/display:\s*none/)
+  })
+
+  it('có cả cặp chuẩn scrollbar-width/scrollbar-color làm lưới an toàn', () => {
+    /*
+     * `::-webkit-scrollbar` không phải chuẩn. WebView2 là Chromium nên nó chạy
+     * trên cả ba nền tảng mục tiêu, nhưng một bản Linux dựng với WebKitGTK cũ
+     * chỉ hiểu cặp chuẩn. Khai cả hai; chúng cố ý không chồng nhau (Chromium ưu
+     * tiên `scrollbar-color` khi cùng phần tử, nên cặp chuẩn chỉ ở `:root`).
+     */
+    expect(cssTruiCommentSb).toMatch(/scrollbar-width:\s*thin/)
+    expect(cssTruiCommentSb, 'scrollbar-color phải dùng biến, không mã cứng').toMatch(
+      /scrollbar-color:\s*var\(--[a-z-]+\)/,
+    )
+  })
+})

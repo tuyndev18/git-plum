@@ -22,7 +22,12 @@ import {
   SELECTION_RING,
   EDGE_WIDTH,
 } from './geometry'
-import type { GraphRenderer, GraphRendererFactory, GraphRenderRow } from './types'
+import type {
+  GraphRenderer,
+  GraphRendererFactory,
+  GraphRenderRow,
+  WipEdgeRender,
+} from './types'
 import type { Edge } from '@/lib/ipc'
 
 /** Ngữ cảnh vẽ 2D tối thiểu mà bản cài này cần — cho phép tiêm giả lập ở test. */
@@ -53,6 +58,16 @@ export interface DrawingContext2D {
   lineWidth: number
   /** Không bắt buộc: bối cảnh giả ở test có thể bỏ qua, `drawRow` gán phòng thủ. */
   font?: string
+  /**
+   * Căn chữ cái đầu vào tâm avatar — không bắt buộc, cùng lý do như `font`.
+   *
+   * Kiểu là `string` chứ không phải `CanvasTextAlign`: interface này cố ý là
+   * bề mặt **hẹp nhất** mà bộ vẽ cần (xem doc comment đầu tệp), nên nó không
+   * kéo theo kiểu DOM. Bối cảnh canvas thật vẫn gán được vì `CanvasTextAlign`
+   * là union của chuỗi.
+   */
+  textAlign?: string
+  textBaseline?: string
 }
 
 /** Điểm tiêm dùng riêng cho test — sản xuất thật dùng mặc định (canvas DOM thật). */
@@ -147,6 +162,67 @@ function drawSegment(
   ctx.stroke()
   // Trả `lineWidth` về mặc định: context dùng chung cho cả lượt vẽ, để nguyên
   // 2px sẽ làm mọi nét sau đó (viền nút, vòng chọn) dày theo ngoài ý muốn.
+  ctx.lineWidth = 1
+}
+
+/**
+ * Vẽ hàng WIP: một nút **rỗng nét đứt** ở lane HEAD, cộng đoạn nối xuống dưới.
+ *
+ * # 🔴 `clamped` và `unknownHead` KHÔNG vẽ đường nào
+ *
+ * Đây là chỗ mà "suy giảm có chủ ý" phải thật sự suy giảm. Lane của HEAD vượt
+ * `MAX_VISIBLE_LANES`, hoặc HEAD không nằm trong phần lịch sử đã nạp — cả hai
+ * ca đều không có cột nào **đúng** để nối tới. Vẽ vào lane 0 hay vào cột bị
+ * clamp tạo ra một phép nối **cụ thể và sai**: người dùng thấy công việc đang
+ * làm của mình mọc ra từ một commit không phải HEAD. Một đồ thị sai một cách
+ * tự tin tệ hơn một đồ thị nói rằng nó không biết.
+ *
+ * Chỉ báo cho người dùng biết là việc của DOM (`data-wip-edge` trên hàng WIP),
+ * không của canvas — canvas không vẽ chữ ngoài chữ cái avatar.
+ *
+ * # Nét đứt, không nét liền
+ *
+ * Cùng ngôn ngữ hình với `row.terminates`: nét đứt = "chưa chắc chắn / chưa
+ * thành hình". Hàng WIP đúng nghĩa đen là thứ chưa được commit.
+ */
+function drawWipEdge(ctx: DrawingContext2D, wip: WipEdgeRender, nodeFill: string): void {
+  if (wip.kind !== 'normal') return
+  if (wip.x === undefined) return
+
+  const x = wip.x
+  const yCenter = wip.y + ROW_HEIGHT / 2
+  const yBottom = wip.y + ROW_HEIGHT
+  // Màu xám trung tính, không lấy màu lane: hàng WIP không thuộc nhánh nào —
+  // nó là thứ chưa nằm trong lịch sử. Tô nó màu lane HEAD sẽ khiến nó trông
+  // như một commit đã có thật trên nhánh đó.
+  const mau = SELECTION_RING
+
+  // Đoạn nối từ tâm hàng WIP xuống mép dưới của chính nó. Nửa trên của hàng
+  // commit kế tiếp do hàng đó tự vẽ, nên hai nửa gặp nhau ở mép chung — cùng
+  // quy ước "mỗi hàng chỉ vẽ trong ô của chính nó" mà `drawRow` dùng.
+  ctx.strokeStyle = mau
+  ctx.lineWidth = EDGE_WIDTH
+  ctx.setLineDash([3, 3])
+  ctx.beginPath()
+  ctx.moveTo(x, yCenter)
+  ctx.lineTo(x, yBottom)
+  ctx.stroke()
+  ctx.setLineDash([])
+  ctx.lineWidth = 1
+
+  // Quầng nền rồi vòng rỗng nét đứt — cùng khuôn `row.terminates`.
+  ctx.beginPath()
+  ctx.arc(x, yCenter, NODE_RADIUS + NODE_HALO_WIDTH, 0, Math.PI * 2)
+  ctx.fillStyle = nodeFill
+  ctx.fill()
+
+  ctx.beginPath()
+  ctx.arc(x, yCenter, NODE_RADIUS, 0, Math.PI * 2)
+  ctx.strokeStyle = mau
+  ctx.lineWidth = NODE_STROKE_WIDTH
+  ctx.setLineDash([2, 2])
+  ctx.stroke()
+  ctx.setLineDash([])
   ctx.lineWidth = 1
 }
 
@@ -250,6 +326,67 @@ function drawRow(
     ctx.stroke()
     ctx.setLineDash([])
     ctx.lineWidth = 1
+  } else if (item.avatar) {
+    /*
+     * Nút commit **là avatar tác giả** — đĩa màu theo người, chữ cái đầu ở tâm.
+     *
+     * # Vì sao 12px trong lane 14px, và vì sao không to hơn
+     *
+     * Tham chiếu (GitKraken) vẽ avatar 22px, nhưng lane của nó rộng hơn. Ở
+     * `LANE_WIDTH` 14px — con số đến từ cap 20 lane, xem `geometry.ts` — avatar
+     * chỉ còn 12px trước khi nó bắt đầu che đường lane bên cạnh. Đây là đánh
+     * đổi chủ dự án chốt 2026-09-22 sau khi thấy số đo chồng cột: cap 20 (0,71%
+     * chồng) với avatar nhỏ, thay vì cap 13 (19,99% chồng) với avatar to.
+     *
+     * # Vì sao vẫn giữ VIỀN màu lane
+     *
+     * Màu avatar theo **tác giả**, màu lane theo **nhánh**. Thay hẳn chấm màu
+     * lane bằng đĩa màu tác giả sẽ xoá mất tín hiệu nhánh đúng tại điểm mắt
+     * đang nhìn — và lần theo nhánh là việc chính của đồ thị. Viền 1,5px màu
+     * lane quanh avatar giữ **cả hai**: nhìn xa thấy chuỗi màu nhánh, nhìn gần
+     * thấy ai viết commit nào.
+     *
+     * # Chữ, không phải ảnh
+     *
+     * Bộ vẽ này **không bao giờ** nạp ảnh. Ảnh Gravatar cần một lần fetch mỗi
+     * tác giả, và `draw()` chạy lại ở **mỗi khung hình cuộn** — nạp ảnh trong
+     * đó là bão request và một nguồn ảnh-chưa-về gây nháy. Ảnh chỉ xuất hiện ở
+     * panel chi tiết (`Avatar.tsx`), nơi có đúng một, đã chọn, và có React lo
+     * vòng đời. Xem doc comment ở `src/lib/avatar.ts`.
+     */
+    ctx.beginPath()
+    ctx.arc(nodeX, yCenter, radius, 0, Math.PI * 2)
+    ctx.fillStyle = item.avatar.mauNen
+    ctx.fill()
+
+    // Viền màu lane: giữ tín hiệu nhánh trên chính cái nút đã bị đổi màu.
+    ctx.beginPath()
+    ctx.arc(nodeX, yCenter, radius, 0, Math.PI * 2)
+    ctx.strokeStyle = laneColor
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+    ctx.lineWidth = 1
+
+    /*
+     * Chữ cái đầu — chỉ vẽ khi nút đủ to để đọc được.
+     *
+     * Dưới ~5px bán kính, một chữ cái thành vài pixel nhoè và trông như bụi
+     * bẩn trên đĩa màu, tệ hơn là để trống. Nút merge (`MERGE_NODE_RADIUS` 5)
+     * qua ngưỡng, nút thường (`NODE_RADIUS` 4) thì không — nên trong thực tế
+     * chỉ merge có chữ, còn lại là đĩa màu thuần. Đó vẫn là tín hiệu tác giả
+     * dùng được: màu ổn định theo email.
+     */
+    if (radius >= 5) {
+      ctx.font = `600 ${Math.round(radius * 1.1)}px system-ui, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = '#fff'
+      // Chỉ ký tự đầu: hai chữ không vừa trong một đĩa 10-12px.
+      ctx.fillText(Array.from(item.avatar.chu)[0] ?? '', nodeX, yCenter)
+      // Trả về mặc định — context dùng chung cho cả lượt vẽ.
+      ctx.textAlign = 'start'
+      ctx.textBaseline = 'alphabetic'
+    }
   } else {
     ctx.beginPath()
     ctx.arc(nodeX, yCenter, radius, 0, Math.PI * 2)
@@ -322,7 +459,7 @@ export const createCanvasRenderer: (
       ctx.scale(dpr, dpr)
     },
 
-    draw(rows, selectedCommitId) {
+    draw(rows, selectedCommitId, wip) {
       ctx.clearRect(0, 0, cssWidth, cssHeight)
 
       // KHÔNG tô nền cho cả cột đồ thị.
@@ -344,6 +481,10 @@ export const createCanvasRenderer: (
       for (const item of rows) {
         drawRow(ctx, item, selectedCommitId, nodeFill)
       }
+
+      // Hàng WIP vẽ **sau** mọi hàng commit: nó ghim ở đầu vùng cuộn và nằm
+      // trên các hàng về thứ tự nhìn, nên nó cũng phải nằm trên về thứ tự vẽ.
+      if (wip) drawWipEdge(ctx, wip, nodeFill)
     },
 
     dispose() {

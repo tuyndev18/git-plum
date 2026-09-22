@@ -8,7 +8,15 @@ import { forgetRepo } from '@/lib/recentRepos'
 import { useActiveRepo, useRepoStore } from '@/stores/repoStore'
 import { useHistoryStore } from '@/stores/historyStore'
 import { useSelectionStore } from '@/stores/selectionStore'
+import { useUiStore } from '@/stores/uiStore'
 import { AppLayout } from '@/components/AppLayout'
+import {
+  IconClose,
+  IconFolderOpen,
+  IconSpinner,
+  IconAvatar,
+  IconTerminal,
+} from '@/components/icons'
 import { CommandLogPanel } from '@/components/CommandLogPanel'
 import { Logo } from '@/components/Logo'
 import { RecentRepoList } from '@/components/RecentRepoList'
@@ -40,6 +48,9 @@ export function App() {
   const openRepository = useRepoStore((s) => s.openRepository)
   const closeRepository = useRepoStore((s) => s.closeRepository)
   const recent = useRepoStore((s) => s.recent)
+
+  const choPhepGravatar = useUiStore((s) => s.choPhepGravatar)
+  const setChoPhepGravatar = useUiStore((s) => s.setChoPhepGravatar)
 
   const [gitVersion, setGitVersion] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -96,6 +107,27 @@ export function App() {
   )
   const setSelectedCommitId = (commitId: string) => {
     if (activeRepoId) selectCommit(activeRepoId, commitId)
+  }
+
+  /**
+   * Bấm một nhánh/tag ở thanh bên: chọn commit **và cuộn đồ thị tới nó**.
+   *
+   * Vì sao không gộp vào `setSelectedCommitId`: `CommitList` cũng gọi hàm đó khi
+   * người dùng bấm thẳng một hàng. Cuộn ở đó sẽ kéo hàng vừa bấm — vốn đang nằm
+   * ngay dưới con trỏ — về giữa khung, tức giao diện tự nhảy dưới tay người
+   * dùng. Chỉ đường vào từ thanh bên mới cần cuộn, nên nó có handler riêng.
+   *
+   * Trả về `false` khi commit đích nằm ngoài phần lịch sử đã nạp (nhánh cũ hơn
+   * 1000 commit đầu). Khi đó commit **vẫn được chọn** — `CommitDetail` hiện
+   * được nhờ `ipc.getCommitDetail`, không cần hàng nào trong danh sách — và
+   * `RefSidebar` nói ra rằng nó không cuộn được, thay vì im lặng không làm gì.
+   */
+  const handleSelectRef = (commitId: string): boolean => {
+    setSelectedCommitId(commitId)
+    // Đang xem diff thì vùng `main` không render `CommitList` (xem ghi chú bố
+    // cục ở trên), nên `commitListRef.current` là `null`. Đó không phải lỗi:
+    // báo "không cuộn được" là đúng trạng thái người dùng đang thấy.
+    return commitListRef.current?.scrollToCommit(commitId) ?? false
   }
 
   // Mọi thao tác đi qua sổ đăng ký lệnh (PLAT-04), không gắn thẳng vào onClick.
@@ -244,12 +276,68 @@ export function App() {
             </>
           )}
         </div>
+        {/*
+          Nút là ICON, chữ nằm ở `title` + `aria-label` — xem doc comment của
+          `DiffToolbar.tsx` cho lý do đầy đủ. Ở đây chữ ngắn hơn nên sức ép bề
+          ngang nhẹ hơn, nhưng hai thanh công cụ dùng hai kiểu nút khác nhau thì
+          giao diện trông như hai ứng dụng ghép lại.
+        */}
         <div className="toolbar-right">
-          <button onClick={() => runCommand('repo.open')} disabled={isOpening}>
-            {isOpening ? 'Đang mở…' : 'Mở repository'}
+          <button
+            className="icon-button"
+            onClick={() => runCommand('repo.open')}
+            disabled={isOpening}
+            title={isOpening ? 'Đang mở…' : 'Mở repository'}
+            aria-label={isOpening ? 'Đang mở…' : 'Mở repository'}
+          >
+            {isOpening ? <IconSpinner /> : <IconFolderOpen />}
           </button>
-          {activeRepo && <button onClick={() => runCommand('repo.close')}>Đóng</button>}
-          <button onClick={() => runCommand('view.toggleCommandLog')}>Nhật ký lệnh</button>
+          {activeRepo && (
+            <button
+              className="icon-button"
+              onClick={() => runCommand('repo.close')}
+              title="Đóng repository"
+              aria-label="Đóng repository"
+            >
+              <IconClose />
+            </button>
+          )}
+          <button
+            className="icon-button"
+            onClick={() => runCommand('view.toggleCommandLog')}
+            aria-pressed={logVisible}
+            title="Nhật ký lệnh"
+            aria-label="Nhật ký lệnh"
+          >
+            <IconTerminal />
+          </button>
+          {/*
+            Công tắc Gravatar — **mặc định tắt**, và tooltip phải nói ra điều
+            đang thực sự xảy ra.
+
+            Ràng buộc Privacy của dự án đòi người dùng cho phép **rõ ràng**
+            trước khi có gì gửi ra ngoài. Một công tắc ghi "Avatar" thoả mãn
+            chữ nhưng không thoả mãn tinh thần: người dùng bật nó mà không biết
+            mình vừa cho phép gửi hash email của tác giả tới một máy chủ bên
+            thứ ba. Nên nhãn nói thẳng gravatar.com.
+          */}
+          <button
+            className="icon-button"
+            onClick={() => setChoPhepGravatar(!choPhepGravatar)}
+            aria-pressed={choPhepGravatar}
+            title={
+              choPhepGravatar
+                ? 'Tắt ảnh đại diện từ gravatar.com'
+                : 'Bật ảnh đại diện từ gravatar.com (gửi hash email tác giả ra ngoài)'
+            }
+            aria-label={
+              choPhepGravatar
+                ? 'Tắt ảnh đại diện từ gravatar.com'
+                : 'Bật ảnh đại diện từ gravatar.com'
+            }
+          >
+            <IconAvatar />
+          </button>
         </div>
       </header>
 
@@ -276,7 +364,7 @@ export function App() {
             <aside className="pane sidebar">
               <h2>Nhánh</h2>
               {activeRepo ? (
-                <RefSidebar repoId={activeRepo.info.id} onSelectCommit={setSelectedCommitId} />
+                <RefSidebar repoId={activeRepo.info.id} onSelectCommit={handleSelectRef} />
               ) : (
                 <p className="placeholder">Mở một repository để xem nhánh và tag.</p>
               )}
