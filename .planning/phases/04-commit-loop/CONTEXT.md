@@ -233,6 +233,20 @@ lời khuyên.
 | 5 | 3 | grep trên nguồn **thô** khớp chú thích **do chính mutation sinh ra** |
 | 6 | 3 | `waitFor` neo vào phần tử có mặt ở **mọi** trạng thái → thoả mãn tức thì |
 | 7 | **4** | fixture có **đúng hình dạng** nhưng dữ liệu vô hại nên lệch nấc **không quan sát được** |
+| 8 | **4** | cổng chỉ kiểm `numFailedTests > 0` → **xanh trên một suite chạy 0 test** |
+
+**Lỗi #8 — cổng xanh khi suite hoàn toàn không chạy.** Executor wave 3 gặp khi
+`@testing-library/user-event` (không có trong `package.json`) không resolve được: báo
+cáo JSON trả `total 0 / passed 0 / failed 0`, và một cổng chỉ hỏi `numFailedTests > 0`
+**đỗ**. Đây là lỗi #3 (đường dẫn sai → grep không thấy gì → xanh) đi vào bằng cửa khác:
+**không tìm thấy gì không bao giờ được là đỗ**.
+
+**Bắt buộc:** mọi cổng đọc báo cáo vitest phải khẳng định **cả hai**:
+
+```js
+if (r.numTotalTests < <so_test_toi_thieu>) process.exit(1)   // tiền đề
+if (r.numFailedTests > 0) process.exit(1)                     // kết quả
+```
 
 **Lỗi #7 — và đây là lần ĐẦU một executor tự bắt cổng của chính nó trước khi giao.**
 Sáu lần trước đều do orchestrator hoặc chủ dự án tìm ra sau.
@@ -275,7 +289,23 @@ chạy đột biến và **thấy** đỏ, không phải lập luận rằng fix
 |---|---|---|---|---|
 | 1 | Phase 2, nguyên nhân B (`5ac43ef`) | Có badge ref, có chữ message | Badge **ngắn** | Badge thật 258px nuốt cột 332px → chữ hiện **0%**. Test xanh suốt |
 | 2 | Phase 4 wave 1, M1 (`c0c4264`) | Bản ghi dạng `2` + ≥2 bản ghi sau | Đường dẫn cũ `a_old.txt` **không khớp dạng nào** | Lệch nấc thật nhưng đoạn rò bị `_ => {}` bỏ im lặng → **0 đỏ** |
-| 3 | Phase 4 wave 3, M14 (chưa chạy) | Hai repo, đổi repo giữa lúc trì hoãn | Nháp repo B **rỗng** | Đè chuỗi của A lên ô rỗng vẫn trông như "B rỗng" → xanh |
+| 3 | Phase 4 wave 3, M14 | Hai repo, đổi repo giữa lúc trì hoãn | Nháp repo B **rỗng** | ⚠️ **Dự đoán SAI cho cài đặt thật** — xem dưới |
+
+> ⚠️ **Dòng #3 là một dự đoán, và nó đã được đo là SAI.** Giữ lại ở đây vì lập luận
+> vẫn đúng ở dạng tổng quát, nhưng **đừng chép nó đi như sự thật đã kiểm chứng**.
+>
+> Executor wave 3 đo cả ba biến thể: B khác rỗng → **3 đỏ**; B rỗng, cùng khẳng định →
+> **3 đỏ**; B rỗng với khẳng định ngây thơ `expect(loadDraft(B)).toBe('')` → **vẫn 1
+> đỏ**. Nguyên nhân: `loadDraft` trả `pending.text` **trước** khi đọc đĩa
+> (`commitDraft.ts:88`), nên việc nhầm khoá quan sát được ngay cả khi B rỗng.
+>
+> Fixture khác rỗng vẫn được giữ, vì **thông điệp lỗi** của nó nêu đúng dữ liệu bị
+> phá — nhưng đó là lý do về khả năng chẩn đoán, không phải về khả năng phân biệt.
+>
+> **Bài học thật ở đây khác với bài học tôi định dạy:** "dữ liệu vô hại" phụ thuộc
+> vào **cài đặt**, không suy được từ hình dạng bài toán. Ở một cài đặt đọc thẳng đĩa
+> thì dự đoán của tôi đúng; ở cài đặt này thì không. Nên quy tắc vẫn là **chạy đột
+> biến và xem đỏ**, và lần này nó bác chính tôi.
 
 **Lỗi chiều cao hàng (`7596e63`) KHÔNG thuộc lớp này** — đừng gộp vào. `STATE.md` ghi
 trung thực nó "không tái hiện được bằng số đo": happy-dom không tính layout nên fixture
