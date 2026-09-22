@@ -370,3 +370,124 @@ echo "Đầu ra đã ghi vào: $BANG_GHI"
 echo
 echo "Test Rust tìm repo này qua git_plum_lib::testing::require_status_fixture()."
 echo "KHÔNG chạy git commit/reset/clean trong repo đó: giá trị của nó là trạng thái BẨN."
+
+# ===========================================================================
+# Repo mẫu có HOOK TỪ CHỐI — plan 04-03, WORK-08
+# ===========================================================================
+#
+# # Vì sao hai repo riêng chứ không thêm hook vào `repo`
+#
+# `repo` ở trên là fixture CHỈ ĐỌC: giá trị của nó nằm ở thư mục làm việc bẩn, và
+# `require_status_fixture` ghi rõ rằng chạy `git commit` trong đó là PHÁ fixture. Test
+# hook PHẢI chạy `git commit` thật — đó là cả điểm. Nên chúng cần repo riêng.
+#
+# # 🔴 Hook phải CHẠY ĐƯỢC, và script tự CHỨNG MINH điều đó
+#
+# Một hook không chạy được cho test XANH mà chẳng kiểm gì — đúng khuôn cổng #4 của
+# CONTEXT.md mục 3.1 (fixture không phân biệt được đột biến). Trên Windows đặc biệt dễ
+# mắc: không có bit executable của POSIX, git chạy hook qua shell đi kèm (`sh.exe` của
+# Git for Windows), và một hook thiếu `#!/bin/sh` hoặc có CRLF sẽ im lặng không chạy.
+#
+# Vì vậy mỗi repo hook dưới đây kết thúc bằng một phép ĐO: chạy `git commit` thật rồi
+# khẳng định (a) nó THẤT BẠI và (b) chuỗi nhận diện của hook CÓ trong đầu ra. Thiếu
+# một trong hai thì script THOÁT 1 — không in cảnh báo rồi thoát 0.
+#
+# Chuỗi nhận diện là duy nhất và dễ grep, để test Rust khẳng định NGUYÊN VĂN đầu ra
+# hook đi tới người dùng, chứ không chỉ khẳng định "có lỗi" (đột biến M5).
+
+readonly DAU_HIEU_PRE_COMMIT="HOOK-PRE-COMMIT-REJECTED"
+readonly DAU_HIEU_COMMIT_MSG="HOOK-COMMIT-MSG-REJECTED"
+
+# Dựng một repo có đúng một hook từ chối.
+#   $1 = tên thư mục repo dưới $DEST
+#   $2 = tên hook (`pre-commit` hoặc `commit-msg`)
+#   $3 = chuỗi nhận diện hook in ra
+dung_repo_hook() {
+  local ten="$1" ten_hook="$2" dau_hieu="$3"
+  local r="$DEST/$ten"
+
+  xoa_that "$r"
+  mkdir -p "$r"
+
+  git init --initial-branch=main --quiet "$r"
+  git -C "$r" config core.autocrlf false
+  git -C "$r" config commit.gpgsign false
+  git -C "$r" config user.name "$GIT_AUTHOR_NAME"
+  git -C "$r" config user.email "$GIT_AUTHOR_EMAIL"
+
+  # Commit nền: `--amend` cần một commit để sửa, và ca "không có gì để commit" cần
+  # một HEAD phân giải được. Repo chưa có commit nào là một ca khác hẳn.
+  printf 'nen\n' >"$r/nen.txt"
+  git -C "$r" add -- nen.txt
+  git -C "$r" commit --quiet -m "commit nen"
+
+  # 🔴 Hook ghi ra CẢ stdout LẪN stderr.
+  #
+  # git chuyển tiếp cả hai luồng của hook, nhưng chúng đi tới hai chỗ khác nhau trong
+  # `GitOutput`. Một hook chỉ ghi stderr cho một test chỉ đọc stderr XANH mà không
+  # chứng minh gì về đường stdout, và ngược lại. Cho hook ghi cả hai thì test khẳng
+  # định được rằng phép phân loại lỗi đọc CẢ HAI — thiếu một luồng là một cách rất
+  # thật để nuốt mất thông báo của hook.
+  local hook="$r/.git/hooks/$ten_hook"
+  printf '#!/bin/sh\necho "%s (stdout)"\necho "%s (stderr)" >&2\nexit 1\n' \
+    "$dau_hieu" "$dau_hieu" >"$hook"
+  chmod +x "$hook"
+
+  # Tệp đã stage để `git commit` có thứ để commit — nếu không, lệnh thất bại vì
+  # "nothing to commit" TRƯỚC khi hook chạy, và phép đo dưới đây sẽ đo nhầm thứ.
+  printf 'de commit\n' >"$r/them.txt"
+  git -C "$r" add -- them.txt
+
+  # -----------------------------------------------------------------------
+  # PHÉP ĐO: hook có THẬT SỰ chạy không?
+  # -----------------------------------------------------------------------
+  local truoc sau ra ma
+  truoc="$(git -C "$r" rev-parse HEAD)"
+
+  # `|| true` vì `set -e` sẽ giết script ở một lệnh thất bại có chủ ý.
+  ra="$(git -C "$r" commit -m "phep do hook" 2>&1 || true)"
+  ma="$(git -C "$r" rev-parse HEAD)"
+
+  if ! printf '%s' "$ra" | grep -q "$dau_hieu"; then
+    echo "LỖI: hook '$ten_hook' của repo '$ten' KHÔNG CHẠY." >&2
+    echo "      Không thấy chuỗi nhận diện '$dau_hieu' trong đầu ra của git commit." >&2
+    echo "      Một hook không chạy được làm MỌI test hook xanh mà chẳng kiểm gì —" >&2
+    echo "      đúng khuôn cổng #4 của CONTEXT.md 3.1." >&2
+    echo "      Nguyên nhân thường gặp trên Windows: thiếu '#!/bin/sh', tệp có CRLF," >&2
+    echo "      hoặc core.hooksPath trỏ đi chỗ khác." >&2
+    echo "      Đầu ra đọc được:" >&2
+    printf '%s\n' "$ra" | sed 's/^/        /' >&2
+    exit 1
+  fi
+
+  if [ "$ma" != "$truoc" ]; then
+    echo "LỖI: hook '$ten_hook' in ra chuỗi nhận diện NHƯNG commit vẫn được tạo." >&2
+    echo "      HEAD đổi $truoc -> $ma. Hook phải THOÁT KHÁC 0 để chặn commit;" >&2
+    echo "      một hook chỉ in chữ rồi exit 0 không chặn gì cả." >&2
+    exit 1
+  fi
+
+  # Tệp phải VẪN CÒN stage sau khi hook từ chối — `<hook_behavior>` của plan 04-03
+  # khẳng định điều này, và test Rust dựa vào nó để kiểm "noVerify=true thì thành công"
+  # trên CÙNG repo ngay sau đó.
+  if ! git -C "$r" diff --cached --quiet -- them.txt; then
+    : # có thay đổi đã stage — đúng như mong đợi
+  else
+    echo "LỖI: sau khi hook từ chối, 'them.txt' không còn ở index." >&2
+    echo "      Test 'cùng repo: noVerify=true thì commit thành công' sẽ không có gì" >&2
+    echo "      để commit, và nó sẽ xanh/đỏ vì một lý do khác hẳn." >&2
+    exit 1
+  fi
+
+  echo "    $ten: hook '$ten_hook' CHẠY, chặn commit, index giữ nguyên. ĐẠT."
+  echo "      đầu ra hook: $(printf '%s' "$ra" | grep "$dau_hieu" | head -2 | tr '\n' ' ')"
+}
+
+echo
+echo "[7] repo mẫu có hook từ chối"
+dung_repo_hook "hook-reject" "pre-commit" "$DAU_HIEU_PRE_COMMIT"
+dung_repo_hook "hook-msg-reject" "commit-msg" "$DAU_HIEU_COMMIT_MSG"
+
+echo
+echo "Repo hook: $DEST/hook-reject (pre-commit), $DEST/hook-msg-reject (commit-msg)"
+echo "Test Rust tìm chúng qua git_plum_lib::testing::require_hook_fixture(<tên>)."

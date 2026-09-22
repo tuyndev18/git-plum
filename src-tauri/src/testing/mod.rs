@@ -253,6 +253,49 @@ pub fn require_status_fixture() -> Option<PathBuf> {
     Some(repo)
 }
 
+/// Tên hai repo mẫu mang hook **từ chối**, dưới [`STATUS_FIXTURES_DIR`] — plan 04-03.
+///
+/// `hook-reject` có `.git/hooks/pre-commit` thoát 1; `hook-msg-reject` có `commit-msg`
+/// thoát 1. Cả hai in một chuỗi nhận diện ra **cả stdout lẫn stderr** của hook, để test
+/// khẳng định được rằng phép phân loại lỗi đọc **cả hai** luồng.
+pub const HOOK_FIXTURE_NAMES: [&str; 2] = ["hook-reject", "hook-msg-reject"];
+
+/// Lấy một repo mẫu có hook từ chối, hoặc `None` **kèm lời nhắc ra stderr** nếu thiếu.
+///
+/// # 🔴 Trả về repo GỐC — người gọi phải SAO CHÉP trước khi commit vào đó
+///
+/// Khác [`require_status_fixture`] ở một điểm quan trọng: test hook **phải** chạy
+/// `git commit` thật (đó là cả điểm của nó), và một commit **thành công** qua đường
+/// `--no-verify` **tiêu thụ** tệp đã stage của fixture. Lần chạy test thứ hai sẽ gặp
+/// một repo không còn gì để commit, và ca "no-verify thì thành công" sẽ đỏ vì
+/// *"nothing to commit"* — một lý do hoàn toàn khác với thứ nó định kiểm.
+///
+/// Đó là lớp lỗi "test đổi màu vì một lý do khác hẳn", và nó chỉ lộ ra ở **lần chạy
+/// thứ hai** — tức nó đi lọt qua được một lần đo, đúng kiểu cổng sống sót cả một wave.
+pub fn require_hook_fixture(ten: &str) -> Option<PathBuf> {
+    assert!(
+        HOOK_FIXTURE_NAMES.contains(&ten),
+        "'{ten}' không phải một repo mẫu hook; có: {HOOK_FIXTURE_NAMES:?}"
+    );
+
+    let repo = fixture_root().join(STATUS_FIXTURES_DIR).join(ten);
+
+    if !repo.is_dir() || !repo.join(".git").exists() {
+        eprintln!(
+            "BỎ QUA TEST: thiếu repo mẫu hook '{}' (tìm ở {}).\n  \
+             Sinh lại bằng: {}\n  \
+             Hoặc trỏ tới thư mục khác bằng biến môi trường {}.",
+            ten,
+            repo.display(),
+            STATUS_FIXTURES_COMMAND,
+            FIXTURES_ENV,
+        );
+        return None;
+    }
+
+    Some(repo)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
