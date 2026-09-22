@@ -68,6 +68,34 @@ lại** thay vì tin con số cũ, và phép tách theo tên tệp xác nhận 5
 `.vitest/json/output.json` được `rm -f` trước **mỗi** lần chạy, và harness khẳng định
 tệp đã biến mất trước khi chạy tiếp (trap 3.6 của CONTEXT.md).
 
+### 🔴 Cây đã ĐỎ ở lần đo CUỐI — và nó KHÔNG phải của plan này
+
+Ba lần chạy 587/587 xanh ở trên đo **trước** khi một session khác giao phần avatar/đồ
+thị. Lần đo cuối cùng, ngay trước khi đóng plan:
+
+```
+tổng 587 | passed 570 | ĐỎ 17
+```
+
+**17 test đỏ nằm trọn trong `App.test.tsx` và `CommitList.test.tsx`**, cộng `npx tsc
+--noEmit` đỏ 7 lỗi ở `CommitList.tsx` và `lib/graph-render/canvasRenderer.ts`
+(`Cannot find name 'avatarTuSinh'`, `Property 'textAlign' does not exist on type
+'DrawingContext2D'`, …).
+
+**Bằng chứng chúng không phải của tôi** — ba phép kiểm độc lập, không phải suy luận:
+
+1. `grep -cE "CommitBox|commitStore|commitDraft"` trên `CommitList.tsx` và `App.tsx`
+   → **0** ở cả hai. Mã của tôi không được tham chiếu từ các tệp đỏ.
+2. Cả bốn tệp liên quan (`App.tsx`, `CommitList.tsx`, `CommitList.test.tsx`,
+   `canvasRenderer.ts`) đang **chưa commit** và thuộc session khác; tôi chưa từng mở
+   để sửa tệp nào trong số đó.
+3. Lọc kết quả theo tên tệp: **79/79 test của plan này vẫn XANH** ở đúng lần chạy đỏ đó.
+
+**Vì vậy tôi ghi `npx tsc --noEmit` và `npm run build` là "sạch **tại thời điểm tôi
+đo**", không phải "sạch" như một trạng thái hiện hành của cây.** Người đóng phase phải
+đo lại sau khi session avatar/đồ thị giao xong — con số của tôi đã lạc hậu theo đúng
+nghĩa mục 3.7 của CONTEXT.md (kiểm một bản dựng cũ hơn bản sửa).
+
 ### Ổn định — chạy nhiều lần
 
 | Phạm vi | Số lần | Kết quả |
