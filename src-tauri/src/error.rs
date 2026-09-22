@@ -30,6 +30,29 @@ pub enum GitError {
     #[error("Không phải một repository git: {path}")]
     NotARepository { path: String },
 
+    /// `.git/index.lock` đang bị một tiến trình git khác giữ — WORK-02, CONTEXT.md 2.3.
+    ///
+    /// # Vì sao ca này có mã lỗi RIÊNG, không phải `CommandFailed`
+    ///
+    /// Đây **không** phải một lỗi; nó là một trạng thái tạm thời có thể phục hồi, và
+    /// người dùng cần một câu khác hẳn: *"đang chờ một tiến trình git khác"* chứ không
+    /// phải *"git thoát với mã 128"*. Chủ dự án **dùng terminal song song** — đó là cả
+    /// điểm của WORK-10 — nên ca này sẽ xảy ra thật, không phải phòng xa.
+    ///
+    /// Gộp nó vào [`GitError::CommandFailed`] là lặp lại đúng khuôn lỗi của
+    /// `open_repository`, nơi "exit khác 0" bị coi là **một** nguyên nhân và người dùng
+    /// nhận "Không phải một repository git" cho một repo hoàn toàn hợp lệ mà git từ
+    /// chối vì `dubious ownership`.
+    ///
+    /// `stderr` giữ **nguyên văn** câu trả lời của git: nó là văn bản chẩn đoán mờ, để
+    /// người đọc, không phải một hợp đồng phân tích được.
+    #[error(
+        "Không ghi được vào repository: một tiến trình git khác đang giữ \
+         .git/index.lock. Bạn có thể đang chạy git ở nơi khác (terminal, IDE, \
+         hay một lệnh rebase chưa xong). Thử lại sau khi lệnh đó kết thúc.\n\n{stderr}"
+    )]
+    IndexLocked { args: Vec<String>, stderr: String },
+
     #[error("Chưa mở repository nào")]
     NoRepositoryOpen,
 
@@ -52,6 +75,7 @@ impl GitError {
             Self::StdinWriteFailed(_) => "stdin_write_failed",
             Self::CommandFailed { .. } => "command_failed",
             Self::NotARepository { .. } => "not_a_repository",
+            Self::IndexLocked { .. } => "index_locked",
             Self::NoRepositoryOpen => "no_repository_open",
             Self::UnknownRepository(_) => "unknown_repository",
             Self::ParseFailed(_) => "parse_failed",
@@ -66,7 +90,8 @@ impl GitError {
         match self {
             Self::SpawnFailed { args, .. }
             | Self::Timeout { args, .. }
-            | Self::CommandFailed { args, .. } => Some(args),
+            | Self::CommandFailed { args, .. }
+            | Self::IndexLocked { args, .. } => Some(args),
             _ => None,
         }
     }
@@ -118,6 +143,88 @@ mod tests {
         assert_eq!(json["code"], "command_failed");
         assert_eq!(json["command"], "git status --porcelain=v2");
         assert!(json["message"].as_str().unwrap().contains("128"));
+    }
+
+    /// Ca `index.lock` có mã **riêng** và nói rõ người dùng đang chờ cái gì.
+    ///
+    /// 🔴 Khẳng định mã **không** phải `command_failed`: gộp hai ca lại là lặp lại
+    /// khuôn lỗi của `open_repository` (CONTEXT.md mục 0), nơi mọi exit khác 0 bị coi
+    /// là một nguyên nhân duy nhất.
+    #[test]
+    fn index_locked_co_ma_rieng_va_thong_bao_noi_ro_dang_cho_gi() {
+        let err = GitError::IndexLocked {
+            args: vec!["add".into(), "--".into(), "a.txt".into()],
+            stderr: "fatal: Unable to create '.../index.lock': File exists.".into(),
+        };
+        let json = serde_json::to_value(&err).unwrap();
+
+        assert_eq!(json["code"], "index_locked");
+        assert_ne!(
+            json["code"], "command_failed",
+            "ca lock KHÔNG được gộp vào command_failed — giao diện phải nói khác"
+        );
+
+        let msg = json["message"].as_str().unwrap();
+        assert!(
+            msg.contains("index.lock"),
+            "thông báo phải nói tên tệp đang bị giữ: {msg:?}"
+        );
+        assert!(
+            msg.contains("terminal") || msg.contains("nơi khác"),
+            "thông báo phải nói người dùng có thể đang chạy git ở nơi khác: {msg:?}"
+        );
+        assert!(
+            msg.contains("File exists"),
+            "stderr NGUYÊN VĂN của git phải đi kèm — nó là văn bản chẩn đoán: {msg:?}"
+        );
+        assert_eq!(
+            json["command"], "git add -- a.txt",
+            "lệnh đã chạy phải hiện ra (PLAT-10)"
+        );
+    }
+
+    /// Mọi mã lỗi phải **khác nhau đôi một**: hai variant cùng mã làm giao diện không
+    /// phân nhánh được, và lỗi đó không gây lỗi biên dịch ở bên nào.
+    #[test]
+    fn moi_ma_loi_khac_nhau_doi_mot() {
+        let mau = [
+            GitError::SpawnFailed {
+                args: vec![],
+                reason: String::new(),
+            },
+            GitError::Timeout {
+                args: vec![],
+                seconds: 1,
+            },
+            GitError::StdinWriteFailed(String::new()),
+            GitError::CommandFailed {
+                args: vec![],
+                status: 1,
+                stderr: String::new(),
+            },
+            GitError::NotARepository {
+                path: String::new(),
+            },
+            GitError::IndexLocked {
+                args: vec![],
+                stderr: String::new(),
+            },
+            GitError::NoRepositoryOpen,
+            GitError::UnknownRepository(String::new()),
+            GitError::ParseFailed(String::new()),
+            GitError::Io(String::new()),
+        ];
+
+        let mut ma: Vec<&str> = mau.iter().map(|e| e.code()).collect();
+        let so_luong = ma.len();
+        ma.sort_unstable();
+        ma.dedup();
+        assert_eq!(
+            ma.len(),
+            so_luong,
+            "có hai variant dùng cùng một mã lỗi: {ma:?}"
+        );
+        assert_eq!(so_luong, 10, "mười variant; thêm variant phải cập nhật test này");
     }
 
     #[test]
