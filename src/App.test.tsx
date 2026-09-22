@@ -12,14 +12,33 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
 
 import { App } from '@/App'
-import { ipc, type RepoInfo } from '@/lib/ipc'
+import { ipc, type RepoInfo, type RepoStatus } from '@/lib/ipc'
 import { useHistoryStore } from '@/stores/historyStore'
 import { useRepoStore } from '@/stores/repoStore'
 import { useRefsStore } from '@/stores/refsStore'
 import { useSelectionStore } from '@/stores/selectionStore'
+import { useStatusStore } from '@/stores/statusStore'
+import { useCommitStore } from '@/stores/commitStore'
+import { ngheTrangThaiNgoai } from '@/lib/ipc'
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }))
 
+/*
+ * Bề mặt của vòng commit (Phase 4) được **thêm vào** mock này, không thay gì cả.
+ *
+ * `App` nay gắn watcher `.git` (`ngheTrangThaiNgoai`, WORK-10) và render
+ * `ChangeList`/`CommitBox` khi vùng soạn mở. Mock của tệp này là bản thay thế
+ * **trọn gói** (không `importActual`), nên mọi export mà đường render đụng tới phải
+ * có mặt ở đây — thiếu một cái là `App` ném lúc gắn kết và **mọi** test trong tệp
+ * đỏ vì một lý do không liên quan tới điều nó khẳng định.
+ *
+ * 🔴 Không khẳng định nào bên dưới được sửa để cho xanh. Chín test đỏ lúc nối dây
+ * đều đỏ với **cùng một** thông báo "No ngheTrangThaiNgoai export is defined", tức
+ * lỗi nằm ở độ đầy đủ của mock, không ở hành vi.
+ *
+ * `ngheTrangThaiNgoai` trả một hàm huỷ đăng ký: `App` gọi nó lúc dọn effect, nên
+ * trả `undefined` sẽ ném ở chế độ Strict của React 19.
+ */
 vi.mock('@/lib/ipc', () => ({
   ipc: {
     openRepository: vi.fn(),
@@ -31,8 +50,30 @@ vi.mock('@/lib/ipc', () => ({
     listRefs: vi.fn(),
     getCommitDetail: vi.fn(),
     searchCommits: vi.fn(),
+    getStatus: vi.fn(),
+    stageFiles: vi.fn(),
+    unstageFiles: vi.fn(),
+    getWorktreeDiff: vi.fn(),
+    createCommit: vi.fn(),
+    amendCommit: vi.fn(),
   },
+  ngheTrangThaiNgoai: vi.fn(async () => () => {}),
   describeError: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+  isGitError: () => false,
+}))
+
+/*
+ * Nháp commit bền vững đi qua `@tauri-apps/plugin-store`, không có trong happy-dom.
+ * `commitStore.switchRepo` chạy khi `activeRepoId` đổi — tức trong mọi test mở
+ * repository — nên thiếu stub này là một lời từ chối promise không ai bắt.
+ */
+vi.mock('@tauri-apps/plugin-store', () => ({
+  load: vi.fn(async () => ({
+    get: vi.fn(async () => undefined),
+    set: vi.fn(async () => undefined),
+    delete: vi.fn(async () => undefined),
+    save: vi.fn(async () => undefined),
+  })),
 }))
 
 vi.mock('@/lib/recentRepos', () => ({
@@ -107,6 +148,15 @@ beforeEach(() => {
   vi.mocked(ipc.commandLog).mockResolvedValue([])
   vi.mocked(ipc.listRefs).mockResolvedValue([])
   vi.mocked(ipc.searchCommits).mockResolvedValue([])
+  // Mặc định "không có thay đổi nào": nhánh đường chính của mọi test cũ, và nó
+  // giữ hàng WIP TẮT ở đó — nếu không, mọi test cũ bỗng render thêm một hàng.
+  vi.mocked(ipc.getStatus).mockResolvedValue({
+    branch: { head: 'main', oid: 'c1', upstream: null, ahead: null, behind: null },
+    entries: [],
+    hasConflicts: false,
+  })
+  useStatusStore.setState({ byRepo: {} })
+  useCommitStore.setState({ draftByRepo: {} })
 })
 
 describe('App', () => {
@@ -335,5 +385,187 @@ describe('nhật ký lệnh — mặc định ẩn để trình xem diff đượ
       'PLAT-08 đòi người dùng nhìn thấy được lệnh git đã chạy — mặc định ẩn ' +
         'chỉ hợp lệ nếu vẫn mở được',
     ).not.toBeNull()
+  })
+})
+
+/**
+ * Nối dây vòng commit vào `App` — wave 5 của Phase 4.
+ *
+ * ⚠️ **Phạm vi của những test này, nói thẳng.** Chúng chứng minh các **đường nối**
+ * tồn tại và chạy: watcher được đăng ký và huỷ, `ChangeList`/`CommitBox` có mặt
+ * trong cây khi vùng soạn mở, hàng WIP mở được vùng đó. Chúng **không** chứng minh
+ * được bất cứ điều gì về **bố cục** — happy-dom không tính CSS và không có cuộn
+ * thật, và đó chính là lý do cả 5 lỗi hiển thị của Phase 3 đi qua 435 test xanh.
+ * Bằng chứng về bố cục chỉ đến từ bước 1 và bước 5 của checkpoint 04-05 Task 3.
+ */
+describe('vòng commit nối vào App (WORK-10, WORK-11)', () => {
+  function moRepo() {
+    useRepoStore.setState({
+      byRepo: { r1: { info: repoInfo('r1'), currentBranch: 'main', error: null } },
+      activeRepoId: 'r1',
+      isOpening: false,
+      recent: [],
+    })
+  }
+
+  /** `RepoStatus` có thay đổi chưa commit → hàng WIP bật. */
+  function coThayDoi() {
+    vi.mocked(ipc.getStatus).mockResolvedValue({
+      branch: { head: 'main', oid: 'c1', upstream: null, ahead: null, behind: null },
+      entries: [
+        { path: 'a.ts', oldPath: null, xy: '.M', group: 'unstaged', hasInvalidUtf8: false },
+        { path: 'moi.ts', oldPath: null, xy: '??', group: 'untracked', hasInvalidUtf8: false },
+      ],
+      hasConflicts: false,
+    })
+  }
+
+  it('gắn kết App thì đăng ký watcher .git đúng MỘT lần (WORK-10)', async () => {
+    moRepo()
+
+    render(<App />)
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(ngheTrangThaiNgoai)).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('unmount App thì huỷ đăng ký watcher — không rò người nghe qua các lần mở', async () => {
+    const huy = vi.fn()
+    vi.mocked(ngheTrangThaiNgoai).mockResolvedValue(huy)
+    moRepo()
+
+    const { unmount } = render(<App />)
+    await vi.waitFor(() => expect(vi.mocked(ngheTrangThaiNgoai)).toHaveBeenCalled())
+
+    unmount()
+
+    // 🔴 Hàm huỷ về tay qua một promise, nên nó có thể tới SAU lúc unmount. Đường
+    // dọn của `App` ghi lại ý định huỷ và `.then` tự gọi khi hàm về — `waitFor`
+    // ở đây kiểm đúng đường đó, không phải một phép gọi đồng bộ.
+    await vi.waitFor(() => expect(huy).toHaveBeenCalledTimes(1))
+  })
+
+  it('watcher phát sự kiện → statusStore nhận trạng thái mới mà KHÔNG gọi thêm git status', async () => {
+    type XuLy = Parameters<typeof ngheTrangThaiNgoai>[0]
+    let phat: XuLy | null = null
+    vi.mocked(ngheTrangThaiNgoai).mockImplementation(async (cb) => {
+      phat = cb
+      return () => {}
+    })
+    moRepo()
+
+    render(<App />)
+    await vi.waitFor(() => expect(phat).not.toBeNull())
+
+    const soLanTruoc = vi.mocked(ipc.getStatus).mock.calls.length
+    const moi: RepoStatus = {
+      branch: { head: 'main', oid: 'c9', upstream: null, ahead: null, behind: null },
+      entries: [
+        { path: 'ngoai.ts', oldPath: null, xy: '.M', group: 'unstaged', hasInvalidUtf8: false },
+      ],
+      hasConflicts: false,
+    }
+
+    await act(async () => {
+      phat!({ repoId: 'r1', status: moi })
+    })
+
+    expect(useStatusStore.getState().byRepo.r1?.status).toEqual(moi)
+    // Tiêu chí 5: watcher phía Rust ĐÃ đọc `git status` rồi mới phát; đọc lại là
+    // một tiến trình thừa và nó còn chậm hơn vì nằm sau 250–300 ms trì hoãn.
+    expect(vi.mocked(ipc.getStatus).mock.calls.length).toBe(soLanTruoc)
+  })
+
+  it('không có thay đổi → vùng chi tiết vẫn là chi tiết commit, chưa có hàng WIP', async () => {
+    moRepo()
+
+    render(<App />)
+
+    await vi.waitFor(() => expect(ipc.listRefs).toHaveBeenCalled())
+    expect(screen.queryByTestId('wip-row')).toBeNull()
+    expect(screen.queryByTestId('change-list')).toBeNull()
+    expect(screen.queryByTestId('commit-box')).toBeNull()
+  })
+
+  it('có thay đổi → hàng WIP hiện, và bấm nó mở ChangeList + CommitBox (WORK-11)', async () => {
+    coThayDoi()
+    moRepo()
+
+    render(<App />)
+
+    const hang = await screen.findByTestId('wip-row')
+    // Vùng soạn CHƯA mở trước khi bấm — nếu nó mở sẵn thì phép bấm dưới đây
+    // không chứng minh gì cả.
+    expect(screen.queryByTestId('commit-box')).toBeNull()
+
+    await act(async () => {
+      hang.click()
+    })
+
+    expect(screen.getByTestId('change-list')).toBeTruthy()
+    expect(screen.getByTestId('commit-box')).toBeTruthy()
+  })
+
+  it('bấm hàng WIP KHÔNG chọn một commit nào — hàng WIP không có SHA', async () => {
+    coThayDoi()
+    moRepo()
+
+    render(<App />)
+    const hang = await screen.findByTestId('wip-row')
+
+    await act(async () => {
+      hang.click()
+    })
+
+    // 🔴 Gọi `onSelect` ở đây buộc phải bịa một commitId, và `CommitDetail` sẽ đi
+    // hỏi backend về một sha không tồn tại.
+    expect(useSelectionStore.getState().selectedByRepo.r1).toBeUndefined()
+  })
+
+  it('đóng vùng soạn → vùng chi tiết quay lại chi tiết commit', async () => {
+    coThayDoi()
+    moRepo()
+
+    render(<App />)
+    const hang = await screen.findByTestId('wip-row')
+    await act(async () => {
+      hang.click()
+    })
+    expect(screen.getByTestId('commit-box')).toBeTruthy()
+
+    await act(async () => {
+      screen.getByLabelText('Đóng vùng soạn commit').click()
+    })
+
+    expect(screen.queryByTestId('commit-box')).toBeNull()
+    expect(screen.queryByTestId('change-list')).toBeNull()
+  })
+
+  it('đổi repo → switchRepo chạy để xả nháp cũ rồi nạp nháp mới (WORK-08)', async () => {
+    moRepo()
+    const { rerender } = render(<App />)
+    await vi.waitFor(() => expect(ipc.listRefs).toHaveBeenCalledWith('r1'))
+
+    useCommitStore.setState({ draftByRepo: { r1: 'nua chung' } })
+
+    await act(async () => {
+      useRepoStore.setState({
+        byRepo: {
+          r1: { info: repoInfo('r1'), currentBranch: 'main', error: null },
+          r2: { info: repoInfo('r2'), currentBranch: 'main', error: null },
+        },
+        activeRepoId: 'r2',
+        isOpening: false,
+        recent: [],
+      })
+      rerender(<App />)
+    })
+
+    // Nháp của r1 KHÔNG được rò sang r2 — tiêu chí thành công số 6.
+    await vi.waitFor(() => {
+      expect(useCommitStore.getState().draftByRepo.r2 ?? '').toBe('')
+    })
+    expect(useCommitStore.getState().draftByRepo.r1).toBe('nua chung')
   })
 })

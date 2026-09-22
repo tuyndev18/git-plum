@@ -25,7 +25,11 @@ import { CommitList, type CommitListHandle } from '@/components/history/CommitLi
 import { CommitDetail } from '@/components/history/CommitDetail'
 import { CommitSearch } from '@/components/history/CommitSearch'
 import { DiffViewer } from '@/components/diff/DiffViewer'
+import { ChangeList } from '@/components/worktree/ChangeList'
+import { CommitBox } from '@/components/worktree/CommitBox'
 import { useDiffStore } from '@/stores/diffStore'
+import { useCommitStore } from '@/stores/commitStore'
+import { noiWatcherVaoStore, useStatusStore } from '@/stores/statusStore'
 
 /**
  * Khung đo của checkpoint #3 (plan 03-01) — nạp lười, **spike tạm thời**.
@@ -70,6 +74,20 @@ export function App() {
   const [logVisible, setLogVisible] = useState(false)
   const [logRefreshKey, setLogRefreshKey] = useState(0)
   const commitListRef = useRef<CommitListHandle>(null)
+
+  /*
+   * Vùng soạn commit đang mở hay không — WORK-11 bước 8 của checkpoint.
+   *
+   * `useState` cấp `App` chứ không phải một store: đây là trạng thái **của một khung
+   * nhìn**, không khoá theo repo và không ai ngoài cây này đọc. `selectionStore` tồn
+   * tại vì `RefSidebar` và `CommitDetail` — hai nhánh anh em — cùng cần một id; ở đây
+   * chỉ có `CommitList` (ghi) và vùng `detail` (đọc), và cả hai là con trực tiếp của
+   * `App`. Thêm một store cho nó là thêm một nguồn sự thật không ai cần.
+   *
+   * Mở lại về `false` khi đổi repo: vùng soạn của repo A không được nằm mở sẵn khi
+   * người dùng vừa chuyển sang repo B. Nháp thì `commitStore.switchRepo` lo giữ.
+   */
+  const [commitBoxOpen, setCommitBoxOpen] = useState(false)
 
   // Trạng thái chọn commit nâng cấp lên `selectionStore` (từ `useState` của
   // plan 02-05) — ARCHITECTURE.md Pattern 3: vùng chi tiết (`CommitDetail`)
@@ -203,6 +221,80 @@ export function App() {
     if (activeRepoId) {
       void useHistoryStore.getState().loadFirstPage(activeRepoId)
     }
+  }, [activeRepoId])
+
+  /**
+   * Nối watcher `.git` của Rust vào `statusStore` — WORK-10, tiêu chí 5.
+   *
+   * # Vì sao **một lần lúc gắn kết**, không theo `activeRepoId`
+   *
+   * `noiWatcherVaoStore` đăng ký **một** người nghe cho **mọi** repo: sự kiện mang
+   * `repoId` của chính nó (xem doc comment của hàm). Đặt `activeRepoId` vào mảng phụ
+   * thuộc sẽ huỷ và đăng ký lại mỗi lần đổi repo — n lần ghi store cho một sự kiện,
+   * đúng thứ hàm đó được viết ra để tránh.
+   *
+   * # 🔴 Huỷ đăng ký phải chịu được việc unmount xảy ra TRƯỚC khi promise xong
+   *
+   * `noiWatcherVaoStore` trả `Promise<() => void>`. Ở chế độ Strict của React 19,
+   * effect chạy → dọn → chạy lại **đồng bộ**, nên lần dọn đầu tiên xảy ra khi promise
+   * còn đang bay và chưa có hàm huỷ nào để gọi. Cờ `daHuy` ghi lại ý định đó, và
+   * `.then` tự huỷ ngay khi hàm huỷ về tay — nếu không, người nghe của lần gắn kết
+   * thứ nhất sống sót vĩnh viễn và mỗi sự kiện ghi store hai lần.
+   *
+   * Lỗi đăng ký watcher **không** dựng banner lỗi: watcher là tiện ích tự làm mới, và
+   * mọi đường ghi (`stage`/`unstage`/`commit`) vẫn tự cập nhật store từ giá trị trả
+   * về. Mất watcher nghĩa là phải bấm làm mới, không phải ứng dụng hỏng.
+   */
+  useEffect(() => {
+    let daHuy = false
+    let huy: (() => void) | null = null
+
+    void noiWatcherVaoStore()
+      .then((fn) => {
+        if (daHuy) fn()
+        else huy = fn
+      })
+      .catch(() => {
+        // Nuốt có chủ ý — xem doc comment trên.
+      })
+
+    return () => {
+      daHuy = true
+      huy?.()
+    }
+  }, [])
+
+  /**
+   * Mở repo → nạp `RepoStatus` lần đầu, và xả/nạp nháp commit.
+   *
+   * # 🔴 Vì sao `App` phải tự gọi `refresh`, dù `ChangeList` cũng gọi
+   *
+   * Bản nối dây đầu tiên để phép gọi này cho `ChangeList` lo, với lý lẽ "gọi thêm ở
+   * `App` là một tiến trình `git status` thừa". Lý lẽ đó **sai**, và ba test đỏ chỉ
+   * đúng chỗ: `ChangeList` chỉ được gắn kết khi vùng soạn **đang mở**, mà đường duy
+   * nhất mở vùng soạn là **bấm hàng WIP**, mà hàng WIP chỉ hiện khi `statusStore` đã
+   * có `RepoStatus`. Ba điều kiện đó khoá vòng vào nhau: mở một repo có thay đổi
+   * chưa commit thì hàng WIP **không bao giờ** xuất hiện, nên không bấm được, nên
+   * `ChangeList` không bao giờ mount, nên không ai gọi `refresh`.
+   *
+   * Hàng WIP là thứ WORK-11 đòi người dùng thấy **ngay khi mở repo** — nó không phải
+   * phần thưởng cho việc đã mở vùng soạn. Nên chủ sở hữu phép nạp đầu tiên là vòng
+   * đời **repo** (`App`), không phải vòng đời của một component có thể chưa tồn tại.
+   *
+   * Phép gọi thứ hai của `ChangeList` lúc nó mount **không** sinh tiến trình thừa:
+   * `statusStore` gộp các `refresh` đang bay theo `repoId` (`dangBay`), và nếu lời
+   * gọi trước đã xong thì đọc lại trạng thái lúc mở một bảng tệp là đúng đắn — người
+   * dùng có thể đã sửa tệp ở terminal trong lúc đó.
+   *
+   * 🔴 `switchRepo`, **không** `hydrate` thẳng: `commitStore.ts` nói rõ mọi đường đổi
+   * repo phải đi qua nó, vì nó `flushDraft()` **trước**. Gọi `hydrate` thẳng làm những
+   * ký tự gõ ngay trước lúc chuyển repo mất cùng phép ghi trì hoãn bị huỷ.
+   */
+  useEffect(() => {
+    if (!activeRepoId) return
+    setCommitBoxOpen(false)
+    void useStatusStore.getState().refresh(activeRepoId)
+    void useCommitStore.getState().switchRepo(activeRepoId)
   }, [activeRepoId])
 
   useEffect(() => {
@@ -385,6 +477,7 @@ export function App() {
                     repoId={activeRepo.info.id}
                     selectedCommitId={selectedCommitId}
                     onSelect={setSelectedCommitId}
+                    onOpenCommitBox={() => setCommitBoxOpen(true)}
                   />
                   {/* Cờ perf tắt → không render và KHÔNG nạp module CodeMirror.
                       `isPerfEnabled()` đọc `localStorage` lúc chạy, nên bật được
@@ -409,12 +502,63 @@ export function App() {
             </main>
           }
           detail={
+            /*
+             * **Quyết định bố cục của Task 2, và vì sao.**
+             *
+             * Vùng soạn commit + ba nhóm tệp chiếm vùng `detail`, **thay** chi tiết
+             * commit, và — như tiền lệ 03-04 đã ghi ngay trên — điều đó đổi thứ render
+             * *bên trong* một vùng chứ **không đổi một dòng nào** trong `AppLayout.tsx`.
+             *
+             * Vì sao `detail` chứ không phải `main`: vùng `main` đang là đồ thị, và
+             * hàng WIP — chỗ vào của cả vòng commit — **nằm trong** đồ thị đó. Đặt vùng
+             * soạn vào `main` sẽ che mất chính hàng vừa bấm để mở nó, và bước 5 của
+             * checkpoint (hàng WIP thẳng cột, cuộn lên xuống) sẽ không quan sát được
+             * cùng lúc với vùng soạn. `detail` giữ đồ thị nguyên vẹn bên trái trong khi
+             * người dùng stage và gõ thông điệp bên phải — hai thứ họ nhìn qua lại
+             * liên tục trong một vòng commit.
+             *
+             * Đổi lại: chi tiết commit bị che khi vùng soạn mở. Nút "Đóng" đưa nó về,
+             * và đó là **cùng** đánh đổi mà diff viewer của 03-04 đã chọn cho `main` —
+             * nên giao diện không mọc thêm một kiểu điều hướng thứ hai.
+             *
+             * 🔴 Đây là **thay đổi bố cục**, và Phase 3 có 5 lỗi hiển thị lọt qua 435
+             * test vì happy-dom không tính CSS layout. Nên đây là **bước 1** của
+             * checkpoint Task 3 để chủ dự án xác nhận hoặc yêu cầu đổi sang `main`.
+             */
             <aside className="pane detail">
-              <h2>Chi tiết</h2>
-              {activeRepo ? (
-                <CommitDetail repoId={activeRepo.info.id} />
+              {activeRepo && commitBoxOpen ? (
+                <>
+                  <div className="detail-header">
+                    <h2>Thay đổi chưa commit</h2>
+                    <button
+                      className="icon-button"
+                      onClick={() => setCommitBoxOpen(false)}
+                      title="Đóng vùng soạn commit"
+                      aria-label="Đóng vùng soạn commit"
+                    >
+                      <IconClose />
+                    </button>
+                  </div>
+                  {/*
+                    `ChangeList` tự gọi `statusStore.refresh(repoId)` lúc gắn kết và
+                    khi `repoId` đổi, nên `App` **không** gọi thêm một lần nữa: đó sẽ
+                    là một tiến trình `git status` thứ hai cho cùng một trạng thái.
+                    `dangBay` trong store gộp hai lời gọi trùng, nhưng dựa vào nó để
+                    che một lời gọi thừa là dựa vào một chi tiết cài đặt.
+                  */}
+                  <ChangeList repoId={activeRepo.info.id} />
+                  <CommitBox repoId={activeRepo.info.id} />
+                </>
+              ) : activeRepo ? (
+                <>
+                  <h2>Chi tiết</h2>
+                  <CommitDetail repoId={activeRepo.info.id} />
+                </>
               ) : (
-                <p className="placeholder">Chọn một repository để xem chi tiết commit.</p>
+                <>
+                  <h2>Chi tiết</h2>
+                  <p className="placeholder">Chọn một repository để xem chi tiết commit.</p>
+                </>
               )}
             </aside>
           }

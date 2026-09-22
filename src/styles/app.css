@@ -2549,3 +2549,28 @@ button:disabled {
 .wip-count-added {
   color: var(--ok, #3fb950);
 }
+
+/* --- Đầu vùng `detail` khi vùng soạn commit đang mở (WORK-11) ----------- */
+
+/**
+ * Hàng tiêu đề của vùng `detail` khi nó đang hiện vùng soạn commit: tiêu đề bên
+ * trái, nút đóng bên phải.
+ *
+ * Vì sao cần một khối riêng thay vì để `h2` đứng một mình như nhánh "Chi tiết":
+ * nhánh này có thêm một nút, và `h2` là phần tử khối nên nút sẽ rơi xuống dòng
+ * dưới, đẩy `ChangeList` xuống thêm một hàng. `.pane h2` đã có `margin-bottom:
+ * 10px`; đặt `margin: 0` cho `h2` bên trong và dời khoảng cách đó lên hộp flex
+ * để chỉ có MỘT nguồn cho khoảng cách dưới tiêu đề — hai nguồn cộng dồn sẽ cho
+ * 20px ở nhánh này và 10px ở nhánh kia, tức hai vùng `detail` so le nhau.
+ */
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.detail-header h2 {
+  margin: 0;
+}

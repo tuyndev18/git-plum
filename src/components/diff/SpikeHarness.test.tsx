@@ -39,6 +39,12 @@ function docAppTsx(): string {
 // khác trong dự án. `spikeBlobPair` có trong danh sách vì `SpikeHarness` gọi nó.
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }))
 
+/*
+ * Bề mặt vòng commit (Phase 4) **thêm vào** mock, không thay gì — cùng lý do và
+ * cùng khuôn với `App.test.tsx`: tệp này render `App` trọn vẹn, nên nó phải mock
+ * mọi thứ `App` đụng tới lúc gắn kết, kể cả những thứ không liên quan gì tới cờ perf
+ * mà nó đang kiểm.
+ */
 vi.mock('@/lib/ipc', () => ({
   ipc: {
     openRepository: vi.fn(),
@@ -51,8 +57,25 @@ vi.mock('@/lib/ipc', () => ({
     getCommitDetail: vi.fn(),
     searchCommits: vi.fn(),
     spikeBlobPair: vi.fn(),
+    getStatus: vi.fn(),
+    stageFiles: vi.fn(),
+    unstageFiles: vi.fn(),
+    getWorktreeDiff: vi.fn(),
+    createCommit: vi.fn(),
+    amendCommit: vi.fn(),
   },
+  ngheTrangThaiNgoai: vi.fn(async () => () => {}),
   describeError: (e: unknown) => String(e),
+  isGitError: () => false,
+}))
+
+vi.mock('@tauri-apps/plugin-store', () => ({
+  load: vi.fn(async () => ({
+    get: vi.fn(async () => undefined),
+    set: vi.fn(async () => undefined),
+    delete: vi.fn(async () => undefined),
+    save: vi.fn(async () => undefined),
+  })),
 }))
 
 vi.mock('@/lib/recentRepos', () => ({

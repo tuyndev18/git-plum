@@ -759,4 +759,57 @@ describe('hàng WIP trong CommitList (WORK-11)', () => {
     const hang = screen.getByTestId('wip-row') as HTMLElement
     expect(hang.style.height).toBe(`${WIP_ROW_HEIGHT}px`)
   })
+
+  it('🔴 độ lệch hàng WIP đi bằng marginTop, KHÔNG paddingTop — lớp lỗi lệch một hàng', () => {
+    /*
+     * # Vì sao một test cho **tên một thuộc tính CSS**
+     *
+     * Các hàng commit là `position: absolute`, và phần tử định vị tuyệt đối neo
+     * theo **padding box** của khối chứa. Nên `paddingTop` dịch chỗ trống mà
+     * **không** dịch các hàng: cột văn bản đứng yên trong khi cột đồ thị — vốn đã
+     * cộng `contentOffset` qua `commitRowY` — dịch xuống đúng 28px. Đó chính là
+     * "cột đồ thị lệch cột văn bản đúng một hàng", lớp lỗi đã xảy ra **hai lần** ở
+     * Phase 2. `marginTop` dịch cả hộp nên hai cột đi cùng nhau.
+     *
+     * Test số học ngay trên KHÔNG bắt được điều này: cả hai cột vẫn gọi cùng
+     * `commitRowY` và vẫn ra cùng một số. Phép lệch xảy ra ở tầng **hộp CSS**, sau
+     * phép tính — nên nó chỉ lộ ra nếu có ai hỏi thẳng "thuộc tính nào".
+     *
+     * ⚠️ Đây vẫn **không** phải bằng chứng hiển thị: happy-dom không tính layout,
+     * nên test này ghim **ý định** (đúng thuộc tính) chứ không chứng minh kết quả
+     * trên màn hình. Bước 5 của checkpoint Task 3 mới làm được điều đó. Nhưng đổi
+     * `marginTop` thành `paddingTop` là một phép sửa **một từ**, và trước test này
+     * nó đi qua toàn bộ bộ test mà không một khẳng định nào đỏ (đột biến M4).
+     */
+    seedRepo('repo-1', [commit('a', 'x'), commit('b', 'y')], [graphRow('a'), graphRow('b')])
+    seedStatus('repo-1', trangThai([muc('x1.txt', '.M', 'unstaged')]))
+
+    const { container } = render(
+      <CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />,
+    )
+
+    // Khối chứa các hàng commit: cha trực tiếp của `.commit-row`.
+    const hangDau = container.querySelector('.commit-row')
+    expect(hangDau, 'tien de: phai co it nhat mot hang commit').not.toBeNull()
+    const khoiNoiDung = hangDau!.parentElement as HTMLElement
+
+    expect(khoiNoiDung.style.marginTop).toBe(`${WIP_ROW_HEIGHT}px`)
+    expect(
+      khoiNoiDung.style.paddingTop,
+      'paddingTop dich cho trong ma KHONG dich cac hang absolute -> lech dung mot hang',
+    ).toBe('')
+  })
+
+  it('không có hàng WIP → khối nội dung KHÔNG lệch (hồi quy: bật tính năng không đổi hành vi cũ)', () => {
+    seedRepo('repo-1', [commit('a', 'x')], [graphRow('a')])
+    // Không seed status → `hasWip` false, đúng trạng thái trước WORK-11.
+
+    const { container } = render(
+      <CommitList repoId="repo-1" selectedCommitId={null} onSelect={vi.fn()} />,
+    )
+
+    const khoiNoiDung = container.querySelector('.commit-row')!.parentElement as HTMLElement
+    expect(khoiNoiDung.style.marginTop === '' || khoiNoiDung.style.marginTop === '0px').toBe(true)
+    expect(khoiNoiDung.style.paddingTop).toBe('')
+  })
 })
