@@ -54,6 +54,7 @@ pub fn run() {
             commands::unstage_files,
             commands::create_commit,
             commands::amend_commit,
+            commands::avatar_hash,
             commands::spike_blob_pair,
         ])
         .run(tauri::generate_context!())

@@ -19,6 +19,7 @@ import { describeError, ipc, type Commit, type CommitDetail as CommitDetailPaylo
 import { useHistoryStore } from '@/stores/historyStore'
 import { useDiffStore } from '@/stores/diffStore'
 import { useSelectionStore } from '@/stores/selectionStore'
+import { Avatar } from '@/components/Avatar'
 import { FileList } from './FileList'
 
 const MAX_CACHE_ENTRIES = 200
@@ -155,8 +156,23 @@ export function CommitDetail({ repoId }: Props) {
 
       <dl className="commit-detail-meta">
         <dt>Tác giả</dt>
-        <dd>
-          {commit.authorName} <span className="commit-detail-email">{commit.authorEmail}</span>
+        <dd className="commit-detail-author">
+          {/*
+            Avatar ở ĐÂY, không ở cột tác giả của danh sách commit.
+
+            Đọc từ ảnh tham chiếu người dùng gửi: GitKraken để cột `AUTHOR`
+            trong danh sách **chỉ có chữ** và dành avatar cho panel chi tiết bên
+            phải, cạnh tên tác giả của commit đang chọn. Đưa avatar vào cột danh
+            sách sẽ tốn một ô 16px trên **mỗi** hàng ở một cột vốn đã bị ép chỗ
+            (xem nguyên nhân B của checkpoint Phase 2: badge ăn hết cột chữ),
+            đổi lại thông tin mà một cái liếc vào panel đã cho.
+
+            Mặc định là avatar tự sinh, không gọi mạng — xem `src/lib/avatar.ts`.
+          */}
+          <Avatar ten={commit.authorName} email={commit.authorEmail} co={20} />
+          <span>
+            {commit.authorName} <span className="commit-detail-email">{commit.authorEmail}</span>
+          </span>
         </dd>
 
         <dt>Thời gian tác giả</dt>

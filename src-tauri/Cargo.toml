@@ -57,6 +57,23 @@ parking_lot = "0.12.5"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# MD5 của email tác giả, cho avatar Gravatar (tuỳ chọn, mặc định tắt).
+#
+# # Vì sao băm ở Rust chứ không ở giao diện
+#
+# Gravatar định danh bằng MD5, và Web Crypto của trình duyệt **không có MD5**
+# (chỉ SHA). Ba đường: tự viết MD5 trong TypeScript, thêm một gói npm, hoặc băm
+# ở đây. Chọn đây vì nó giữ **email tác giả không bao giờ rời khỏi Rust** — lớp
+# giao diện chỉ nhận chuỗi hash. Với một công cụ mã nguồn mở mà người dùng phải
+# tin được, thu hẹp đường đi của dữ liệu cá nhân đáng giá hơn một dependency.
+#
+# Không tự viết MD5: 16 byte đầu ra và một bảng hằng số, nhưng sai một bit thì
+# hash vẫn *trông* hợp lệ và chỉ biểu hiện thành "avatar của người khác" — một
+# lỗi không ai báo vì không ai biết avatar đúng phải là gì. Crate RustCrypto
+# được kiểm nhiều hơn bất cứ thứ gì viết lại ở đây.
+#
+# MD5 ở đây **không** dùng cho mục đích mật mã, chỉ để khớp định danh Gravatar.
+md-5 = "0.10.6"
 # Theo dõi thay đổi trong `.git` — WORK-10. Từ Phase 4 ứng dụng **ghi**, và ghi dựa
 # trên trạng thái cũ thì hỏng repo của người dùng; chủ dự án dùng terminal song song
 # nên đây là ca thường, không phải ca biên.
