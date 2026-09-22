@@ -10,6 +10,7 @@ import { useHistoryStore } from '@/stores/historyStore'
 import { useSelectionStore } from '@/stores/selectionStore'
 import { AppLayout } from '@/components/AppLayout'
 import { CommandLogPanel } from '@/components/CommandLogPanel'
+import { Logo } from '@/components/Logo'
 import { RecentRepoList } from '@/components/RecentRepoList'
 import { RefSidebar } from '@/components/RefSidebar'
 import { CommitList, type CommitListHandle } from '@/components/history/CommitList'
@@ -232,6 +233,7 @@ export function App() {
     <div className="app">
       <header className="toolbar">
         <div className="toolbar-left">
+          <Logo size={20} />
           <span className="brand">git-plum</span>
           {activeRepo && (
             <>
