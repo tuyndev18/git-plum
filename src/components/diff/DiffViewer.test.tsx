@@ -28,7 +28,7 @@
  * 4. **Bốn dạng không phải `text` KHÔNG dựng `EditorView`** (T-03-29).
  */
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { clearCommands } from '@/lib/commands'
@@ -185,18 +185,40 @@ describe('🔴 cổng chống đua — phản hồi về sai thứ tự (T-03-31
 
     // B về trước, rồi A về SAU.
     giaiPhongB(textDiff('b.ts', 'NOI DUNG CUA B'))
-    await waitFor(() => expect(screen.getByTestId('diff-path').textContent).toContain('b.ts'))
+    // 🔴 Đọc `diff-content-path` — nó render từ `diff.path` (DỮ LIỆU đã về).
+    // Lần viết đầu test này đọc `diff-path`, vốn render từ `selectedFile`
+    // (TRẠNG THÁI store) nên nó hiện `b.ts` bất kể phản hồi nào đã ghi đè — và
+    // mutation #4 cho **0 test đỏ**. Cổng đo sai đại lượng, đúng lớp lỗi mà
+    // 03-02 gặp hai lần. Xem SUMMARY mục "cổng xanh sai".
+    await waitFor(() =>
+      expect(screen.getByTestId('diff-content-path').textContent).toBe('b.ts'),
+    )
 
     giaiPhongA(textDiff('a.ts', 'NOI DUNG CUA A'))
-    // Cho microtask của promise A chạy hết.
-    await Promise.resolve()
-    await Promise.resolve()
+
+    /*
+     * Phải chờ React **thật sự flush** một lần render nữa, không chỉ chờ
+     * microtask của promise.
+     *
+     * Ba `await Promise.resolve()` là **không đủ** và đó là lý do mutation #4
+     * cho 0 test đỏ ở lần chạy thứ hai: React 19 gom `setDiff` từ một callback
+     * promise vào một lượt render sau, nên ngay ở cài đặt ĐÃ BỊ đột biến, DOM
+     * vẫn chưa kịp mang `a.ts` lúc `expect` chạy. Test xanh vì đo quá sớm — đúng
+     * lớp lỗi "đo sai thời điểm" mà `measureFirstPaint` của Phase 2 đã dạy (đo
+     * tới `useEffect` đầu tiên thay vì tới lúc có dữ liệu).
+     *
+     * `act()` bọc việc flush, rồi khẳng định trạng thái ĐÃ ỔN ĐỊNH.
+     */
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
 
     expect(
-      screen.getByTestId('diff-path').textContent,
-      'phản hồi của tệp KHÔNG còn được chọn phải bị BỎ, không ghi đè',
-    ).toContain('b.ts')
-    expect(screen.getByTestId('diff-path').textContent).not.toContain('a.ts')
+      screen.getByTestId('diff-content-path').textContent,
+      'nội dung đang hiện phải thuộc tệp ĐANG CHỌN (b.ts). Phản hồi của tệp không ' +
+        'còn được chọn phải bị BỎ, không ghi đè — không có cổng này thì giao diện ' +
+        'hiện diff của tệp khác mà KHÔNG lỗi nào (T-03-31).',
+    ).toBe('b.ts')
   })
 })
 
@@ -214,7 +236,7 @@ describe('🔴 view.destroy() ở cleanup — không rò EditorView (T-03-28)', 
     for (const p of ['b.ts', 'c.ts', 'd.ts']) {
       useDiffStore.setState({ selectedFileByRepo: { r: p } })
       view.rerender(<DiffViewer repoId="r" />)
-      await waitFor(() => expect(screen.getByTestId('diff-path').textContent).toContain(p))
+      await waitFor(() => expect(screen.getByTestId('diff-content-path').textContent).toBe(p))
     }
 
     const { created, destroyed } = __diffViewerStatsForTest

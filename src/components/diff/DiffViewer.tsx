@@ -288,9 +288,28 @@ export function DiffViewer({ repoId }: Props) {
   return (
     <div className="diff-viewer" ref={paneRef}>
       <div className="diff-header">
+        {/*
+          🔴 Đường dẫn hiện ra đọc từ **`diff.path`** (DỮ LIỆU đã về), không từ
+          `selectedFile` (TRẠNG THÁI store). Quan trọng hơn nó trông:
+
+          Một nhãn đọc `selectedFile` luôn hiện tệp *đang chọn* kể cả khi nội dung
+          bên dưới là của tệp **khác** — tức nó **che** đúng cái lỗi mà cổng chống
+          đua (T-03-31) tồn tại để chặn, và làm cổng đó không quan sát được gì.
+          Mutation #4 của plan cho **0 test đỏ** ở lần chạy đầu vì đúng lý do này.
+          Đây là bản sửa, không phải trang trí.
+
+          `diff-content-path` là bằng chứng "nội dung đang hiện thuộc tệp nào", và
+          là thứ test chống đua đọc. `hidden` vì nó chỉ để quan sát — đường dẫn
+          cho người dùng đọc là nhãn phía trên.
+        */}
         <span className="diff-path" data-testid="diff-path">
-          {diff?.oldPath ? `${diff.oldPath} → ${selectedFile}` : selectedFile}
+          {diff?.oldPath ? `${diff.oldPath} → ${diff.path}` : (diff?.path ?? selectedFile)}
         </span>
+        {diff && (
+          <span hidden data-testid="diff-content-path">
+            {diff.path}
+          </span>
+        )}
         <DiffToolbar onNextHunk={onNextHunk} onPrevHunk={onPrevHunk} />
         <button className="diff-close" onClick={() => clearFile(repoId)}>
           Đóng diff
