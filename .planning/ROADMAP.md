@@ -248,7 +248,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Nền tảng và lớp bọc git | 3/4 | In Progress|  |
 | 2. Lịch sử và đồ thị nhánh | 3/7 | In Progress|  |
-| 3. Xem khác biệt | 0/5 | Planned | - |
+| 3. Xem khác biệt | 4/5 | In Progress | - |
 | 4. Vòng lặp commit theo tệp | 0/? | Not started | - |
 | 5. Staging theo khối và an toàn khi huỷ | 0/? | Not started | - |
 | 6. Nhánh, remote và xung đột | 0/? | Not started | - |
