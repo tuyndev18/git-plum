@@ -6,6 +6,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 /** Thông tin một repository đang mở. Khớp `state::RepoInfo` bên Rust. */
 export interface RepoInfo {
@@ -693,4 +694,44 @@ export const ipc = {
    */
   amendCommit: (repoId: string, message: string, noVerify: boolean) =>
     invoke<AmendResult>('amend_commit', { repoId, message, noVerify }),
+}
+
+// --- Sự kiện đi từ Rust RA (Phase 4, WORK-10) ------------------------------
+
+/**
+ * Tên sự kiện Tauri mà watcher `.git` phát — WORK-10.
+ *
+ * 🔴 Là một **hợp đồng** với `src-tauri/src/watch/mod.rs::SU_KIEN_TRANG_THAI_NGOAI`.
+ * Đổi một phía mà không đổi phía kia là lỗi **im lặng hoàn toàn**: `listen` chỉ đơn
+ * giản không bao giờ chạy — không lỗi, không cảnh báo, chỉ một giao diện đứng im.
+ * Có test ghim ở **cả hai** phía, cùng khuôn với `MAX_VISIBLE_LANES`.
+ */
+export const SU_KIEN_TRANG_THAI_NGOAI = 'repo-status-changed'
+
+/** Payload của {@link SU_KIEN_TRANG_THAI_NGOAI}. Khớp `watch::TrangThaiNgoai`. */
+export interface TrangThaiNgoai {
+  repoId: string
+  status: RepoStatus
+}
+
+/**
+ * Nghe sự kiện trạng thái đến từ **bên ngoài** ứng dụng (người dùng chạy git ở
+ * terminal) — WORK-10.
+ *
+ * Trả hàm huỷ đăng ký. Chỗ gọi **phải** gọi nó lúc unmount: `listen` đăng ký ở tầng
+ * webview và không tự dọn theo vòng đời component, nên bỏ sót là một handler tích luỹ
+ * mỗi lần mount — và mỗi handler ghi vào store, nên n handler = n lần ghi cho một sự
+ * kiện.
+ *
+ * 🔴 Đây là đường **một chiều: đọc rồi ghi vào store.** Nó **không** được gọi một lệnh
+ * ghi nào — đó là lớp phòng thủ R2 nhìn từ phía giao diện, và nó khớp với bất biến
+ * cùng tên ở `watch/mod.rs`.
+ *
+ * **Không** cần thêm quyền vào capability file: sự kiện đi từ Rust **ra**, và
+ * `core:default` đã phủ `listen`.
+ */
+export function ngheTrangThaiNgoai(
+  xuLy: (payload: TrangThaiNgoai) => void,
+): Promise<UnlistenFn> {
+  return listen<TrangThaiNgoai>(SU_KIEN_TRANG_THAI_NGOAI, (e) => xuLy(e.payload))
 }

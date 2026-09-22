@@ -107,6 +107,18 @@ pub struct AppState {
     /// hiển thị; `DiffCache` giữ 200 mục cỡ KB với quy tắc LRU thuần. Gộp chúng lại
     /// buộc một trong hai phải chịu quy tắc của cái kia. Xem `cache::diff_cache`.
     pub diff_cache: Arc<crate::cache::DiffCache>,
+
+    /// Các watcher `.git` đang sống, khoá theo `RepoId` — WORK-10.
+    ///
+    /// 🔴 **Tích luỹ theo số repo mở**, không phải một cái duy nhất: `open_repo` dùng
+    /// `or_insert_with` nên mở một đường dẫn **khác** thêm một mục mà không bỏ mục cũ,
+    /// và `close_repo` chỉ chạy từ lệnh "Đóng repository" tường minh. Mở 5 repo trong
+    /// một phiên = **5 watcher sống**, mỗi cái giữ một handle `ReadDirectoryChangesW`.
+    ///
+    /// Nằm ở đây, cạnh hai cache, vì nó chịu **cùng** vòng đời: [`Self::close_repo`]
+    /// phải giải phóng cả ba, và gom chúng vào một chỗ làm việc bỏ sót khó xảy ra hơn.
+    /// Xem doc comment module `crate::watch`.
+    pub watchers: Arc<crate::watch::SoTayWatcher>,
 }
 
 impl AppState {
@@ -117,6 +129,7 @@ impl AppState {
             command_log: Arc::new(CommandLog::new()),
             cache: Arc::new(crate::cache::RepoCache::new()),
             diff_cache: Arc::new(crate::cache::DiffCache::new()),
+            watchers: Arc::new(crate::watch::SoTayWatcher::new()),
         }
     }
 
@@ -163,10 +176,18 @@ impl AppState {
     /// 200 mục và chặn trên của nó là toàn cục chứ không theo repo — bỏ sót ở đây thì
     /// các mục của repo đã đóng vẫn chiếm chỗ và đẩy mục của repo đang mở ra sớm hơn
     /// cần thiết, tức người dùng mất cache hit ở repo họ đang thật sự dùng.
+    ///
+    /// 🔴 **Và watcher `.git` (WORK-10).** Đây là ca nặng hơn hai cache: một watcher
+    /// giữ một handle `ReadDirectoryChangesW` của hệ điều hành cộng buffer cho mỗi
+    /// đường theo dõi, và đây là **đường gọi duy nhất** giải phóng nó. Bỏ sót thì
+    /// mở/đóng lặp lại rò rỉ handle mà **không** lỗi, **không** log — chỉ một tiến
+    /// trình lớn dần. Có test ghim (`watch::tests::dung_giai_phong_watcher` và
+    /// `mo_dong_lap_lai_khong_tich_luy`).
     pub fn close_repo(&self, id: &str) {
         self.open_repos.write().remove(id);
         self.cache.invalidate(id);
         self.diff_cache.invalidate_repo(id);
+        self.watchers.dung(id);
         let mut active = self.active_repo.write();
         if active.as_deref() == Some(id) {
             *active = None;
@@ -315,6 +336,71 @@ mod tests {
         assert!(
             state.diff_cache.get_diff(&khoa_b).is_some(),
             "mục của repo còn mở KHÔNG được đụng tới"
+        );
+    }
+
+    /// 🔴 Đóng repository cũng phải giải phóng **watcher `.git`** của nó — WORK-10.
+    ///
+    /// Nặng hơn hai cache ở trên: một watcher giữ một handle `ReadDirectoryChangesW`
+    /// của hệ điều hành, không chỉ RAM trong tiến trình. Và `close_repo` là **đường
+    /// gọi duy nhất** hiện có giải phóng nó, nên bỏ sót ở đây rò rỉ hoàn toàn im lặng:
+    /// không lỗi, không log, chỉ một handle mỗi lần mở/đóng.
+    #[test]
+    fn closing_repo_stops_its_watcher() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(tmp.path().join(".git")).expect("mkdir .git");
+
+        let state = AppState::new();
+        let h = state.open_repo(tmp.path());
+
+        state
+            .watchers
+            .bat_dau(h.id.clone(), tmp.path(), |_| {})
+            .expect("bắt đầu theo dõi");
+        assert!(
+            state.watchers.dang_theo_doi(&h.id),
+            "tiền đề: watcher đang sống"
+        );
+
+        state.close_repo(&h.id);
+
+        assert!(
+            !state.watchers.dang_theo_doi(&h.id),
+            "đóng repository phải DỪNG watcher của nó — nếu không, mở/đóng lặp lại là \
+             rò rỉ handle hệ điều hành"
+        );
+        assert_eq!(state.watchers.so_luong(), 0);
+    }
+
+    /// Đóng một repo **không** đụng watcher của repo còn mở. Cùng phép phân biệt với
+    /// `closing_repo_frees_its_diff_cache`: một `close_repo` dọn sạch **mọi** watcher
+    /// cũng thoả test trên, và nó sẽ làm repo còn mở im lặng ngừng cập nhật.
+    #[test]
+    fn closing_one_repo_leaves_other_watchers_alive() {
+        let tmp_a = tempfile::tempdir().expect("tempdir a");
+        let tmp_b = tempfile::tempdir().expect("tempdir b");
+        std::fs::create_dir_all(tmp_a.path().join(".git")).expect("mkdir .git a");
+        std::fs::create_dir_all(tmp_b.path().join(".git")).expect("mkdir .git b");
+
+        let state = AppState::new();
+        let a = state.open_repo(tmp_a.path());
+        let b = state.open_repo(tmp_b.path());
+        state
+            .watchers
+            .bat_dau(a.id.clone(), tmp_a.path(), |_| {})
+            .expect("a");
+        state
+            .watchers
+            .bat_dau(b.id.clone(), tmp_b.path(), |_| {})
+            .expect("b");
+        assert_eq!(state.watchers.so_luong(), 2, "tiền đề: hai watcher sống");
+
+        state.close_repo(&a.id);
+
+        assert!(!state.watchers.dang_theo_doi(&a.id));
+        assert!(
+            state.watchers.dang_theo_doi(&b.id),
+            "watcher của repo CÒN MỞ không được đụng tới"
         );
     }
 

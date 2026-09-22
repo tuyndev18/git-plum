@@ -15,7 +15,11 @@ use crate::state::{AppState, CommandLogEntry, RepoInfo};
 /// Kiểm tra đường dẫn thật sự là một repository trước khi ghi vào trạng thái.
 /// Thư mục không hợp lệ phải trả lỗi đọc hiểu được, không được treo (PLAT-10).
 #[tauri::command]
-pub async fn open_repository(path: String, state: State<'_, AppState>) -> Result<RepoInfo> {
+pub async fn open_repository(
+    path: String,
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<RepoInfo> {
     // `rev-parse --show-toplevel` vừa xác nhận đây là repository, vừa trả về
     // thư mục gốc — mở một thư mục con thì vẫn ra đúng repository cha.
     let out = GitCommand::new(&path)
@@ -46,7 +50,76 @@ pub async fn open_repository(path: String, state: State<'_, AppState>) -> Result
     }
 
     let handle = state.open_repo(&toplevel);
+
+    // Bắt đầu theo dõi `.git` — WORK-10.
+    //
+    // 🔴 Thất bại ở đây **không** làm hỏng việc mở repo. Watcher là lớp phòng thủ, còn
+    // đường chính là "thao tác ghi trả trạng thái trực tiếp" (ràng buộc 2.5). Một
+    // repository mở được nhưng không theo dõi được (đĩa mạng, quyền, giới hạn handle)
+    // vẫn phải **dùng được** — chỉ là không tự cập nhật khi người dùng chạy git ở
+    // terminal. Trả lỗi ở đây sẽ biến một suy giảm thành một lỗi chặn.
+    if let Err(loi) = khoi_dong_watcher(&app, &state, &handle) {
+        tracing::warn!(%loi, repo = %handle.id, "không theo dõi được .git — repo vẫn dùng được");
+    }
+
     Ok(RepoInfo::from(handle.as_ref()))
+}
+
+/// Bắt đầu theo dõi `.git` của một repository và nối sự kiện lên giao diện.
+///
+/// # 🔴 Callback chỉ ĐỌC rồi PHÁT — nó không bao giờ ghi
+///
+/// Đây là lớp phòng thủ thứ hai của R2 (vòng lặp ghi → sự kiện → đọc → ghi), và nó là
+/// một bất biến về **cấu trúc**: thân callback dưới đây gọi `lay_trang_thai` (lệnh
+/// đọc, đi qua `runner.read`) rồi `emit`. Không có đường nào để một sự kiện sinh ra
+/// một sự kiện. Có cổng ghim ở `worktree.rs` rằng `lay_trang_thai` **không** giữ khoá
+/// ghi — giữ khoá ở đó sẽ làm watcher bị chặn bởi chính thao tác đã sinh ra sự kiện
+/// nó đang xử lý.
+fn khoi_dong_watcher(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    handle: &Arc<crate::state::RepoHandle>,
+) -> std::result::Result<(), String> {
+    let app = app.clone();
+    let repo = Arc::clone(handle);
+
+    state
+        .watchers
+        .bat_dau(handle.id.clone(), &handle.path.clone(), move |repo_id| {
+            let app = app.clone();
+            let repo = Arc::clone(&repo);
+
+            // Callback của debouncer chạy trên luồng **đồng bộ** của nó, còn
+            // `lay_trang_thai` là `async`. Đẩy sang runtime của Tauri thay vì chặn
+            // luồng theo dõi — chặn nó làm sự kiện kế tiếp xếp hàng phía sau một
+            // tiến trình `git status`.
+            tauri::async_runtime::spawn(async move {
+                // `Manager` là trait mang `try_state`; import cục bộ để không mở rộng
+                // bề mặt trait ở cấp module.
+                use tauri::Manager as _;
+
+                let Some(state) = app.try_state::<AppState>() else {
+                    return;
+                };
+
+                match crate::commands::worktree::lay_trang_thai(&state, repo).await {
+                    Ok(status) => {
+                        let payload = crate::watch::TrangThaiNgoai { repo_id, status };
+                        if let Err(e) =
+                            tauri::Emitter::emit(&app, crate::watch::SU_KIEN_TRANG_THAI_NGOAI, payload)
+                        {
+                            tracing::warn!(?e, "không phát được sự kiện trạng thái");
+                        }
+                    }
+                    Err(e) => {
+                        // Đọc thất bại **không** làm sập ứng dụng: người dùng có thể
+                        // đang `git rebase` ở terminal và `index.lock` đang giữ.
+                        // Lần sự kiện kế tiếp sẽ đọc lại.
+                        tracing::warn!(?e, "đọc trạng thái sau sự kiện watcher thất bại");
+                    }
+                }
+            });
+        })
 }
 
 /// Danh sách repository đang mở. v1 chỉ có tối đa một, nhưng API trả về danh

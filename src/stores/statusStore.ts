@@ -35,7 +35,12 @@
  */
 
 import { create } from 'zustand'
-import { describeError, ipc, type RepoStatus } from '@/lib/ipc'
+import {
+  describeError,
+  ipc,
+  ngheTrangThaiNgoai,
+  type RepoStatus,
+} from '@/lib/ipc'
 
 interface StatusSlice {
   /** `undefined` = chưa nạp lần nào. Khác `entries: []` nghĩa là "đã nạp, repo sạch". */
@@ -134,6 +139,31 @@ export const useStatusStore = create<StatusState>((set, get) => ({
       return { byRepo: rest }
     }),
 }))
+
+/**
+ * Nối watcher `.git` của Rust vào [`applyExternal`] — WORK-10.
+ *
+ * Gọi **một lần** lúc ứng dụng khởi động; trả hàm huỷ đăng ký.
+ *
+ * # 🔴 Vì sao `applyExternal` chứ không phải `refresh`
+ *
+ * Watcher phía Rust **đã đọc** `git status` rồi mới phát sự kiện — payload mang sẵn
+ * `RepoStatus` mới. Gọi `refresh` ở đây sinh **thêm** một tiến trình `git status` cho
+ * một trạng thái ta vừa nhận xong, và nó chạy sau 250–300 ms trì hoãn của watcher nên
+ * nó còn **chậm hơn**. Đó đúng là lý do `applyExternal` được khai tách riêng ở 04-02.
+ *
+ * # Không nối vào repo cụ thể nào
+ *
+ * Sự kiện mang `repoId` của chính nó, nên một đăng ký phục vụ **mọi** repo đang mở —
+ * đúng khuôn tích luỹ của watcher phía Rust (mở 5 repo = 5 watcher, nhưng vẫn **một**
+ * đăng ký ở đây). Đăng ký theo repo sẽ là n đăng ký cho n repo và n lần ghi store cho
+ * một sự kiện.
+ */
+export function noiWatcherVaoStore(): Promise<() => void> {
+  return ngheTrangThaiNgoai(({ repoId, status }) => {
+    useStatusStore.getState().applyExternal(repoId, status)
+  })
+}
 
 type Set = (fn: (s: StatusState) => Partial<StatusState>) => void
 type Get = () => StatusState
