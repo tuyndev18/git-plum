@@ -31,27 +31,31 @@ export function Logo({ size = 20, className }: LogoProps) {
       aria-hidden="true"
       focusable="false"
     >
+      {/* Thân quả mận — hình học khớp src/assets/logo-mark.svg */}
       <path
-        d="M32,25 C37,25 40,27 39,32 C38,36 42,34 47,39 C47,47 40,53 32,53 C24,53 17,47 17,39 C17,32 21,26 27,25 C29,24.5 30.5,24.7 32,25 Z"
+        d="M32,22 C41.5,22 49,28.5 49,37 C49,45.5 41.5,52 32,52 C22.5,52 15,45.5 15,37 C15,28.5 22.5,22 32,22 Z"
         fill="var(--accent)"
       />
-      <path d="M32,25 L32,16" fill="none" stroke="var(--success)" strokeWidth={3.5} strokeLinecap="round" />
+      {/* Rãnh dọc mặt trước quả */}
       <path
-        d="M32,16 C32,11 26,8 22,7"
+        d="M34,23 C31,30.5 31,44 34,51"
         fill="none"
-        stroke="var(--success)"
-        strokeWidth={3.5}
+        stroke="var(--accent-dim)"
+        strokeWidth={2.2}
         strokeLinecap="round"
       />
+      {/* Nhánh git: thân chính thẳng đứng + một nhánh rẽ phải (bất đối xứng
+          có chủ ý — xem chú thích hình học ở logo-mark.svg) */}
+      <path d="M32,23 L32,13" fill="none" stroke="var(--success)" strokeWidth={3} strokeLinecap="round" />
       <path
-        d="M32,16 C32,12 39,10 44,9"
+        d="M32,20 C36,20 41,19 43,15"
         fill="none"
         stroke="var(--success)"
-        strokeWidth={3.5}
+        strokeWidth={3}
         strokeLinecap="round"
       />
-      <circle cx={22} cy={7} r={3.5} fill="var(--success)" />
-      <circle cx={44} cy={9} r={3.5} fill="var(--success)" />
+      <circle cx={32} cy={11} r={4} fill="var(--success)" />
+      <circle cx={44} cy={13} r={3.5} fill="var(--success)" />
     </svg>
   )
 }

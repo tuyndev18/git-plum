@@ -6,21 +6,36 @@ của logo hiện có.
 
 ## 1. Khái niệm
 
-Logo là **quả mận + nhánh git**: thân quả mận tròn (hơi lệch, có một đường
-cleft lõm vào một bên — quả mận thật không tròn hoàn hảo và luôn có một rãnh
-dọc), và từ đỉnh quả mận (chỗ cuống trái cây thật mọc lên) vươn ra một đường
-nhánh git rẽ đôi, mang 2 nút commit — một trên mỗi nhánh.
+Logo là **quả mận + nhánh git**: thân quả mận bầu dục bè ngang, có một **rãnh
+dọc chạy mặt trước** (quả mận thật luôn có rãnh này, chạy dọc mặt quả — nó
+KHÔNG phải vết khuyết cắt vào đường bao), và từ đỉnh quả vươn lên một thân
+nhánh git thẳng đứng mang nút commit gốc, rồi rẽ một nhánh sang phải mang nút
+commit con.
 
 Ý đồ: logo phải đọc được là **VỪA quả mận VỪA đồ thị commit** cùng lúc, không
 phải một quả mận với một đường kẻ gắn thêm cho có. Đường nhánh mọc ra từ đúng
-điểm cuống tự nhiên của quả mận (đỉnh, chỗ có "dimple" — vết lõm nhỏ khi cuống
-rời khỏi quả) rồi mới rẽ nhánh, để cảm giác nó "mọc" ra như một cái cuống thật,
-không phải một cái que cắm cạnh.
+điểm cuống tự nhiên của quả mận rồi mới rẽ, để cảm giác nó "mọc" ra như một
+cái cuống thật, không phải một cái que cắm cạnh.
 
-Hình học gốc: `src/assets/logo-mark.svg`, `viewBox="0 0 64 64"`. Thân mận nằm
-trong khung x:17–47, y:24.7–53 — **sà xuống thấp có chủ ý**: nhánh git chiếm
-phần trên của viewBox, nên thân đặt lệch xuống mới cân đối về thị giác (căn
-giữa toán học sẽ làm cả khối trông lệch lên trên).
+Hình học gốc: `src/assets/logo-mark.svg`, `viewBox="0 0 64 64"`. Thân mận là
+bầu dục 34×30, tâm (32,37).
+
+### Hai ràng buộc hình học đã trả giá để học
+
+Hai bản nháp đầu đều hỏng theo cách chỉ nhìn ảnh render mới thấy, sửa hình học
+phải giữ lại cả hai:
+
+1. **Nhánh git phải BẤT ĐỐI XỨNG** — một thân chính thẳng đứng, một nhánh rẽ
+   ra *một* bên. Bản nháp cho hai cuống toả đều sang hai bên (và bản sau cho
+   hai nhánh cùng vươn chéo lên) đều đọc ra **râu côn trùng**, không ra đồ
+   thị: mắt người gộp hai nét đối xứng thành một cặp. Đồ thị commit thật cũng
+   luôn có một lane chính + nhánh rẽ ra một bên.
+2. **Nhánh rẽ phải đi CHÉO LÊN, không nằm ngang.** Bản nháp cho nhánh này gần
+   nằm ngang (y 19 → 16) và nó đọc ra một sợi dây có hạt ở đầu.
+
+Ngoài ra, rãnh quả phải vẽ *đè lên mặt* thân (một nét stroke màu
+`--accent-dim`), không được cắt lõm vào đường bao thân: bản nháp đầu khoét
+đường bao ở góc trên phải và trông đúng như một lỗi render.
 
 ## 2. Tên hiển thị
 

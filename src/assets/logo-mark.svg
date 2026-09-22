@@ -1,34 +1,59 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <!--
-    git-plum brand mark (D-01). Thân quả mận + nhánh git rẽ đôi mang 2 nút
+    git-plum brand mark (D-01). Thân quả mận + nhánh git rẽ nhánh mang nút
     commit. Nền trong suốt — dùng trong app (xem src/components/Logo.tsx).
     Toạ độ tay vẽ, xem docs/BRAND.md mục "Hai biến thể tệp".
+
+    Hình học (PHẢI khớp logo-icon.svg và src/components/Logo.tsx):
+    - Thân: bầu dục bè ngang 34x30, tâm (32,37) — mận bè ngang, không tròn
+      như anh đào. Hai cung Bézier đối xứng.
+    - Rãnh: đường dọc chạy mặt TRƯỚC quả, lệch phải 2 đơn vị theo phối cảnh
+      3/4. Đây là rãnh thật của quả mận, không phải vết khuyết ở đường viền —
+      bản nháp đầu cắt lõm vào đường bao và trông như lỗi render.
+    - Nhánh git: một thân chính THẲNG ĐỨNG lên nút gốc (32,11), một nhánh rẽ
+      phải lên nút con (44,13). Bất đối xứng có chủ ý: đã thử hai phương án
+      đối xứng, cả hai đều đọc ra râu côn trùng vì mắt người gộp hai nét đối
+      xứng thành một cặp. Đồ thị commit thật có một lane chính + nhánh rẽ ra
+      một bên.
   -->
+
+  <!-- Thân quả mận: bầu dục bè ngang 34x30, tâm (32,37) -->
   <path
-    d="M32,25 C37,25 40,27 39,32 C38,36 42,34 47,39 C47,47 40,53 32,53 C24,53 17,47 17,39 C17,32 21,26 27,25 C29,24.5 30.5,24.7 32,25 Z"
+    d="M32,22
+       C41.5,22 49,28.5 49,37
+       C49,45.5 41.5,52 32,52
+       C22.5,52 15,45.5 15,37
+       C15,28.5 22.5,22 32,22 Z"
     fill="var(--accent)"
   />
+
+  <!-- Rãnh dọc mặt trước quả — tối hơn thân, cùng màu hệ -->
   <path
-    d="M32,25 L32,16"
+    d="M34,23 C31,30.5 31,44 34,51"
     fill="none"
-    stroke="var(--success)"
-    stroke-width="3.5"
+    stroke="var(--accent-dim)"
+    stroke-width="2.2"
     stroke-linecap="round"
   />
+
+  <!-- Nhánh git: thân chính từ hõm cuống lên nút gốc -->
   <path
-    d="M32,16 C32,11 26,8 22,7"
+    d="M32,23 L32,13"
     fill="none"
     stroke="var(--success)"
-    stroke-width="3.5"
+    stroke-width="3"
     stroke-linecap="round"
   />
+
+  <!-- Nhánh rẽ phải: tách khỏi thân ở giữa, cong lên nút con -->
   <path
-    d="M32,16 C32,12 39,10 44,9"
+    d="M32,20 C36,20 41,19 43,15"
     fill="none"
     stroke="var(--success)"
-    stroke-width="3.5"
+    stroke-width="3"
     stroke-linecap="round"
   />
-  <circle cx="22" cy="7" r="3.5" fill="var(--success)" />
-  <circle cx="44" cy="9" r="3.5" fill="var(--success)" />
+
+  <circle cx="32" cy="11" r="4" fill="var(--success)" />
+  <circle cx="44" cy="13" r="3.5" fill="var(--success)" />
 </svg>
