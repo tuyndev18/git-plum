@@ -61,6 +61,34 @@ export type GitErrorCode =
   | 'unknown_repository'
   | 'parse_failed'
   | 'io'
+  /**
+   * Thông điệp commit rỗng hoặc chỉ khoảng trắng — WORK-08.
+   *
+   * Lỗi **trước** khi chạy git, mã riêng. R5 của `CONTEXT.md`: **không tự sửa thông
+   * điệp**, không tự thêm nội dung. Gộp nó vào `command_failed` sẽ khiến giao diện
+   * hiện stderr thô của git cho một ca mà ta biết chính xác vấn đề là gì.
+   */
+  | 'empty_message'
+  /**
+   * Không có gì để commit (không tệp nào đã stage).
+   *
+   * Mã riêng vì câu đúng cho người dùng là "hãy stage một tệp trước", không phải một
+   * dòng stderr của git.
+   */
+  | 'nothing_to_commit'
+  /**
+   * Hook `pre-commit` hoặc `commit-msg` **từ chối** — WORK-08, ràng buộc 2.4.
+   *
+   * 🔴 `message` mang **nguyên văn** stdout+stderr của hook. Với người dùng đây là
+   * một **thông báo cần đọc**, không phải lỗi của ứng dụng: chính họ (hoặc dự án của
+   * họ) viết hook đó, và đầu ra của nó có xuống dòng và thụt lề **mang nghĩa**. Giao
+   * diện hiện nó trong `<pre>`.
+   *
+   * Mã riêng vì `git commit` thoát khác 0 vì **nhiều** nguyên nhân — hook, không có
+   * gì để commit, `index.lock`, thông điệp sai. Gán một nguyên nhân cho mọi exit
+   * khác 0 là đúng lỗi KB-4b mà `CONTEXT.md` mục 0 cấm lặp lại.
+   */
+  | 'hook_rejected'
 
 /** Nhận biết lỗi đến từ lớp Rust, phân biệt với lỗi JavaScript thường. */
 export function isGitError(e: unknown): e is GitErrorPayload {
@@ -481,6 +509,33 @@ export interface RepoStatus {
   hasConflicts: boolean
 }
 
+/**
+ * Kết quả của `amendCommit` — WORK-09. Khớp `commands::commit::AmendResult`.
+ *
+ * 🔴 `wasPushed` là một **cảnh báo**, không phải một phép chặn.
+ *
+ * Nguyên văn ROADMAP: amend trên commit đã push **cảnh báo nhưng KHÔNG chặn**. Nên
+ * trường này về cùng **kết quả của một thao tác đã chạy xong**, không phải một câu
+ * hỏi trước khi chạy. Người dùng biết họ đang làm gì; một hộp thoại "bạn có chắc?"
+ * ở đây là sai yêu cầu, và nó là bước đầu của việc chặn.
+ *
+ * Suy từ `BranchInfo` của **cùng** lời gọi status, **không** phải một lệnh git thứ
+ * hai — cùng tinh thần với ràng buộc đếm của WORK-11.
+ */
+export interface AmendResult {
+  /** Trạng thái **sau** khi amend. Cùng ràng buộc 2.5 với mọi lệnh ghi khác. */
+  status: RepoStatus
+  /**
+   * `true` khi nhánh có upstream **và** `ahead === 0` — tức commit vừa bị viết lại
+   * là commit người khác đã thấy.
+   *
+   * 🔴 `ahead === null` (không có upstream) → `false`, **không** `true`. Dòng
+   * `# branch.ab` vắng mặt hoàn toàn khi không có upstream; git không in `+0 -0`.
+   * Đột biến M11 ghim ca này.
+   */
+  wasPushed: boolean
+}
+
 // --- Các lệnh -------------------------------------------------------------
 
 export const ipc = {
@@ -545,6 +600,23 @@ export const ipc = {
   spikeBlobPair: (repoId: string, commitId: string, path: string) =>
     invoke<SpikeBlobPair>('spike_blob_pair', { repoId, commitId, path }),
 
+  // --- Avatar ---
+
+  /**
+   * MD5 của một email, cho URL Gravatar.
+   *
+   * 🔴 **Chỉ gọi khi người dùng đã bật Gravatar**, và chỉ cho commit đang chọn.
+   *
+   * Vì sao là một command riêng chứ không phải một trường trên `Commit`: hash
+   * hex là 32 ký tự, nên gắn nó vào mỗi bản ghi thêm ~3,2MB JSON trên repo
+   * 100k commit — cho một tính năng **mặc định tắt**, trên đúng đường nóng của
+   * Core Value. Xem doc comment đầy đủ ở `src-tauri/src/commands/avatar.rs`.
+   *
+   * Băm ở Rust để **email không bao giờ rời khỏi Rust**: Web Crypto của trình
+   * duyệt không có MD5, nên đường thay thế là gửi email sang đây để băm.
+   */
+  avatarHash: (email: string) => invoke<string>('avatar_hash', { email }),
+
   // --- Thư mục làm việc (Phase 4) ---
   //
   // 🔴 `stageFiles` và `unstageFiles` trả **`RepoStatus` mới**, không trả `void`.
@@ -583,4 +655,42 @@ export const ipc = {
    */
   getWorktreeDiff: (repoId: string, path: string, staged: boolean) =>
     invoke<FileDiff>('get_worktree_diff', { repoId, path, staged }),
+
+  // --- Vòng commit (Phase 4, WORK-08 / WORK-09) ---
+  //
+  // Cả hai là **lệnh ghi** và trả trạng thái **mới** trực tiếp — ràng buộc 2.5 của
+  // `CONTEXT.md`, cùng lập luận đã ghi ở `stageFiles` phía trên: chờ watcher làm
+  // giao diện trễ 250–300 ms sau mỗi cú bấm, và watcher chết thì giao diện đứng im
+  // mà không ai biết.
+
+  /**
+   * Tạo commit từ những tệp **đã stage** — WORK-08. Trả trạng thái **mới**.
+   *
+   * 🔴 `noVerify` **mặc định `false`**, và đó là một quyết định của ROADMAP chứ
+   * không phải một giá trị mặc định tiện tay: hook `pre-commit` và `commit-msg`
+   * chạy **MẶC ĐỊNH**, và `no-verify` là công tắc **tường minh** người dùng phải tự
+   * bật. Bỏ hook là bỏ một trong những lý do dự án chọn `git` CLI thay vì libgit2.
+   *
+   * Tham số được khai **bắt buộc** ở đây, không có giá trị mặc định trong TypeScript:
+   * mặc định nằm ở ô tick của `CommitBox` (tắt) và ở chữ ký Rust. Thêm `= false`
+   * ở đây nghĩa là có **hai** chỗ khai cùng một mặc định, và chúng lệch nhau được.
+   *
+   * Hook từ chối → ném `GitErrorPayload` mã `hook_rejected`, `message` mang
+   * **nguyên văn** đầu ra hook. Thông điệp người dùng vừa gõ **không** bị mất — đó là
+   * việc của `commitStore`, và đột biến M6 ghim nó.
+   */
+  createCommit: (repoId: string, message: string, noVerify: boolean) =>
+    invoke<RepoStatus>('create_commit', { repoId, message, noVerify }),
+
+  /**
+   * Sửa commit gần nhất — WORK-09. Trả `AmendResult`, **không** chỉ `RepoStatus`.
+   *
+   * Kiểu trả về khác `createCommit` vì `wasPushed` chỉ có nghĩa ở đường amend.
+   * Nhồi nó vào `RepoStatus` sẽ đặt một trường luôn `false` lên mọi lời gọi
+   * `getStatus`, và trường luôn `false` là trường không ai kiểm.
+   *
+   * Command **không chặn** trong bất kỳ ca nào — xem `AmendResult.wasPushed`.
+   */
+  amendCommit: (repoId: string, message: string, noVerify: boolean) =>
+    invoke<AmendResult>('amend_commit', { repoId, message, noVerify }),
 }
