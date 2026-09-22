@@ -52,11 +52,23 @@ async fn text_simple_tra_hunk_da_phan_tich() {
         .await
         .expect("tệp văn bản bị sửa phải trả Ok");
 
-    let DiffKind::Text { hunks, truncated } = &fd.kind else {
+    let DiffKind::Text {
+        hunks,
+        truncated,
+        context_only,
+    } = &fd.kind
+    else {
         panic!("phải là kind `text`, nhận: {:?}", fd.kind);
     };
     assert!(!hunks.is_empty(), "phải có ít nhất một hunk");
     assert!(!truncated, "bản vá nhỏ không được bị cắt");
+    // `text-simple.txt` là tệp mẫu vài dòng, tức dưới `MAX_BYTE_TOAN_TEP` (512 KB) rất
+    // xa — nên nó phải đi đường **toàn tệp**. `context_only == true` ở đây nghĩa là
+    // ngưỡng đang kích hoạt sai và mọi tệp bình thường bị rút gọn.
+    assert!(
+        !context_only,
+        "tệp mẫu vài dòng phải hiện toàn tệp, không phải diff rút gọn"
+    );
     assert_eq!(fd.path, "text-simple.txt");
 
     // Giao diện dựng hai cột từ số dòng — kiểm chúng có mặt, không chỉ kiểm có hunk.

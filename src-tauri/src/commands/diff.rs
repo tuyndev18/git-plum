@@ -86,6 +86,75 @@ const LFS_MAGIC: &[u8] = b"version https://git-lfs.github.com/spec/v1";
 /// bao giờ lệch nhau.
 const CAY_RONG: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
+/// Số dòng ngữ cảnh khi hiện **toàn tệp** — mặc định của trình xem.
+///
+/// # Vì sao toàn tệp, không phải `--unified=3`
+///
+/// Người dùng báo (2026-09-22): *"đáng nhẽ nó phải diff toàn bộ file chứ nhỉ đâu chỉ là
+/// mỗi phần thay đổi đâu"*. Với `--unified=3`, trình xem chỉ hiện các khối đổi kèm 3 dòng
+/// ngữ cảnh, nên **số dòng nhảy** (đo trên ảnh người dùng gửi: 5 → 24 → 37 → 39) và người
+/// đọc mất ngữ cảnh của tệp. Ảnh tham chiếu ở `docs/screenshots/` hiện toàn tệp, số dòng
+/// chạy liên tục.
+///
+/// # Vì sao 1 000 000, không phải `usize::MAX`
+///
+/// `git diff -U<n>` nhận một số hữu hạn; `usize::MAX` làm git từ chối tham số. Một triệu
+/// dòng lớn hơn mọi tệp mà cổng [`MAX_DIFF_BLOB_BYTES`] (5 MB) cho đi qua: 5 MB văn bản ở
+/// mức ~50 byte/dòng là ~100 nghìn dòng, còn xa một triệu. Nên trong thực tế con số này
+/// luôn nghĩa là "toàn tệp".
+const UNIFIED_TOAN_TEP: usize = 1_000_000;
+
+/// Ngưỡng lùi về diff rút gọn: tệp lớn hơn mức này **không** hiện toàn tệp.
+///
+/// # Đánh đổi mà hằng số này giải
+///
+/// Hiện toàn tệp nghĩa là `MergeView` phải diff và render **toàn bộ** hai tài liệu, không
+/// phải vài khối. Đó đúng là rủi ro mà validation checkpoint #3 đặt ra — và phép đo của
+/// checkpoint đó **đã bị bỏ qua** (xem `docs/09-phase3-diff-decision.md` mục 7-8), nên ta
+/// không có con số nào về việc `MergeView` chịu được bao nhiêu.
+///
+/// Thiếu số đo thì cách đúng là một ngưỡng thủ công, **và nói cho người dùng biết** khi nó
+/// kích hoạt — xem `DiffKind::Text::context_only`. Im lặng lùi về rút gọn sẽ tái diễn đúng
+/// việc vừa xảy ra: người dùng thấy số dòng nhảy rồi tưởng là lỗi, báo hai lần.
+///
+/// # Vì sao đo bằng BYTE, không bằng số dòng
+///
+/// Đếm dòng cần đọc nội dung — tức thêm một lệnh git, hoặc nạp blob chỉ để đếm. Byte thì
+/// [`kich_thuoc_hai_phia`] đã lấy sẵn bằng `cat-file --batch-check` **mà không đọc nội
+/// dung**, và cổng [`MAX_DIFF_BLOB_BYTES`] ở ngay trước cũng dùng chính con số đó. Dùng
+/// cùng một phép đo cho cả hai cổng nghĩa là không có lệnh git nào thêm, và hai ngưỡng
+/// không thể lệch đơn vị.
+///
+/// # Vì sao 512 KB
+///
+/// * Cổng [`MAX_DIFF_BLOB_BYTES`] là 5 MB. Ngưỡng này thấp hơn **mười lần**, nên nó thật
+///   sự kích hoạt trước khi tệp đủ lớn để làm trình xem khó thở — một cổng nằm sát 5 MB
+///   thì gần như không bao giờ chạy.
+/// * 512 KB văn bản ở mức ~50 byte/dòng là ~10 nghìn dòng. Cùng cỡ với `MAX_PAGE_LIMIT`
+///   của Phase 2 (10 000 hàng commit, đã biết là cuộn mượt ở mức đó) — mốc duy nhất trong
+///   dự án này có kinh nghiệm thật đằng sau.
+/// * `yarn.lock` 632 KB của repo công ty — tệp mà checkpoint #3 định đo — nằm **trên**
+///   ngưỡng này. Có chủ ý: đó đúng là ca ta không có số đo, nên nó phải đi đường an toàn.
+///
+/// Con số này **là phỏng đoán có căn cứ, không phải kết quả đo.** Khi nào có số thật của
+/// checkpoint #3 thì xem lại nó cùng lúc.
+const MAX_BYTE_TOAN_TEP: u64 = 512 * 1024;
+
+/// Chọn `-U<n>` cho một tệp: toàn tệp, hay rút gọn về 3 dòng ngữ cảnh.
+///
+/// Trả [`UNIFIED_TOAN_TEP`] cho tệp dưới [`MAX_BYTE_TOAN_TEP`], `3` cho tệp lớn hơn.
+///
+/// Tách thành hàm riêng để test được **cả hai nhánh** mà không cần repo — và để có đúng
+/// một chỗ quyết định. Hai lệnh git (diff chính và word-diff) đọc cùng kết quả của hàm
+/// này, nên chúng không thể lệch nhau.
+fn so_dong_ngu_canh(byte_lon_nhat: u64) -> usize {
+    if byte_lon_nhat > MAX_BYTE_TOAN_TEP {
+        3
+    } else {
+        UNIFIED_TOAN_TEP
+    }
+}
+
 /// Kích thước hai phía của một blob, đọc **mà không nạp nội dung**.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct KichThuocHaiPhia {
@@ -272,6 +341,21 @@ pub async fn lay_diff_tep(
     // --- Bước 6: trạng thái và đường dẫn cũ --------------------------------
     let (status, old_path) = trang_thai_va_ten_cu(state, &repo, &ve_trai, commit_id, path).await?;
 
+    // --- Bước 6b: toàn tệp hay rút gọn -------------------------------------
+    //
+    // Người dùng muốn thấy **toàn bộ** tệp, không chỉ các khối đổi (2026-09-22). Quyết
+    // định ở đây, TRƯỚC khi dựng lệnh, vì con số này phải đi vào **cả hai** lệnh: lệnh
+    // diff ở bước 7 và lệnh word-diff trong [`gan_khoang_muc_tu`]. Lệch nhau thì hai
+    // đầu ra có tập dòng khác nhau và phép khớp theo số dòng trượt ở biên hunk — xem
+    // doc comment của lệnh word-diff.
+    //
+    // Dùng `kich_thuoc` đã đọc ở bước 3 (`cat-file --batch-check`), nên **không thêm
+    // lệnh git nào**. Đó là lý do ngưỡng đo bằng byte chứ không bằng số dòng — đếm dòng
+    // cần đọc nội dung.
+    let unified = so_dong_ngu_canh(kich_thuoc.lon_nhat());
+    let rut_gon = unified != UNIFIED_TOAN_TEP;
+    let unified_arg = format!("--unified={unified}");
+
     // --- Bước 7: chỉ tới đây mới chạy diff thật ----------------------------
     //
     // Pathspec phải gồm **cả hai** đường dẫn khi tệp bị đổi tên. Xem
@@ -284,7 +368,7 @@ pub async fn lay_diff_tep(
             "-c",
             "core.quotepath=false",
             "diff",
-            "--unified=3",
+            &unified_arg,
             "--find-renames",
             &ve_trai,
             commit_id,
@@ -320,11 +404,12 @@ pub async fn lay_diff_tep(
     // cùng một tệp mất word-level — và đó đúng là thao tác thường gặp nhất (bấm qua
     // lại giữa các tệp trong một commit).
     let mut hunks = phan_tich.hunks;
-    gan_khoang_muc_tu(state, &repo, &ve_trai, commit_id, path, &mut hunks).await;
+    gan_khoang_muc_tu(state, &repo, &ve_trai, commit_id, path, unified, &mut hunks).await;
 
     let kind = DiffKind::Text {
         hunks,
         truncated: phan_tich.truncated,
+        context_only: rut_gon,
     };
 
     Ok(ket_thuc_voi_ten_cu(
@@ -362,6 +447,9 @@ async fn gan_khoang_muc_tu(
     ve_trai: &str,
     commit_id: &str,
     path: &str,
+    // `unified` PHẢI là đúng con số mà lệnh diff chính đã dùng — người gọi truyền xuống
+    // thay vì hàm này tự quyết, để hai lệnh không thể lệch. Xem `so_dong_ngu_canh`.
+    unified: usize,
     hunks: &mut [Hunk],
 ) {
     // --- Ba cổng bỏ qua, mỗi cổng tránh một loại lệnh git vô ích -----------
@@ -408,7 +496,7 @@ async fn gan_khoang_muc_tu(
             "diff",
             "--word-diff=porcelain",
             &format!("--word-diff-regex={WORD_DIFF_REGEX}"),
-            "--unified=3",
+            &format!("--unified={unified}"),
             "--find-renames",
             ve_trai,
             commit_id,
@@ -1207,6 +1295,51 @@ mod tests {
             muc.iter().any(|m| m == "commands::get_file_diff"),
             "`commands::get_file_diff` phải là một MỤC trong generate_handler!, không \
              chỉ xuất hiện đâu đó trong tệp. Các mục hiện có: {muc:#?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests_toan_tep {
+    use super::*;
+
+    /// Tệp thường → **toàn tệp**. Đây là mặc định người dùng yêu cầu (2026-09-22).
+    #[test]
+    fn tep_thuong_hien_toan_tep() {
+        assert_eq!(so_dong_ngu_canh(0), UNIFIED_TOAN_TEP, "tệp rỗng");
+        assert_eq!(so_dong_ngu_canh(10_000), UNIFIED_TOAN_TEP, "10 KB");
+        assert_eq!(so_dong_ngu_canh(MAX_BYTE_TOAN_TEP), UNIFIED_TOAN_TEP, "đúng ngưỡng");
+    }
+
+    /// Vượt ngưỡng → rút gọn về 3. Ghim con số `3`, không chỉ ghim "khác toàn tệp":
+    /// một cài đặt trả `0` cũng khác `UNIFIED_TOAN_TEP` nhưng `-U0` bỏ hết ngữ cảnh và
+    /// làm phép khớp word-level theo số dòng trượt.
+    #[test]
+    fn tep_lon_lui_ve_ba_dong_ngu_canh() {
+        assert_eq!(so_dong_ngu_canh(MAX_BYTE_TOAN_TEP + 1), 3, "vượt một byte");
+        assert_eq!(so_dong_ngu_canh(5 * 1024 * 1024), 3, "5 MB");
+    }
+
+    /// Ngưỡng phải nằm **dưới** cổng kích thước, nếu không nó gần như không bao giờ
+    /// chạy: mọi tệp qua được cổng 5 MB sẽ hiện toàn tệp, kể cả tệp 4,9 MB.
+    #[test]
+    fn nguong_toan_tep_thap_hon_cong_kich_thuoc() {
+        assert!(
+            MAX_BYTE_TOAN_TEP < MAX_DIFF_BLOB_BYTES,
+            "MAX_BYTE_TOAN_TEP ({MAX_BYTE_TOAN_TEP}) phải < MAX_DIFF_BLOB_BYTES \
+             ({MAX_DIFF_BLOB_BYTES}), nếu không cổng rút gọn vô dụng"
+        );
+    }
+
+    /// `yarn.lock` 632 KB của repo công ty — tệp mà checkpoint #3 định đo nhưng phép đo
+    /// bị bỏ qua — **phải** đi đường rút gọn. Ghim đúng con số đó vì nó là ca thật duy
+    /// nhất ta biết kích thước, và là ca ta không có số liệu hiệu năng.
+    #[test]
+    fn tep_632kb_cua_repo_cong_ty_di_duong_an_toan() {
+        assert_eq!(
+            so_dong_ngu_canh(631_868),
+            3,
+            "yarn.lock 631 868 byte phải rút gọn: đây đúng ca checkpoint #3 không đo"
         );
     }
 }

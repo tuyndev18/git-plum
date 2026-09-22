@@ -145,6 +145,25 @@ pub enum DiffKind {
         hunks: Vec<Hunk>,
         /// `true` khi bản vá bị cắt ở `MAX_HUNKS` hoặc `MAX_DIFF_LINES`.
         truncated: bool,
+        /// `true` khi diff hiện **chỉ các khối đổi** kèm 3 dòng ngữ cảnh, thay vì toàn
+        /// tệp.
+        ///
+        /// # Vì sao là một trường RIÊNG, không dùng lại `truncated`
+        ///
+        /// Hai thứ khác nhau và giao diện phải nói hai câu khác nhau:
+        ///
+        /// * `truncated` — bản vá **bị cắt mất nội dung**, người dùng không thấy hết
+        ///   những gì đã đổi.
+        /// * `context_only` — người dùng thấy **đủ mọi thay đổi**, chỉ thiếu phần ngữ
+        ///   cảnh không đổi ở giữa. Không mất dữ liệu nào.
+        ///
+        /// Gộp hai cờ sẽ khiến một tệp 600 KB (hoàn toàn bình thường) bị báo là "diff
+        /// bị cắt" — một lời cảnh báo sai làm người dùng mất tin vào trình xem.
+        ///
+        /// Trường này **phải** được hiển thị khi `true`. Im lặng lùi về rút gọn chính
+        /// là việc đã xảy ra ngày 2026-09-22: người dùng thấy số dòng nhảy, tưởng lỗi,
+        /// và báo hai lần. Xem `MAX_BYTE_TOAN_TEP`.
+        context_only: bool,
     },
     /// Tệp nhị phân theo phán quyết của **chính git** (`--numstat` in hai dấu gạch).
     /// Chỉ có kích thước hai phía — không byte nội dung nào.
@@ -192,11 +211,25 @@ mod tests {
         let v = serde_json::to_value(DiffKind::Text {
             hunks: Vec::new(),
             truncated: false,
+            context_only: true,
         })
         .unwrap();
         assert_eq!(v["kind"], "text");
         assert!(v["hunks"].is_array(), "`hunks` phải cùng cấp với `kind`");
         assert_eq!(v["truncated"], false);
+        // `context_only` → `contextOnly`. Ghim tên **camelCase** vì `rename_all` ở cấp
+        // enum chỉ đổi tên *biến thể*, không đổi tên *trường* — bài học của plan 03-02,
+        // nơi JSON ra `old_size` trong khi `ipc.ts` đọc `oldSize` mà **không bên nào
+        // lỗi biên dịch**. Biến thể `Text` có `rename_all` riêng của nó; test này là
+        // thứ chứng minh điều đó còn đúng.
+        assert_eq!(
+            v["contextOnly"], true,
+            "phải là `contextOnly` (camelCase), nhận được JSON: {v}"
+        );
+        assert!(
+            v.get("context_only").is_none(),
+            "không được có khoá snake_case `context_only` — `ipc.ts` đọc camelCase"
+        );
 
         let v = serde_json::to_value(DiffKind::Binary {
             old_size: 10,
