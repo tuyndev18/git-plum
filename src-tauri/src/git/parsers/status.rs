@@ -374,13 +374,40 @@ mod tests {
 
     /// 🔴 **Ca chịu lực của cả plan.** Đột biến M1 phải làm test này đỏ.
     ///
-    /// Một bộ phân tích tách NUL trơn đọc `a_old.txt` thành bản ghi thứ hai rồi gán sai
-    /// hai bản ghi còn lại: nó cho **4** phần tử và phần tử cuối mang đường dẫn sai.
-    /// Đó là phép phân biệt, và nó cần **hai** bản ghi đứng sau mới hoạt động — với một
-    /// bản ghi, bộ phân tích lệch nấc vẫn cho đúng số lượng.
+    /// # Vì sao test này KHÔNG dùng `DANG_2_ROI_HAI_DANG_1`, và đó là một phát hiện
+    ///
+    /// Bản đầu của test này chạy trên `DANG_2_ROI_HAI_DANG_1` (đường dẫn cũ là
+    /// `a_old.txt`) và **sống sót qua đột biến M1** — 0 test đỏ. Nguyên nhân đo được:
+    /// khi bản ghi dạng `2` không tiêu thụ đoạn NUL thứ hai, đoạn `a_old.txt` rò ra ở
+    /// vòng lặp sau; nhưng `a_old.txt` **không chứa khoảng trắng**, nên `la_dang` trượt
+    /// mọi dạng, nó rơi vào nhánh `_ => {}` và **bị bỏ trong im lặng**. Kết quả vẫn là
+    /// đúng 3 phần tử với đúng đường dẫn — fixture không phân biệt được gì, đúng lỗi
+    /// cổng #4 của CONTEXT.md mục 3.1.
+    ///
+    /// Điều đó cũng nói một điều về *mã*: phép lệch nấc chỉ **im lặng** khi đường dẫn cũ
+    /// tình cờ vô hại. Đường dẫn cũ **có khoảng trắng** thì đoạn rò ra thành một bản ghi
+    /// thật sự sai, và đó là ca phải ghim. Tên tệp có khoảng trắng là ca thường, không
+    /// dị biệt — cả `make-status-fixtures.sh` cũng dựng một tệp như vậy.
+    ///
+    /// Thử `old name.txt` cũng **không** đủ: nó có khoảng trắng nhưng token đầu (`old`)
+    /// không phải ký tự dạng, nên `la_dang` vẫn trượt và đoạn rò ra vẫn bị bỏ im lặng.
+    /// Phép khẳng định `old_path` cũng không bắt được M1, vì M1 chỉ bỏ bước **tiêu thụ**
+    /// — `duong_dan_cu` vẫn được đọc đúng, nên `old_path` vẫn đúng.
+    ///
+    /// Thứ **thật sự** phân biệt M1 là đoạn rò ra phải **trông giống một bản ghi**, để
+    /// nó biến thành một phần tử rác đếm được. Tên tệp `? cu.txt` làm được điều đó: git
+    /// cho phép mọi byte trừ NUL và `/` trong tên tệp, nên đây là dữ liệu hợp lệ. Đã
+    /// kiểm: với đầu vào này M1 cho **3** phần tử thay vì 2, và test đỏ.
     #[test]
     fn hai_ban_ghi_sau_dang_2_khong_lech_nac() {
-        let st = parse_status(DANG_2_ROI_HAI_DANG_1);
+        // Đường dẫn cũ TRÔNG GIỐNG một bản ghi dạng `?`, và SAU bản ghi dạng `2` có HAI
+        // bản ghi nữa. Hai là số tối thiểu: với một bản ghi, bộ phân tích lệch nấc vẫn
+        // cho đúng số lượng và test không phân biệt được gì.
+        let vao: &[u8] = b"2 R. N... 100644 100644 100644 aaa bbb R100 a_new.txt\0? cu.txt\0\
+            1 M. N... 100644 100644 100644 ccc ddd m_one.txt\0\
+            1 M. N... 100644 100644 100644 eee fff n_two.txt\0";
+
+        let st = parse_status(vao);
 
         assert_eq!(
             st.entries.len(),
@@ -391,13 +418,88 @@ mod tests {
             st.entries.iter().map(|e| &e.path).collect::<Vec<_>>()
         );
 
+        // 🔴 Phép phân biệt thật của M1: đường dẫn cũ phải được GHÉP vào bản ghi đổi
+        // tên. Không tiêu thụ đoạn thứ hai thì `old_path` là None (hoặc sai), bất kể
+        // đoạn rò ra sau đó có bị bỏ im lặng hay không.
+        assert_eq!(
+            st.entries[0].path, "a_new.txt",
+            "được: {:?}",
+            st.entries.iter().map(|e| &e.path).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            st.entries[0].old_path,
+            Some("? cu.txt".to_owned()),
+            "đường dẫn cũ phải được ghép vào CHÍNH bản ghi đổi tên"
+        );
+
+        // 🔴 Phép phân biệt M1: không có phần tử nào thuộc nhóm Untracked. Đầu vào không
+        // có bản ghi dạng `?` nào; một phần tử Untracked nghĩa là đoạn `? cu.txt` đã
+        // KHÔNG được tiêu thụ và bị đọc lại thành một bản ghi riêng.
+        assert!(
+            !st.entries
+                .iter()
+                .any(|e| e.group == StatusGroup::Untracked),
+            "đoạn đường dẫn cũ `? cu.txt` bị đọc lại thành bản ghi dạng `?` — \
+             bản ghi dạng 2 không tiêu thụ đoạn NUL thứ hai: {:?}",
+            st.entries
+                .iter()
+                .map(|e| (&e.path, e.group))
+                .collect::<Vec<_>>()
+        );
+
+        assert_eq!(st.entries[1].path, "m_one.txt");
         assert_eq!(
             st.entries[2].path, "n_two.txt",
             "phần tử CUỐI phải là n_two.txt; sai ở đây nghĩa là mọi bản ghi sau bản ghi \
              dạng 2 đã bị lệch một nấc"
         );
-        assert_eq!(st.entries[1].path, "m_one.txt");
-        assert_eq!(st.entries[0].path, "a_new.txt");
+        // Hai bản ghi dạng `1` KHÔNG được mang old_path — nếu chúng có, nghĩa là bộ
+        // phân tích đang ghép sai đoạn cho sai bản ghi.
+        assert_eq!(st.entries[1].old_path, None);
+        assert_eq!(st.entries[2].old_path, None);
+    }
+
+    /// 🔴 M1 phần hai: đường dẫn cũ **tự nó trông giống một bản ghi** thì lệch nấc
+    /// không còn im lặng — nó sinh thêm một phần tử rác.
+    ///
+    /// Ca này bổ sung cho test trên: ở đó phép phân biệt là `old_path` bị mất; ở đây là
+    /// `entries.len()` tăng. Một đột biến phải vượt **cả hai** mới lọt, và không có đột
+    /// biến nào làm được điều đó.
+    ///
+    /// Đường dẫn `? cu.txt` là tên tệp hợp lệ (git cho phép mọi byte trừ NUL và `/`),
+    /// và nó **có** khoảng trắng sau một ký tự dạng — nên khi rò ra nó bị đọc thành một
+    /// bản ghi dạng `?` thật.
+    #[test]
+    fn duong_dan_cu_trong_giong_ban_ghi_thi_lech_nac_sinh_phan_tu_rac() {
+        let vao: &[u8] = b"2 R. N... 100644 100644 100644 aaa bbb R100 moi.txt\0? cu.txt\0\
+            1 M. N... 100644 100644 100644 ccc ddd sau.txt\0";
+
+        let st = parse_status(vao);
+
+        assert_eq!(
+            st.entries.len(),
+            2,
+            "đường dẫn cũ `? cu.txt` phải được TIÊU THỤ như một phần của bản ghi đổi \
+             tên, không được đọc lại thành một bản ghi dạng `?`. Được: {:?}",
+            st.entries
+                .iter()
+                .map(|e| (&e.path, e.group))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(st.entries[0].path, "moi.txt");
+        assert_eq!(st.entries[0].old_path, Some("? cu.txt".to_owned()));
+        assert_eq!(st.entries[1].path, "sau.txt");
+        assert!(
+            !st.entries
+                .iter()
+                .any(|e| e.group == StatusGroup::Untracked),
+            "không có tệp chưa theo dõi nào trong đầu vào; một phần tử Untracked nghĩa là \
+             đường dẫn cũ đã bị đọc lại thành bản ghi dạng `?` — lệch nấc: {:?}",
+            st.entries
+                .iter()
+                .map(|e| (&e.path, e.group))
+                .collect::<Vec<_>>()
+        );
     }
 
     /// 🔴 Đột biến M2: git in đường dẫn **mới trước, cũ sau** — đã đo bằng `od -c`.
