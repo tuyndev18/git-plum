@@ -12,6 +12,26 @@
  * khi trùng id, nên thiếu bước gỡ làm component vỡ ở lần mount thứ hai (trong
  * test là từ test thứ hai trở đi). `FileList.tsx` đã có đúng khuôn này.
  *
+ * # Nút là ICON, chữ nằm ở `title` + `aria-label`
+ *
+ * Năm nhãn tiếng Việt ("Hiện khoảng trắng", "Ẩn lịch sử tệp"…) ăn hết bề ngang
+ * một thanh công cụ nằm trên panel mà `MIN_SPLIT_WIDTH` đã ghim sàn 720px —
+ * chính panel đó còn phải chứa hai cột nội dung cộng hai cột số dòng.
+ *
+ * Hai thứ **phải** đi cùng mỗi icon, và thiếu một trong hai là lỗi im lặng:
+ *
+ * - `title` — người dùng chuột thấy chữ khi rê vào. Bỏ nó thì nút thành câu đố.
+ * - `aria-label` — trình đọc màn hình đọc nó. `<svg>` trong `icons.tsx` có
+ *   `aria-hidden` nên **không** có nguồn chữ nào khác; bỏ nó thì nút câm hoàn
+ *   toàn với người dùng bàn phím.
+ *
+ * Nhãn đổi theo trạng thái (`viewMode`, `showWhitespace`, `historyOpen`) nên cả
+ * hai thuộc tính phải đọc cùng biểu thức — lệch nhau thì tooltip nói một đằng,
+ * trình đọc màn hình đọc một nẻo.
+ *
+ * Test tìm nút bằng `data-testid`, **không** bằng chữ, nên việc bỏ chữ không
+ * đụng tới chúng. Giữ nguyên như vậy.
+ *
  * # Năm dạng thông báo — năm câu KHÁC NHAU
  *
  * DIFF-06 không phải "báo là không xem được". Mỗi dạng nói một lý do khác và
@@ -35,6 +55,14 @@ import { useEffect } from 'react'
 import { registerCommands, runCommand, unregisterCommand } from '@/lib/commands'
 import type { DiffKind } from '@/lib/ipc'
 import { useDiffStore } from '@/stores/diffStore'
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconHistory,
+  IconViewSplit,
+  IconViewUnified,
+  IconWhitespace,
+} from '@/components/icons'
 
 /**
  * Kích thước byte thành chuỗi người đọc được, định dạng theo locale bằng
@@ -131,18 +159,24 @@ export function DiffToolbar({ onNextHunk, onPrevHunk, repoId }: ToolbarProps = {
   return (
     <div className="diff-toolbar">
       <button
+        className="icon-button"
         data-testid="diff-toggle-view-mode"
+        title={viewMode === 'unified' ? 'Xem hai cột' : 'Xem hợp nhất'}
+        aria-label={viewMode === 'unified' ? 'Xem hai cột' : 'Xem hợp nhất'}
         onClick={() => void runCommand('diff.toggleViewMode')}
       >
-        {viewMode === 'unified' ? 'Xem hai cột' : 'Xem hợp nhất'}
+        {viewMode === 'unified' ? <IconViewSplit /> : <IconViewUnified />}
       </button>
 
       <button
+        className="icon-button"
         data-testid="diff-toggle-whitespace"
         aria-pressed={showWhitespace}
+        title={showWhitespace ? 'Ẩn khoảng trắng' : 'Hiện khoảng trắng'}
+        aria-label={showWhitespace ? 'Ẩn khoảng trắng' : 'Hiện khoảng trắng'}
         onClick={() => void runCommand('diff.toggleWhitespace')}
       >
-        {showWhitespace ? 'Ẩn khoảng trắng' : 'Hiện khoảng trắng'}
+        <IconWhitespace />
       </button>
 
       {/*
@@ -155,21 +189,36 @@ export function DiffToolbar({ onNextHunk, onPrevHunk, repoId }: ToolbarProps = {
         đây chỉ để người dùng **thấy** điều đó, không phải để thực thi nó.
       */}
       <button
+        className="icon-button"
         data-testid="diff-toggle-file-history"
         aria-pressed={historyOpen}
         disabled={!coTepDangChon}
+        title={historyOpen ? 'Ẩn lịch sử tệp' : 'Lịch sử tệp'}
+        aria-label={historyOpen ? 'Ẩn lịch sử tệp' : 'Lịch sử tệp'}
         onClick={() => void runCommand('diff.toggleFileHistory')}
       >
-        {historyOpen ? 'Ẩn lịch sử tệp' : 'Lịch sử tệp'}
+        <IconHistory />
       </button>
 
       <span className="diff-toolbar-spacer" />
 
-      <button data-testid="diff-prev-hunk" onClick={() => void runCommand('diff.prevHunk')}>
-        ↑ Khối trước
+      <button
+        className="icon-button"
+        data-testid="diff-prev-hunk"
+        title="Khối thay đổi trước đó"
+        aria-label="Khối thay đổi trước đó"
+        onClick={() => void runCommand('diff.prevHunk')}
+      >
+        <IconChevronUp />
       </button>
-      <button data-testid="diff-next-hunk" onClick={() => void runCommand('diff.nextHunk')}>
-        ↓ Khối sau
+      <button
+        className="icon-button"
+        data-testid="diff-next-hunk"
+        title="Khối thay đổi kế tiếp"
+        aria-label="Khối thay đổi kế tiếp"
+        onClick={() => void runCommand('diff.nextHunk')}
+      >
+        <IconChevronDown />
       </button>
     </div>
   )

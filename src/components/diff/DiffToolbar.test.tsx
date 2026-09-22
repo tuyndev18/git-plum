@@ -124,10 +124,53 @@ describe('DiffToolbar — bốn nút, TẤT CẢ đi qua runCommand (PLAT-04)', 
   })
 
   it('nhãn nút chế độ phản ánh chế độ đang dùng', () => {
+    /*
+     * Đọc `aria-label`, không phải `textContent`: nút nay chỉ có icon, và
+     * `<svg>` trong `icons.tsx` mang `aria-hidden` nên `textContent` là chuỗi
+     * rỗng. Chữ sống ở `aria-label` + `title`.
+     *
+     * Phép khẳng định vẫn giữ nguyên giá trị nó vốn có — nhãn phải **đổi theo
+     * trạng thái**, không đứng yên. Bỏ chữ khỏi giao diện không được phép bỏ
+     * luôn cái cổng đó, vì nút chỉ có icon mà nhãn sai thì người dùng bàn phím
+     * không còn đường nào khác để biết nút làm gì.
+     */
     render(<DiffToolbar />)
-    expect(screen.getByTestId('diff-toggle-view-mode').textContent).toMatch(/hai cột/i)
-    fireEvent.click(screen.getByTestId('diff-toggle-view-mode'))
-    expect(screen.getByTestId('diff-toggle-view-mode').textContent).toMatch(/hợp nhất/i)
+    const nut = () => screen.getByTestId('diff-toggle-view-mode')
+    expect(nut().getAttribute('aria-label')).toMatch(/hai cột/i)
+    fireEvent.click(nut())
+    expect(nut().getAttribute('aria-label')).toMatch(/hợp nhất/i)
+  })
+
+  it('nút chỉ-icon PHẢI có cả title lẫn aria-label, và hai chuỗi phải khớp nhau', () => {
+    /*
+     * 🔴 Lớp lỗi im lặng của việc bỏ chữ: quên một trong hai thuộc tính thì
+     * giao diện **trông vẫn đúng**.
+     *
+     * - Thiếu `title` → người dùng chuột thấy một nút câu đố, không có tooltip.
+     * - Thiếu `aria-label` → nút **câm hoàn toàn** với trình đọc màn hình, vì
+     *   `<svg>` có `aria-hidden` nên không còn nguồn chữ nào.
+     *
+     * Và vì nhãn đổi theo trạng thái, hai thuộc tính phải đọc **cùng** biểu
+     * thức — lệch nhau thì tooltip nói một đằng, trình đọc màn hình đọc một nẻo,
+     * mà không màn hình nào lộ ra điều đó.
+     */
+    render(<DiffToolbar />)
+    const ids = [
+      'diff-toggle-view-mode',
+      'diff-toggle-whitespace',
+      'diff-toggle-file-history',
+      'diff-prev-hunk',
+      'diff-next-hunk',
+    ]
+    for (const id of ids) {
+      const el = screen.getByTestId(id)
+      const label = el.getAttribute('aria-label')
+      const title = el.getAttribute('title')
+      expect(label, `${id} thiếu aria-label — nút chỉ-icon sẽ câm với trình đọc màn hình`).toBeTruthy()
+      expect(title, `${id} thiếu title — người dùng chuột không có tooltip`).toBeTruthy()
+      expect(el.textContent, `${id} phải là nút chỉ-icon, không còn chữ`).toBe('')
+      expect(title, `${id}: title và aria-label lệch nhau`).toBe(label)
+    }
   })
 })
 
