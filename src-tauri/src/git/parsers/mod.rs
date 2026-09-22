@@ -15,4 +15,5 @@ pub mod file_history;
 pub mod log;
 pub mod patch;
 pub mod refs;
+pub mod status;
 pub mod word_diff;
