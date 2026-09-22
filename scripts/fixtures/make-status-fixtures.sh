@@ -118,13 +118,19 @@ echo "Sinh repo mẫu trạng thái vào: $REPO"
 echo
 
 # ---------------------------------------------------------------------------
-# 1. Commit nền — ba tệp theo dõi
+# 1. Commit nền — bốn tệp theo dõi
+#
+# `p_mm.txt` nằm ở commit nền, còn phần làm bẩn nó ở mục 6. Nó **phải** vào đây chứ
+# không được có một `git commit` riêng ở mục 6: lúc đó bản ghi đổi tên của mục 3 đã
+# nằm trong index, nên một commit thêm sẽ **commit luôn nó** và phá toàn bộ trạng thái
+# bẩn — chính là thứ duy nhất fixture này có giá trị.
 # ---------------------------------------------------------------------------
 echo "[1] commit nền"
 printf 'aaa\n' >"$REPO/a_old.txt"
 printf 'z\n' >"$REPO/m_one.txt"
 printf 'z\n' >"$REPO/n_two.txt"
-git -C "$REPO" add -- a_old.txt m_one.txt n_two.txt
+printf 'z\n' >"$REPO/p_mm.txt"
+git -C "$REPO" add -- a_old.txt m_one.txt n_two.txt p_mm.txt
 git -C "$REPO" commit --quiet -m "commit nen"
 
 # ---------------------------------------------------------------------------
@@ -216,6 +222,45 @@ printf 'u\n' >"$REPO/z_untracked.txt"
 printf 'ws\n' >"$REPO/z with space.txt"
 
 # ---------------------------------------------------------------------------
+# 6. Nhóm CHƯA STAGE — thiếu ở bản đầu của fixture này (phát hiện ở plan 04-02)
+#
+# # 🔴 Vì sao mục này được thêm vào sau
+#
+# Bản đầu của fixture (plan 04-01) `git add` sau **mỗi** lần sửa, nên **mọi** bản ghi
+# theo dõi đều là `R.` hoặc `M.` — tức nhóm `Unstaged` **hoàn toàn vắng mặt**. Test
+# đơn vị của 04-01 không thấy điều đó vì chúng chạy trên byte tự dựng, nơi ca `.M` có
+# test riêng; chỉ khi plan 04-02 chạy `get_status` **thật** trên fixture này và đòi đủ
+# **ba** nhóm thì khoảng trống mới lộ ra.
+#
+# Đây đúng lớp "fixture có hình dạng đúng cho câu hỏi cũ nhưng không phủ câu hỏi mới"
+# — họ hàng với lỗi #7 của CONTEXT.md mục 3.1.
+#
+# # Vì sao sửa bằng `p_mm.txt` chứ không bằng cách bỏ một `git add` ở mục 4
+#
+# Hai bản ghi của mục 4 (`m_one.txt`, `n_two.txt`) là **chính** hai bản ghi đứng sau
+# bản ghi dạng `2`, và phép kiểm chống lệch nấc ở cuối script đếm chúng. Bỏ `git add`
+# của một trong hai làm bản ghi đó thành `.M` — vẫn là một bản ghi, nên phép đếm vẫn
+# qua — nhưng nó **đổi dữ liệu của ca kiểm chịu lực nhất** của plan 04-01, thứ vừa
+# phải sửa một lần vì không phân biệt được đột biến M1. Thêm một tệp mới thì không
+# đụng gì tới nó.
+#
+# `p_mm.txt` sắp xếp sau `n_two.txt` và trước `z*`, nên nó cũng nằm **sau** bản ghi
+# dạng `2` và làm số bản ghi phía sau tăng chứ không giảm.
+#
+# Tệp này có XY = `MM`: sửa rồi stage, rồi sửa tiếp. Nó phủ **hai** thứ trong một bản
+# ghi — nhóm `Unstaged` đang thiếu, và ca "một tệp sinh HAI phần tử" mà
+# `RepoStatus::wip_counts` phải đếm là **một** (đột biến M8 của plan 04-01).
+# ---------------------------------------------------------------------------
+#
+# 🔴 KHÔNG `git commit` ở đây. `p_mm.txt` đã nằm ở commit nền (mục 1) vì lúc này bản
+# ghi đổi tên của mục 3 đã ở trong index, và một commit thêm sẽ commit luôn nó — phá
+# toàn bộ trạng thái bẩn mà fixture này tồn tại để mang.
+echo "[6] tệp MM: đã stage một lần rồi sửa tiếp — cung cấp nhóm CHƯA STAGE"
+printf 'da stage\n' >>"$REPO/p_mm.txt"
+git -C "$REPO" add -- p_mm.txt
+printf 'chua stage\n' >>"$REPO/p_mm.txt"
+
+# ---------------------------------------------------------------------------
 # Kiểm chứng NGAY tại đây: fixture có thật sự phân biệt được lệch nấc không?
 #
 # Đây là cổng chống lỗi #4 của CONTEXT.md mục 3.1 ("fixture không phân biệt được đột
@@ -249,6 +294,46 @@ if [ "$SAU" -lt 2 ]; then
   echo "      Nguyên nhân thường gặp: đổi tên đích thành một tên sort muộn." >&2
   exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# Kiểm chứng thứ hai: fixture có ĐỦ BA NHÓM không? (thêm ở plan 04-02)
+#
+# # 🔴 Vì sao phép kiểm này tồn tại
+#
+# Bản đầu của fixture có **hình dạng đúng** cho câu hỏi của plan 04-01 (một bản ghi
+# dạng `2` đứng trước >= 2 bản ghi khác) nhưng **không có nhóm `Unstaged` nào** — nó
+# `git add` sau mỗi lần sửa. Test đơn vị của 04-01 không thấy vì chúng chạy trên byte
+# tự dựng; khoảng trống chỉ lộ ra khi plan 04-02 chạy `get_status` THẬT trên fixture
+# và đòi cả ba nhóm.
+#
+# Nên phép kiểm này **khẳng định tiền đề của chính fixture**: một fixture mang tên
+# "status-cases" mà thiếu một trong ba nhóm của WORK-01 là một fixture âm thầm không
+# phủ được thứ nó hứa. Thất bại ở đây là ĐÚNG — script thoát 1, không in cảnh báo rồi
+# thoát 0.
+#
+# Phân nhóm đọc thẳng từ XY của porcelain v2 (ký tự sau chữ `1`/`2` là XY):
+#   - `?` ở đầu dòng           -> chưa theo dõi
+#   - XY[0] khác `.`           -> đã stage
+#   - XY[1] khác `.`           -> chưa stage
+# ---------------------------------------------------------------------------
+CO_STAGED="$(awk '/^[12] [^.]/ {print; exit}' "$BANG_GHI" || true)"
+CO_UNSTAGED="$(awk '/^[12] .[^.]/ {print; exit}' "$BANG_GHI" || true)"
+CO_UNTRACKED="$(grep -c '^? ' "$BANG_GHI" || true)"
+
+THIEU=""
+[ -z "$CO_STAGED" ] && THIEU="$THIEU staged"
+[ -z "$CO_UNSTAGED" ] && THIEU="$THIEU unstaged"
+[ "${CO_UNTRACKED:-0}" -eq 0 ] && THIEU="$THIEU untracked"
+
+if [ -n "$THIEU" ]; then
+  echo "LỖI: fixture thiếu nhóm:$THIEU" >&2
+  echo "      WORK-01 có BA nhóm; một fixture tên 'status-cases' phải mang cả ba," >&2
+  echo "      nếu không test 'get_status cho cả ba nhóm' không phủ được thứ nó hứa." >&2
+  echo "      Bản ghi đọc được:" >&2
+  sed 's/^/        /' "$BANG_GHI" >&2
+  exit 1
+fi
+echo "    ba nhóm (đã stage / chưa stage / chưa theo dõi): ĐỦ"
 
 # Byte thô trong tên tệp: ĐO, không giả định. Kết quả khác nhau theo hệ thống tệp.
 #
