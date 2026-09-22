@@ -163,6 +163,11 @@ pub fn parse_patch(stdout: &[u8]) -> PatchParse {
             old_line,
             new_line,
             no_newline_at_eof: false,
+            // Unified diff **không** mang thông tin mức từ — nó nói "dòng này đổi",
+            // không nói "chữ nào trong dòng đổi". `spans` được điền ở một bước SAU,
+            // từ một lệnh git thứ hai (`--word-diff=porcelain`, xem
+            // `super::word_diff`). Rỗng ở đây là đúng, không phải thiếu sót.
+            spans: Vec::new(),
         });
         tong_dong += 1;
     }

@@ -14,3 +14,4 @@
 pub mod log;
 pub mod patch;
 pub mod refs;
+pub mod word_diff;

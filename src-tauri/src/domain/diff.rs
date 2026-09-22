@@ -20,6 +20,40 @@ pub enum LineKind {
     Removed,
 }
 
+/// Một khoảng **byte** vào [`DiffLine::content`] — phần chữ thay đổi trong dòng.
+///
+/// # Đơn vị là BYTE, và đó là một quyết định phải đọc kỹ
+///
+/// `start`/`end` là chỉ số byte vào đúng chuỗi `DiffLine::content` mà cùng một
+/// `FileDiff` trả về. Không phải chỉ số ký tự, không phải chỉ số UTF-16 code unit, và
+/// không phải chỉ số vào một chuỗi nào khác.
+///
+/// Ba hệ chỉ số này **khác nhau** ngay khi dòng có một ký tự tiếng Việt: `é` là 2 byte
+/// / 1 ký tự / 1 UTF-16 unit, còn `ỏ` là 3 byte / 1 ký tự / 1 unit, và một emoji ngoài
+/// BMP là 4 byte / 1 ký tự / **2** unit. CodeMirror đánh chỉ số theo UTF-16 code unit,
+/// nên tầng vẽ của 03-04 **phải chuyển hệ** — nó không được dùng thẳng hai con số này
+/// làm offset cho decoration.
+///
+/// Byte được chọn làm hệ gốc vì đó là hệ mà git nói: `--word-diff=porcelain` phát ra
+/// byte, và `content` được dựng từ chính những byte đó. Bất kỳ phép chuyển nào ở phía
+/// Rust cũng là một cơ hội lệch một nấc, và 03-04 dù sao cũng phải chuyển sang hệ của
+/// CodeMirror.
+///
+/// # Bất biến: hai đầu luôn nằm trên **biên ký tự**
+///
+/// `content.is_char_boundary(start)` và `content.is_char_boundary(end)` luôn đúng.
+/// Không có bất biến này thì `&content[span.start..span.end]` panic và
+/// `String::slice` ở tầng JS cắt một ký tự làm đôi. Có test ghim trên nội dung
+/// tiếng Việt ở `git::parsers::word_diff`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Span {
+    /// Chỉ số byte đầu, bao gồm.
+    pub start: usize,
+    /// Chỉ số byte cuối, **không** bao gồm.
+    pub end: usize,
+}
+
 /// Một dòng trong một hunk.
 ///
 /// # Vì sao `old_line` và `new_line` là hai trường riêng, đều `Option`
@@ -48,6 +82,18 @@ pub struct DiffLine {
     /// Bản thân dòng đó **không** phải một `DiffLine` — đọc nó thành dòng nội dung
     /// sẽ thêm một dòng giả vào diff.
     pub no_newline_at_eof: bool,
+    /// Khoảng chữ **thay đổi** trong dòng — diff mức từ (03-03).
+    ///
+    /// Rỗng nghĩa là "không có thông tin mức từ cho dòng này", và đó là ca **bình
+    /// thường**, không phải lỗi: dòng ngữ cảnh không bao giờ có span; tệp chỉ-thêm
+    /// hoặc chỉ-xoá không chạy lệnh word-diff nào; tệp vượt
+    /// `WORD_DIFF_MAX_CHANGED_LINES` cố ý bỏ hẳn. Giao diện phải vẽ được dòng khi
+    /// `spans` rỗng — tô cả dòng là suy giảm đúng, không phải trường hợp lỗi.
+    ///
+    /// `#[serde(default)]` để một payload cũ (hoặc một test dựng `DiffLine` bằng tay
+    /// trước 03-03) deserialize được mà không phải sửa.
+    #[serde(default)]
+    pub spans: Vec<Span>,
 }
 
 /// Một khối thay đổi liền mạch.
@@ -217,6 +263,7 @@ mod tests {
                 old_line: None,
                 new_line: Some(4),
                 no_newline_at_eof: true,
+                spans: Vec::new(),
             }],
         };
         let v = serde_json::to_value(&hunk).unwrap();
@@ -232,13 +279,72 @@ mod tests {
         }
 
         let dong = &v["lines"][0];
-        for khoa in ["kind", "content", "oldLine", "newLine", "noNewlineAtEof"] {
+        for khoa in [
+            "kind",
+            "content",
+            "oldLine",
+            "newLine",
+            "noNewlineAtEof",
+            "spans",
+        ] {
             assert!(dong.get(khoa).is_some(), "DiffLine phải có khoá `{khoa}`");
         }
         assert_eq!(dong["kind"], "added");
         assert!(dong["oldLine"].is_null(), "dòng `added` không có số dòng cũ");
         assert_eq!(dong["newLine"], 4);
         assert_eq!(dong["noNewlineAtEof"], true);
+    }
+
+    /// **Hợp đồng IPC của `Span`** — 03-04 vẽ decoration từ đúng hai con số này.
+    ///
+    /// Liệt kê **toàn bộ** khoá rồi so **bằng**, không chỉ kiểm khoá mình mong có mặt.
+    /// Đây đúng là phép kiểm đã bắt được lỗi `old_size`/`oldSize` của 03-02: một khoá
+    /// sai tên vẫn để mọi phép `assert!(v.get("x").is_some())` xanh nếu ta chỉ hỏi về
+    /// những khoá ta nhớ tới, và không bên nào lỗi biên dịch.
+    #[test]
+    fn span_dung_ten_khoa_va_khong_co_khoa_thua() {
+        let v = serde_json::to_value(Span { start: 4, end: 7 }).unwrap();
+        let obj = v.as_object().expect("Span phải serialize thành object");
+        let mut khoa: Vec<&str> = obj.keys().map(String::as_str).collect();
+        khoa.sort_unstable();
+        assert_eq!(
+            khoa,
+            vec!["end", "start"],
+            "Span chỉ được mang hai chỉ số byte; khoá thừa nghĩa là hợp đồng với \
+             `src/lib/ipc.ts` đã lệch"
+        );
+        assert_eq!(v["start"], 4);
+        assert_eq!(v["end"], 7);
+    }
+
+    /// `DiffLine.spans` phải là **mảng** trong JSON, kể cả khi rỗng — `null` hay thiếu
+    /// khoá đều buộc 03-04 viết phép kiểm phòng thủ ở mọi chỗ vẽ.
+    #[test]
+    fn spans_luon_la_mang_ke_ca_khi_rong() {
+        let dong = DiffLine {
+            kind: LineKind::Added,
+            content: "  if (typeof cellData === \"object\") {".into(),
+            old_line: None,
+            new_line: Some(2),
+            no_newline_at_eof: false,
+            spans: vec![Span { start: 21, end: 24 }],
+        };
+        let v = serde_json::to_value(&dong).unwrap();
+        assert!(v["spans"].is_array(), "`spans` phải là mảng");
+        assert_eq!(v["spans"][0]["start"], 21);
+        assert_eq!(v["spans"][0]["end"], 24);
+
+        let rong = DiffLine {
+            spans: Vec::new(),
+            ..dong
+        };
+        let v = serde_json::to_value(&rong).unwrap();
+        assert!(
+            v["spans"].is_array() && v["spans"].as_array().unwrap().is_empty(),
+            "dòng không có thông tin mức từ phải cho mảng RỖNG, không phải `null` — \
+             `null` buộc 03-04 kiểm phòng thủ ở mọi chỗ vẽ. Nhận: {}",
+            v["spans"]
+        );
     }
 
     /// Ba giá trị của `LineKind` phải serialize thành đúng ba chuỗi thường.
