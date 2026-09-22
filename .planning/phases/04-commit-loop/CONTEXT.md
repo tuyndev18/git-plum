@@ -222,7 +222,7 @@ WORK-01. **Không** thêm lệnh git thứ hai chỉ để đếm.
 Những chỗ dưới đây đã tốn thời gian thật. Mỗi mục là một ca kiểm bắt buộc, không phải
 lời khuyên.
 
-### 3.1 Cổng không thể fail — đã xảy ra **sáu** lần
+### 3.1 Cổng không thể fail — đã xảy ra **tám** lần
 
 | # | Phase | Cổng sai vì |
 |---|---|---|
@@ -465,6 +465,17 @@ trên test happy-dom. Ghi "có mã, chưa kiểm".
 - **`rtk` lọc đầu ra `cargo test`** nhưng **có** ghi một dòng tổng vào tệp khi
   redirect (`cargo test: 284 passed, 1 ignored`), nên `> tệp` cho tổng số. Muốn **tên
   từng test** thì cần `rtk proxy cargo test`.
+- 🔴 **`rtk` làm hỏng MÃ THOÁT của đường ống `git`/`grep` — nguy hơn cắt đầu ra.**
+  Wave 5 gặp: phép kiểm nhiễm bẩn báo `!!! EXTRA FILES !!!` trên một kết quả grep
+  **rỗng**, và `wc -l` trả `0` cho một tệp **đang** được stage.
+
+  Cắt đầu ra làm cổng **trống**; đảo mã thoát làm cổng **nói ngược**. Một cổng báo bẩn
+  khi sạch sẽ bị người ta tắt đi vì "hay báo nhầm", rồi lần bẩn thật thì không ai tin
+  nó nữa.
+
+  **Dùng `rtk proxy git …` cho mọi thứ mà mã thoát hoặc số đếm là kết quả**, gồm cả các
+  cổng dạng `git status … | grep -E` trong plan. Kiểm tập đã stage bằng
+  `rtk proxy git diff --cached --name-only`.
 
 ### 3.7 Kiểm tra bản dựng người dùng nhận
 
