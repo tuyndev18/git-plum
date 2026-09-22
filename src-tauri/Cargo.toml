@@ -7,6 +7,19 @@ license = "MIT"
 edition = "2021"
 rust-version = "1.82"
 
+# Bắt buộc từ lúc `src/bin/lanedist.rs` xuất hiện (công cụ đo phân bố lane, plan
+# 04). Hai binary trong một crate làm `cargo run` không đoán được chạy cái nào, và
+# `tauri dev` chạy đúng `cargo run --no-default-features --color always --` nên nó
+# **đứt ngay**:
+#
+#   error: `cargo run` could not determine which binary to run.
+#   available binaries: git-plum, lanedist
+#
+# `lanedist` là công cụ dòng lệnh chạy tay (`cargo run --bin lanedist <repo>`), còn
+# `git-plum` là ứng dụng — nên mặc định phải là `git-plum`. Thêm bất kỳ bin nào nữa
+# vào `src/bin/` cũng không sao chừng nào dòng này còn đây.
+default-run = "git-plum"
+
 [lib]
 name = "git_plum_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
