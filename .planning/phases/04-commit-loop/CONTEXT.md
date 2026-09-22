@@ -238,6 +238,27 @@ khi M1 vẫn áp dụng** → `242 passed, 0 đỏ`. Lỗi đi qua hoàn toàn. 
 phân biệt được nếu *dữ liệu* của nó vô hại. Hình dạng là điều kiện cần, không đủ. Phải
 chạy đột biến và **thấy** đỏ, không phải lập luận rằng fixture bao được.
 
+#### Lớp lỗi "hình dạng đúng, dữ liệu vô hại" — đã gặp BA lần, hai phase
+
+Đủ số lần để đặt tên và kiểm chủ động, không chờ gặp lần thứ tư.
+
+| # | Ở đâu | Fixture có gì đúng | Dữ liệu vô hại thế nào | Hậu quả |
+|---|---|---|---|---|
+| 1 | Phase 2, nguyên nhân B (`5ac43ef`) | Có badge ref, có chữ message | Badge **ngắn** | Badge thật 258px nuốt cột 332px → chữ hiện **0%**. Test xanh suốt |
+| 2 | Phase 4 wave 1, M1 (`c0c4264`) | Bản ghi dạng `2` + ≥2 bản ghi sau | Đường dẫn cũ `a_old.txt` **không khớp dạng nào** | Lệch nấc thật nhưng đoạn rò bị `_ => {}` bỏ im lặng → **0 đỏ** |
+| 3 | Phase 4 wave 3, M14 (chưa chạy) | Hai repo, đổi repo giữa lúc trì hoãn | Nháp repo B **rỗng** | Đè chuỗi của A lên ô rỗng vẫn trông như "B rỗng" → xanh |
+
+**Lỗi chiều cao hàng (`7596e63`) KHÔNG thuộc lớp này** — đừng gộp vào. `STATE.md` ghi
+trung thực nó "không tái hiện được bằng số đo": happy-dom không tính layout nên fixture
+nào cũng không đo được. Đó là lớp lỗi ở mục 3.4, khác hẳn.
+
+**Cách kiểm chủ động, trước khi viết fixture:** hỏi *dữ liệu này có thể khiến lỗi để lại
+dấu vết quan sát được không?* — chứ không hỏi *fixture này có đúng hình dạng không*.
+
+Instance #1 là ca đắt nhất và đáng nhớ nhất: fixture không chỉ vô hại, nó **không đại
+diện đúng ở chính chiều đang quyết định kết quả** (bề rộng chữ với font thật ở bề rộng
+khung thật). Khoảng cách chỉ lộ ra khi đo bằng Segoe UI nạp từ `C:/Windows/Fonts`.
+
 Điều này cũng nói về **mã**, không chỉ về test: lệch nấc chỉ im lặng khi đường dẫn cũ
 tình cờ vô hại. Một đường dẫn cũ có khoảng trắng, hoặc bắt đầu bằng ký tự dạng bản ghi,
 sinh ra bản ghi **sai thật sự** — nên đây là lỗi có thể gặp trên repo thật.
