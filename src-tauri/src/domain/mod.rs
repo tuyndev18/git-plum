@@ -12,5 +12,5 @@ pub mod diff;
 pub mod refs;
 
 pub use commit::Commit;
-pub use diff::{DiffKind, DiffLine, FileDiff, Hunk, LineKind};
+pub use diff::{DiffKind, DiffLine, FileDiff, FileHistory, FileVersion, Hunk, LineKind};
 pub use refs::{Ref, RefKind};

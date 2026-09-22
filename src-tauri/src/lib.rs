@@ -46,6 +46,7 @@ pub fn run() {
             commands::get_commit_detail,
             commands::search_commits,
             commands::get_file_diff,
+            commands::get_file_history,
             commands::spike_blob_pair,
         ])
         .run(tauri::generate_context!())

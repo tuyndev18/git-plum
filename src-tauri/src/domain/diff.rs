@@ -198,6 +198,56 @@ pub struct FileDiff {
     pub kind: DiffKind,
 }
 
+/// Một phiên bản của **một** tệp — một commit đã sửa nó (DIFF-05).
+///
+/// # Vì sao không dùng lại [`crate::domain::Commit`]
+///
+/// `Commit` mang `parents`, `committer_*` và `body` — dữ liệu để **vẽ đồ thị** và để
+/// hiện chi tiết một commit. Danh sách phiên bản của một tệp là một danh sách phẳng
+/// chặn trên 200 hàng, mỗi hàng hiện bốn thứ: ngày, tác giả, tiêu đề, mã ngắn. Kéo
+/// `parents` và `body` của 200 commit qua IPC cho một danh sách không dùng chúng là
+/// chi phí thuần, và nó cũng làm kiểu này nói sai về ý nghĩa của mình: đây là *một
+/// tệp ở một commit*, không phải *một commit*.
+///
+/// Hai trường `status` và `old_path` là phần khiến kiểu này khác `Commit` về bản
+/// chất — chúng thuộc **cặp** (commit, tệp), không thuộc commit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileVersion {
+    /// Mã commit đầy đủ (40 hex). Giao diện tự cắt ngắn khi hiện.
+    pub commit_id: String,
+    pub author_name: String,
+    /// Giây Unix. Truyền số nguyên qua IPC rồi để `Intl.DateTimeFormat` định dạng —
+    /// CLAUDE.md, mục "What NOT to Use" → `chrono`.
+    pub author_time: i64,
+    pub subject: String,
+    /// Chữ trạng thái của git kèm điểm tương đồng: `M`, `A`, `D`, `R100`, `C075`.
+    pub status: String,
+    /// Đường dẫn của tệp **tại commit đó** — đổi ở mỗi lần đổi tên.
+    pub path: String,
+    /// Tên **cũ**, chỉ khác `None` ở bản ghi `R` (đổi tên) và `C` (sao chép).
+    ///
+    /// 🔴 Đây là thứ `--follow` mua được, và giao diện **phải hiện nó ra**. Một lịch
+    /// sử lần qua chỗ đổi tên trong im lặng làm người dùng không hiểu vì sao đường
+    /// dẫn ở hàng dưới khác hàng trên.
+    pub old_path: Option<String>,
+}
+
+/// Lịch sử của một tệp — DIFF-05.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct FileHistory {
+    /// Đường dẫn được hỏi (tên **hiện tại** của tệp).
+    pub path: String,
+    /// Phiên bản, mới nhất trước.
+    pub versions: Vec<FileVersion>,
+    /// `true` khi đã chạm chặn trên `MAX_FILE_HISTORY`.
+    ///
+    /// Phải hiện **trên giao diện**, không chỉ nằm trong payload (T-03-38): một lịch
+    /// sử bị cắt mà không ai nói ra là một lịch sử sai mà không ai biết.
+    pub truncated: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

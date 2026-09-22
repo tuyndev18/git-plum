@@ -39,9 +39,10 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::cache::DiffKey;
-use crate::domain::diff::{DiffKind, FileDiff, Hunk, LineKind};
+use crate::domain::diff::{DiffKind, FileDiff, FileHistory, Hunk, LineKind};
 use crate::error::{GitError, Result};
 use crate::git::exec::DEFAULT_TIMEOUT;
+use crate::git::parsers::file_history::{parse_file_history, FILE_HISTORY_FORMAT};
 use crate::git::parsers::patch::parse_patch;
 use crate::git::parsers::word_diff::{parse_word_diff, WORD_DIFF_REGEX};
 use crate::git::GitCommand;
@@ -860,6 +861,121 @@ fn chon_ban_ghi_khop(stdout: &[u8], path: &str) -> (String, Option<String>) {
     ("M".to_owned(), None)
 }
 
+/// Chặn trên số phiên bản trả về cho một tệp — **200 commit**.
+///
+/// # Vì sao có chặn trên, và vì sao nó đủ
+///
+/// `--follow` tốn kém vì nó tính điểm tương đồng ở **mỗi** commit đụng tới path, để
+/// nhận ra chỗ đổi tên. Không chặn thì chi phí tỉ lệ với **độ dài lịch sử** — trên
+/// một repo triệu commit đó là một cách treo giao diện (T-03-33).
+///
+/// `--max-count=200` biến chi phí đó thành **hằng số**: git dừng ngay khi đủ 200
+/// commit, nên không có phép tính tương đồng nào cho phần lịch sử phía sau.
+///
+/// 200 đủ cho mọi tệp thật. Một tệp có hơn 200 commit sửa nó là tệp mà người dùng
+/// không cuộn hết danh sách; chạm chặn thì cờ `truncated` bật và giao diện nói
+/// "200 phiên bản gần nhất" — **nói ra**, không im lặng (T-03-38).
+///
+/// # Và vì sao 200 hàng DOM là lý do không cần ảo hoá
+///
+/// Chặn ở tầng git nghĩa là `FileHistory.tsx` không bao giờ dựng hơn 200 hàng, nên
+/// `useVirtualizer` ở đó là phức tạp không mua được gì (T-03-34). `CommitList` cần nó
+/// vì 100 nghìn hàng; đây thì không.
+pub const MAX_FILE_HISTORY: usize = 200;
+
+/// Lịch sử thay đổi của **một** tệp — DIFF-05.
+///
+/// Tách khỏi `#[tauri::command]` để test tích hợp gọi được mà không cần dựng một
+/// `App` có webview — cùng cách `lay_diff_tep` làm.
+///
+/// # Hạn giờ: [`DEFAULT_TIMEOUT`] (30 giây), **không** `HISTORY_TIMEOUT` (120 giây)
+///
+/// Đây là truy vấn **một tệp** có `--max-count`, không phải `git log --all` trên toàn
+/// lịch sử. Mượn hằng số của nhóm khác khiến việc chỉnh hạn giờ lịch sử về sau vô
+/// tình đổi hành vi ở đây — đúng khuôn lập luận mà 02-04 dùng khi từ chối mượn
+/// `NETWORK_TIMEOUT`. Vẫn **phải có** một hạn giờ, và nó là chặn cứng thứ hai sau
+/// `--max-count`: thiếu nó thì một repo hỏng treo giao diện vĩnh viễn (T-02-14).
+///
+/// # 🔴 KHÔNG cache, và đó là một quyết định có lý do
+///
+/// Diff của một commit lịch sử là **bất biến** theo `(sha, path)`, nên cache nó là
+/// đúng. Lịch sử tệp thì **phụ thuộc HEAD**: một commit mới xuất hiện sẽ đổi kết quả
+/// cho cùng một `path`. Cache nó cần một cơ chế vô hiệu hoá, và cái duy nhất đúng là
+/// theo dõi thư mục làm việc — thứ chỉ tới ở Phase 4.
+///
+/// Một truy vấn 200 commit cho một path là rẻ. Cache nó bây giờ là tự tạo ra một lớp
+/// dữ liệu cũ mà chưa có gì để dọn: người dùng commit rồi mở lại lịch sử tệp và
+/// **không thấy commit của chính mình**. Ghi lý do ở đây để người sau không "tối ưu"
+/// nó vào một lỗi.
+///
+/// # `--no-ext-diff` không phải việc của hàm này
+///
+/// `GitCommand::run()` chèn nó cho mọi lệnh con có thể gọi trình khác biệt, và `log`
+/// nằm trong danh sách đó (xem `them_no_ext_diff`). Thêm lần nữa ở đây là mã chết.
+pub async fn lay_lich_su_tep(
+    state: &AppState,
+    repo: Arc<RepoHandle>,
+    path: &str,
+) -> Result<FileHistory> {
+    let runner = state.runner(Arc::clone(&repo));
+
+    let ra = runner
+        .read(
+            GitCommand::new(&repo.path)
+                // `core.quotepath=false` để tên tệp có ký tự ngoài ASCII về ở dạng
+                // byte thô thay vì escape bát phân — bộ phân tích giải mã lossy, nên
+                // nó cần byte thật (HIST-11).
+                .args(["-c", "core.quotepath=false", "log"])
+                .arg("--follow")
+                .arg(format!("--max-count={MAX_FILE_HISTORY}"))
+                .arg(FILE_HISTORY_FORMAT)
+                .args(["--name-status", "-z"])
+                // 🔴 `--` TRƯỚC pathspec (T-02-11 / T-03-32). Thiếu nó thì một `path`
+                // trùng tên nhánh bị git hiểu thành một **revision**, và người dùng
+                // nhận lịch sử của một nhánh thay vì của tệp mình chọn.
+                .arg("--")
+                .arg(PATHSPEC_SAU_DAU_GACH(path))
+                .timeout(DEFAULT_TIMEOUT),
+        )
+        .await?;
+
+    // git thoát khác 0 khi `path` chưa từng tồn tại. Đó **không** phải lỗi: "tệp này
+    // không có trong lịch sử" là một câu trả lời bình thường mà giao diện hiện bằng
+    // một câu riêng, khác hẳn ca lỗi. Nên đi tiếp và để bộ phân tích trả danh sách
+    // rỗng.
+    let phan_tich = parse_file_history(&ra.stdout, MAX_FILE_HISTORY);
+
+    if phan_tich.skipped_records > 0 {
+        // Ghi `repo.id` (mã băm) và **số**, KHÔNG ghi `path` — khuôn T-02-24/T-03-36:
+        // đường dẫn tệp của người dùng không vào log.
+        tracing::warn!(
+            repo = %repo.id,
+            skipped = phan_tich.skipped_records,
+            "bỏ qua bản ghi méo khi đọc lịch sử tệp"
+        );
+    }
+
+    Ok(FileHistory {
+        path: path.to_owned(),
+        versions: phan_tich.versions,
+        truncated: phan_tich.truncated,
+    })
+}
+
+/// Lịch sử thay đổi của một tệp — DIFF-05.
+///
+/// Xem [`lay_lich_su_tep`] cho hạn giờ, chặn trên và lý do **không** cache.
+#[tauri::command]
+pub async fn get_file_history(
+    repo_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<FileHistory> {
+    let repo = repo_cua(&state, &repo_id)?;
+    lay_lich_su_tep(&state, repo, &path).await
+}
+
+
 /// Diff của một tệp trong một commit — DIFF-01, DIFF-06.
 ///
 /// Xem tài liệu đầu module về thứ tự các bước; nó là hợp đồng của DIFF-06.
@@ -980,12 +1096,13 @@ mod tests {
 
         let so_moc = ma.matches("PATHSPEC_SAU_DAU_GACH").count();
         assert_eq!(
-            so_moc, 4,
-            "bốn vị trí pathspec từ `lay_diff_tep` tới hết phần không-test: lệnh \
+            so_moc, 5,
+            "năm vị trí pathspec từ `lay_diff_tep` tới hết phần không-test: lệnh \
              --numstat, HAI đường dẫn của lệnh diff thật (tên mới cộng tên cũ khi đổi \
-             tên), và lệnh --word-diff của bước mức từ (03-03). Lệnh --name-status cố \
-             ý KHÔNG có pathspec — xem tài liệu của `trang_thai_va_ten_cu`. \
-             Số mốc khác 4 nghĩa là một lệnh mất mốc hoặc có lệnh mới chưa được kiểm"
+             tên), lệnh --word-diff của bước mức từ (03-03), và lệnh \
+             `log --follow` của `lay_lich_su_tep` (03-05, DIFF-05). Lệnh --name-status \
+             cố ý KHÔNG có pathspec — xem tài liệu của `trang_thai_va_ten_cu`. \
+             Số mốc khác 5 nghĩa là một lệnh mất mốc hoặc có lệnh mới chưa được kiểm"
         );
 
         // Kiểm **từng lệnh một**, không kiểm cả thân hàm như một khối.
@@ -1039,10 +1156,11 @@ mod tests {
         }
 
         assert_eq!(
-            so_lenh_co_pathspec, 3,
-            "đúng ba lệnh mang pathspec: `--numstat`, lệnh diff thật, và lệnh \
-             `--word-diff` của bước mức từ (03-03). Lệnh `--name-status` cố ý không \
-             mang (xem `trang_thai_va_ten_cu`). Con số khác 3 nghĩa là phép cắt theo \
+            so_lenh_co_pathspec, 4,
+            "đúng bốn lệnh mang pathspec: `--numstat`, lệnh diff thật, lệnh \
+             `--word-diff` của bước mức từ (03-03), và `log --follow` của \
+             `lay_lich_su_tep` (03-05). Lệnh `--name-status` cố ý không mang (xem \
+             `trang_thai_va_ten_cu`). Con số khác 4 nghĩa là phép cắt theo \
              `GitCommand::new` đã lệch và vòng lặp trên không còn kiểm đúng thứ nó tưởng"
         );
     }

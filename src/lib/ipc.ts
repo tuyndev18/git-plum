@@ -345,6 +345,53 @@ export interface SpikeBlobPair {
   rustMs: number
 }
 
+
+/**
+ * Một phiên bản của **một** tệp — một commit đã sửa nó (DIFF-05).
+ *
+ * Khớp `domain::diff::FileVersion`. Tên khoá đã ghim bằng test ở phía Rust.
+ */
+export interface FileVersion {
+  /** Mã commit đầy đủ (40 hex). Giao diện tự cắt ngắn khi hiện. */
+  commitId: string
+  authorName: string
+  /**
+   * **Giây** Unix, không phải milli.
+   *
+   * 🔴 `new Date(authorTime)` cho một ngày năm 1970 — `Date` nhận milli. Phải là
+   * `new Date(authorTime * 1000)`. Lỗi này đã nằm trong checklist checkpoint của
+   * 02-06, tức là một lỗi **đã được lường trước** và vẫn đáng một test riêng.
+   */
+  authorTime: number
+  subject: string
+  /** Chữ trạng thái của git kèm điểm tương đồng: `M`, `A`, `D`, `R100`, `C075`. */
+  status: string
+  /** Đường dẫn của tệp **tại commit đó** — đổi ở mỗi lần đổi tên. */
+  path: string
+  /**
+   * Tên **cũ**, chỉ khác `null` ở bản ghi `R` (đổi tên) và `C` (sao chép).
+   *
+   * 🔴 Giao diện **phải hiện nó ra**. Đây là thứ `--follow` mua được, và một lịch sử
+   * lần qua chỗ đổi tên trong im lặng làm người dùng không hiểu vì sao đường dẫn ở
+   * hàng dưới khác hàng trên.
+   */
+  oldPath: string | null
+}
+
+/** Lịch sử của một tệp — DIFF-05. Khớp `domain::diff::FileHistory`. */
+export interface FileHistory {
+  /** Đường dẫn được hỏi (tên **hiện tại** của tệp). */
+  path: string
+  /** Phiên bản, mới nhất trước. */
+  versions: FileVersion[]
+  /**
+   * `true` khi đã chạm chặn trên 200 phiên bản.
+   *
+   * Phải hiện **trên giao diện**, không chỉ nằm trong payload (T-03-38): một lịch sử
+   * bị cắt mà không ai nói ra là một lịch sử sai mà không ai biết.
+   */
+  truncated: boolean
+}
 // --- Các lệnh -------------------------------------------------------------
 
 export const ipc = {
@@ -389,6 +436,19 @@ export const ipc = {
   getFileDiff: (repoId: string, commitId: string, path: string) =>
     invoke<FileDiff>('get_file_diff', { repoId, commitId, path }),
 
+
+  /**
+   * Lịch sử thay đổi của một tệp — DIFF-05.
+   *
+   * 🔴 **Không cache phía nào.** Khác `getFileDiff` (bất biến theo `(commitId, path)`,
+   * nên `staleTime: Infinity` là đúng), lịch sử tệp phụ thuộc **HEAD**: commit mới
+   * xuất hiện sẽ đổi kết quả cho cùng một `path`. Phía Rust cố ý không cache — xem
+   * `lay_lich_su_tep`. Đặt `staleTime` dài ở đây sẽ dựng lại đúng lớp dữ liệu cũ mà
+   * phía Rust vừa từ chối tạo ra, và hệ quả là người dùng commit rồi mở lại lịch sử
+   * tệp mà **không thấy commit của chính mình**.
+   */
+  getFileHistory: (repoId: string, path: string) =>
+    invoke<FileHistory>('get_file_history', { repoId, path }),
   // --- Spike đo hiệu năng diff (plan 03-01, checkpoint #3) ---
   //
   // Không nằm trên đường người dùng: chỉ `SpikeHarness` gọi, và harness chỉ hiện

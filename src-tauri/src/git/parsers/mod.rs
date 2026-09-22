@@ -11,6 +11,7 @@
 //! * Một bản ghi hỏng **không** được làm hỏng cả trang. Bỏ nó, đếm nó, trả phần còn
 //!   lại — xem `LogParseResult::skipped_records`.
 
+pub mod file_history;
 pub mod log;
 pub mod patch;
 pub mod refs;
