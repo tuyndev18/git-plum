@@ -365,7 +365,7 @@ tệp exe.** Kiểm bằng `ls -l --time-style=full-iso src-tauri/target/release
 | R4 | `--porcelain=v2` dòng dạng `2` lệch nấc | Đúng lớp lỗi bản ghi `R` của wave 5 | Test có ≥ 2 bản ghi **sau** một bản ghi dạng `2` |
 | R5 | Commit rỗng / chỉ khoảng trắng trong thông điệp | `commit-msg` hook có thể từ chối | Không tự sửa thông điệp; hiện nguyên văn lỗi hook |
 | R6 | amend trên commit đã push | Ràng buộc nói **cảnh báo, không chặn** | Lấy ahead/behind từ `--branch` của cùng lệnh status |
-| R7 | Bản nháp mất khi chuyển repo | Tiêu chí thành công số 6 | Nháp khoá theo `repo_id`, lưu qua `tauri-plugin-store` |
+| R7 | Bản nháp mất khi chuyển repo | Tiêu chí thành công số 6 | Nháp khoá theo `repo_id`, lưu qua `tauri-plugin-store`; **`flushDraft()` khi đổi repo** — ghi đĩa trì hoãn ~300 ms nên ký tự gõ ngay trước lúc chuyển sẽ mất nếu không xả |
 | R8 | Xây trên diff viewer chưa kiểm | Năm lỗi hiển thị đã tìm thấy bằng mắt | Vòng commit **không** phụ thuộc diff render đúng (mục 0) |
 
 ---
@@ -399,3 +399,23 @@ Ba session Claude đang mở trên cùng repo này (2026-09-22). Đã xác nhậ
 **Nghĩa là:** phase này chỉ ghi vào `.planning/phases/04-commit-loop/` và mã mới của
 Phase 4. Không sửa `ROADMAP.md`, `REQUIREMENTS.md`, hay sáu tệp Phase 2 đó khi chúng
 còn chưa commit.
+
+### Cập nhật 2026-09-22: PLAT-11 (nhiều repo mở theo thẻ) kéo lên v1
+
+Chủ dự án kéo V2-05 lên v1 thành **PLAT-11**, giao cho **Phase 2** (không phải Phase 4)
+— đó là việc nền tảng/vỏ, và Phase 2 đã sở hữu thanh bên với đồ thị mà thanh thẻ ngồi
+lên trên. Tổng requirement **60 → 61**. **Phạm vi Phase 4 không đổi**: vẫn sáu
+WORK-01, 02, 08, 09, 10, 11.
+
+**Chạm Phase 4 ở đúng một chỗ, và chỗ đó đã xử lý sẵn.** Nếu thẻ về trước, thì "chuyển
+repo" ở tiêu chí thành công số 6 nghĩa là "chuyển thẻ". Nháp đã khoá theo `repoId`
+(`commitStore.draftByRepo` + `repoId` **trong khoá lưu trữ** của `commitDraft.ts`), nên
+đổi thẻ là đổi `repoId` và hành vi đúng tự nhiên. Ca hẹp `flushDraft()` ở R7 áp y hệt
+cho đổi thẻ.
+
+**Ca của Phase 2 thì khác và khó hơn — ghi ở đây để không ai nhầm nó với ca nháp:**
+`scrollTop` của virtualizer **không nằm trong store nào**, nó là trạng thái DOM. PLAT-05
+khoá mọi thứ khác theo `repo_id` nên đổi thẻ gần như miễn phí, riêng `scrollTop` thì
+không. Hai đường: giữ cây component của thẻ không hoạt động **mounted** (tốn RAM, đụng
+ràng buộc < 150 MB) hoặc lưu `scrollTop` theo `repoId` rồi khôi phục. Việc của plan
+02-08, không phải của phase này.
