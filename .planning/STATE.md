@@ -26,7 +26,7 @@ progress:
 
 **Core Value:** Đọc và hiểu lịch sử của một repository phải tức thì — đồ thị commit mở ra trong dưới một giây và cuộn mượt kể cả trên repo hàng chục nghìn commit.
 
-**Current focus:** Phase 3 — Xem khác biệt (wave 2 xong; Phase 2 còn hai checkpoint nợ)
+**Current focus:** Phase 3 — Xem khác biệt (wave 3 xong; Phase 2 còn hai checkpoint nợ)
 
 **Mode:** mvp (Vertical MVP) · **Granularity:** standard · **Parallelization:** enabled
 
@@ -40,8 +40,9 @@ progress:
 |---|---|
 | **Wave 1 (03-01)** | ✅ Mã xong. Spike đo A/B dựng xong; **checkpoint #3 CHƯA CHẠY** — chủ dự án chưa đo, nên quyết định A/B vẫn chưa có. Tìm và sửa một lỗi Phase 1: `GIT_EXTERNAL_DIFF=""` làm **mọi** lệnh git sinh bản vá thất bại trong im lặng (`f5c4c17`, đo thêm ở `43183d4`). |
 | **Wave 2 (03-02)** | ✅ Xong, `autonomous` nên không phụ thuộc checkpoint #3. Backend diff đầy đủ: hợp đồng dữ liệu 5 dạng, `parse_patch` viết tay, `DiffCache` LRU 200 mục, `get_file_diff` với cổng DIFF-06 chạy **trước** `git diff`. **216 test Rust** (mốc 163) + **233 test frontend** (mốc 226); `clippy`/`typecheck`/`tauri:build` đều xanh. **9/9 mutation đã chạy**, trong đó **ba cổng vô dụng phải sửa rồi chạy lại**. Repo mẫu `target/fixtures/diff-cases` 26 commit, gồm ba fixture mà wave 3 phụ thuộc. |
-| **Phát hiện đo được** | 🔴 **Plan 03-02 sai một chỗ:** `git diff --name-status` **mang pathspec** làm git báo `A` thay vì `R077` cho tệp đổi tên, vì pathspec lọc mất đường dẫn cũ **trước khi** phép phát hiện đổi tên chạy. Kéo theo bản vá in **toàn bộ tệp là dòng thêm** thay vì một hunk sửa một dòng. Đã sửa và ghim bằng ba test. |
-| **Tiếp theo** | Wave 3 (03-03, diff mức từ) — không chặn bởi checkpoint #3. Wave 4 (03-04, giao diện) **chặn** bởi checkpoint #3. |
+| **Wave 3 (03-03)** | ✅ Xong, `autonomous` nên không phụ thuộc checkpoint #3. Diff mức **từ** lấy từ `git diff --word-diff=porcelain`: bộ phân tích riêng dựng lại dòng nguồn từ các đoạn từ (`parse_word_diff`), `DiffLine.spans` là khoảng **byte** vào `content`, và một lệnh git thứ hai **có điều kiện** trong `get_file_diff` với ba cổng bỏ qua. **257 test Rust** (mốc 216) + **236 test frontend** (mốc 233); `clippy`/`typecheck` xanh. **12/12 mutation đã chạy**: 9 đỏ, 3 ghi rõ là không kiểm được (hai trong đó vì **dữ liệu**, không vì cổng sai). Chi phí đo được: lệnh word-diff ≈ **32–39ms**, xấp xỉ bằng lệnh diff chính — bị chi phối bởi chi phí sinh tiến trình. |
+| **Phát hiện đo được** | 🔴 **Plan 03-02 sai một chỗ:** `git diff --name-status` **mang pathspec** làm git báo `A` thay vì `R077` cho tệp đổi tên. Đã sửa và ghim bằng ba test.<br>🔴 **Plan 03-03 sai một chỗ:** biên từ **mặc định** của git **mất** khoảng trắng ngăn cách (`alpha beta` → `alpha` dựng lại thành `alphabeta`; `dong hai` → `dong hai da sua` để lại dấu cách thừa ở phía cũ), làm bất biến "dựng lại bằng từng byte với `parse_patch`" **bất khả**. Ca thứ hai nằm ngay trong `text-simple.txt`. Đã sửa sang `--word-diff-regex=[^[:space:]]+\|[[:space:]]+` — vẫn an toàn với UTF-8 vì nó khớp theo **vệt** byte, không theo byte lẻ như `.`. |
+| **Tiếp theo** | Wave 4 (03-04, giao diện) — **chặn** bởi checkpoint #3 (quyết định A/B vẫn chưa có). |
 
 ### Phase 2 — nợ cũ
 

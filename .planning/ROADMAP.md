@@ -124,7 +124,7 @@ Phạm vi gồm DIFF-01…DIFF-06 **cộng word-level diff** (tô riêng phần 
 Plans:
 - [ ] 03-01-PLAN.md — Checkpoint #3 ở wave 1: đo `@codemirror/merge` so với tự vẽ hunk trên tệp lớn thật, ngưỡng chốt trước (250ms tốt nhất / 400ms tệ nhất, profile release)
 - [x] 03-02-PLAN.md — Hợp đồng dữ liệu diff + bộ phân tích unified diff viết tay + cache LRU 200 mục khoá `(sha, path)` + cổng DIFF-06 chạy TRƯỚC `git diff` (ngưỡng 5 MB) — **xong 2026-09-22**, 216 test Rust + 233 test frontend, 9/9 mutation
-- [ ] 03-03-PLAN.md — Word-level diff từ `git diff --word-diff=porcelain` (chính tả `--word-diff-porcelain` **không tồn tại** — đã đo trên git 2.54)
+- [x] 03-03-PLAN.md — Word-level diff từ `git diff --word-diff=porcelain` (chính tả `--word-diff-porcelain` **không tồn tại** — đã đo trên git 2.54) — **xong 2026-09-22**, 257 test Rust + 236 test frontend, 12/12 mutation. 🔴 Phải đổi biên từ sang `--word-diff-regex=[^[:space:]]+|[[:space:]]+`: biên **mặc định** làm mất khoảng trắng ngăn cách nên không dựng lại được dòng nguồn
 - [ ] 03-04-PLAN.md — Trình xem CodeMirror: tô màu cú pháp nạp lười, hai chế độ, nhảy khối, hiện khoảng trắng (DIFF-01..04, 06) + checkpoint hiển thị 11 bước
 - [ ] 03-05-PLAN.md — Lịch sử một tệp qua `git log --follow` (DIFF-05) + **exit gate dogfood**
 **UI hint**: yes
