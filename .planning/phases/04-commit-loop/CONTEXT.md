@@ -477,6 +477,21 @@ trên test happy-dom. Ghi "có mã, chưa kiểm".
   cổng dạng `git status … | grep -E` trong plan. Kiểm tập đã stage bằng
   `rtk proxy git diff --cached --name-only`.
 
+  🔴 **Và `rtk proxy` CŨNG không cứu được — lỗi này chập chờn.** Wave 5 chạy
+  `rtk proxy git status --porcelain <paths>` trên ba tệp **đang dirty** và nhận **rỗng**;
+  `git` trần trên đúng pathspec đó trả ` M`. Không có đường ống nào cả.
+
+  Tôi cũng dính, theo hướng khác: `git status --porcelain <paths> | wc -l` trả **0**
+  trong khi cùng lệnh không qua ống trả ` M src/App.tsx`. Tôi đọc số **0** đó thành
+  "hết tắc" và khởi động một wave lên một tiền đề sai.
+
+  **Đo lại 20 lần ngay sau đó: 20/20 đúng.** Nên nó **không tái hiện theo ý muốn** —
+  và nó nổ đúng lúc đang ra quyết định.
+
+  **Quy tắc:** với một phép kiểm mà kết quả **quyết định có chạy tiếp hay không**, đừng
+  tin một con số. Đọc **đầu ra thô**, in nó ra, và nhìn bằng mắt. `[$(cmd)]` bọc ngoặc
+  để phân biệt "rỗng" với "trắng". Đếm chỉ dùng cho việc không quan trọng.
+
 ### 3.7 Kiểm tra bản dựng người dùng nhận
 
 Đã xảy ra: chủ dự án kiểm một exe cũ hơn bản sửa **32 phút**. Quy tắc từ đó: **mỗi vòng
