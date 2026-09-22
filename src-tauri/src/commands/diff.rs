@@ -896,6 +896,31 @@ pub const MAX_FILE_HISTORY: usize = 200;
 /// `NETWORK_TIMEOUT`. Vẫn **phải có** một hạn giờ, và nó là chặn cứng thứ hai sau
 /// `--max-count`: thiếu nó thì một repo hỏng treo giao diện vĩnh viễn (T-02-14).
 ///
+/// # ⚠️ Giới hạn đã biết: MERGE COMMIT không xuất hiện trong danh sách
+///
+/// `git log` mặc định không sinh diff cho merge, và với `--follow` hệ quả mạnh hơn:
+/// merge commit **không xuất hiện trong danh sách commit** ở tất cả — kể cả một merge
+/// đã **thật sự giải quyết xung đột** trong chính tệp đang xem. Đo thật (git 2.54,
+/// repo dựng riêng có xung đột thật): ba commit thường hiện ra, merge giải quyết xung
+/// đột thì không.
+///
+/// **Đã thử `--diff-merges=first-parent` và nó SAI ở đây**, đo trên repo thật
+/// `dau-tri-toan-hoc` (1140 commit, 39 merge):
+///
+/// | tệp | không cờ | `--diff-merges=first-parent` |
+/// |---|---|---|
+/// | `.planning/STATE.md` | 104 bản ghi | **5715** |
+/// | `.planning/ROADMAP.md` | 118 bản ghi | **4655** |
+///
+/// Cờ đó làm git in **nội dung bản vá** ra cùng luồng, nên `--max-count=200` mất tác
+/// dụng và bộ phân tích nhận thêm hàng nghìn dòng không phải bản ghi tệp. Nó phá cả
+/// chặn trên DoS (T-03-33) lẫn chặn 200 hàng DOM (T-03-34) — tức nó đổi một khoảng
+/// thiếu **nhìn thấy được** thành hai lỗi **im lặng**. Không dùng.
+///
+/// Nên giới hạn này được **nhận và ghi ra**, không lấp bằng một cờ tệ hơn. Cách đúng
+/// (nếu cổng thoát cho thấy nó đáng) là một lệnh riêng cho merge, không phải một cờ
+/// thêm vào lệnh này. Có test ghim phép đo ở `tests/file_history_commands.rs`.
+///
 /// # 🔴 KHÔNG cache, và đó là một quyết định có lý do
 ///
 /// Diff của một commit lịch sử là **bất biến** theo `(sha, path)`, nên cache nó là

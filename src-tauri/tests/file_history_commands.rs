@@ -386,3 +386,111 @@ fn bo_chu_thich(ma: &str) -> String {
     }
     ra
 }
+
+/// ⚠️ **Giới hạn đã biết, ghim bằng test:** merge commit KHÔNG vào danh sách phiên bản.
+///
+/// Test này dựng một repo có **xung đột thật** rồi giải quyết nó, và khẳng định merge
+/// commit đó **không** xuất hiện. Nó ghim một khoảng thiếu, không một tính năng — và
+/// nó tồn tại vì ba lý do:
+///
+/// 1. Khoảng thiếu này **đo được**, không suy luận: `git log --follow` mặc định bỏ
+///    merge khỏi cả danh sách commit, kể cả merge đã sửa chính tệp đang xem.
+/// 2. `--diff-merges=first-parent` **không** phải bản sửa — xem doc comment của
+///    `lay_lich_su_tep` cho phép đo 104 → 5715 bản ghi trên repo thật.
+/// 3. Nếu ai đó về sau "sửa" nó bằng một cờ, test này đỏ và buộc họ đọc phép đo trước
+///    khi đánh đổi hai chặn trên (T-03-33, T-03-34) lấy một khoảng thiếu nhìn thấy được.
+///
+/// Đỏ ở đây nghĩa là hành vi đã đổi — **không** tự động nghĩa là đã tốt hơn.
+#[tokio::test]
+async fn merge_commit_khong_vao_danh_sach_phien_ban_gioi_han_da_biet() {
+    let Some(tam) = tao_repo_co_xung_dot() else {
+        return;
+    };
+    let state = AppState::new();
+    let repo = state.open_repo(tam.path());
+
+    let ls = lay_lich_su_tep(&state, repo, "f.txt")
+        .await
+        .expect("phải đọc được lịch sử");
+
+    // Tiền đề: repo mẫu thật sự có một merge. Không có khẳng định này thì test xanh
+    // vì repo dựng thất bại, chứ không vì hành vi đúng như mô tả.
+    let so_merge = std::process::Command::new("git")
+        .args(["log", "--oneline", "--merges"])
+        .current_dir(tam.path())
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().count())
+        .unwrap_or(0);
+    assert_eq!(so_merge, 1, "tiền đề: repo mẫu phải có đúng một merge commit");
+
+    // Ba commit thường có mặt.
+    assert_eq!(
+        ls.versions.len(),
+        3,
+        "ba commit thường phải có mặt, đọc được {}: {:?}",
+        ls.versions.len(),
+        ls.versions.iter().map(|v| &v.subject).collect::<Vec<_>>()
+    );
+
+    // ⚠️ Và merge — vốn đã giải quyết xung đột TRONG chính tệp này — thì KHÔNG.
+    assert!(
+        !ls.versions.iter().any(|v| v.subject.contains("merge")),
+        "⚠️ giới hạn đã biết: merge commit không vào danh sách. Nếu khẳng định này \
+         đỏ thì hành vi đã đổi — đọc phép đo 104 → 5715 ở doc comment của \
+         `lay_lich_su_tep` TRƯỚC khi coi đó là một cải thiện"
+    );
+}
+
+/// Dựng một repo tạm có xung đột thật đã được giải quyết bằng một merge commit.
+///
+/// Trả `None` (kèm lời nhắc) khi không dựng được, theo cùng hợp đồng với
+/// `require_diff_fixture`: người mới clone repo chạy `cargo test` phải thấy xanh kèm
+/// lời nhắc, không thấy một bức tường đỏ vì môi trường.
+fn tao_repo_co_xung_dot() -> Option<tempfile::TempDir> {
+    let tam = tempfile::tempdir().ok()?;
+    let p = tam.path();
+
+    let git = |args: &[&str]| -> bool {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(p)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    };
+    let ghi = |ten: &str, noi_dung: &str| std::fs::write(p.join(ten), noi_dung).is_ok();
+
+    if !git(&["init", "-q", "."]) {
+        eprintln!("BỎ QUA TEST: không dựng được repo tạm (git init thất bại)");
+        return None;
+    }
+    git(&["config", "user.email", "t@t.t"]);
+    git(&["config", "user.name", "T"]);
+
+    ghi("f.txt", "one\ntwo\nthree\n");
+    git(&["add", "-A"]);
+    git(&["commit", "-q", "-m", "init"]);
+
+    git(&["checkout", "-q", "-b", "side"]);
+    ghi("f.txt", "one\nSIDE\nthree\n");
+    git(&["commit", "-qam", "side edits"]);
+
+    // Tên nhánh mặc định khác nhau theo cấu hình git; thử cả hai.
+    if !git(&["checkout", "-q", "master"]) && !git(&["checkout", "-q", "main"]) {
+        eprintln!("BỎ QUA TEST: không về được nhánh mặc định");
+        return None;
+    }
+    ghi("f.txt", "one\nMAIN\nthree\n");
+    git(&["commit", "-qam", "main edits"]);
+
+    // `merge` thất bại vì xung đột — đó là điều ta muốn.
+    git(&["merge", "side"]);
+    ghi("f.txt", "one\nRESOLVED\nthree\n");
+    git(&["add", "-A"]);
+    if !git(&["commit", "-q", "-m", "merge with real resolution"]) {
+        eprintln!("BỎ QUA TEST: không tạo được merge commit");
+        return None;
+    }
+
+    Some(tam)
+}
