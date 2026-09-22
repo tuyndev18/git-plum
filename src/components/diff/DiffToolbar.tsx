@@ -77,11 +77,24 @@ interface ToolbarProps {
    */
   onNextHunk?: () => void
   onPrevHunk?: () => void
+  /**
+   * Repo đang mở, để nút "Lịch sử tệp" biết có tệp nào đang chọn không (DIFF-05).
+   *
+   * **Optional** theo đúng tiền lệ `repoId` của `FileList` (03-04 deviation #4): các
+   * test hiện có dựng `DiffToolbar` không có prop này, và một prop bắt buộc sẽ phá
+   * chúng vì một lý do không liên quan tới hành vi đang kiểm. Không truyền → nút
+   * hiện mờ, và `runCommand` vẫn không làm gì nhờ `enabled` của lệnh.
+   */
+  repoId?: string
 }
 
-export function DiffToolbar({ onNextHunk, onPrevHunk }: ToolbarProps = {}) {
+export function DiffToolbar({ onNextHunk, onPrevHunk, repoId }: ToolbarProps = {}) {
   const viewMode = useDiffStore((s) => s.viewMode)
   const showWhitespace = useDiffStore((s) => s.showWhitespace)
+  const historyOpen = useDiffStore((s) => s.historyOpen)
+  const coTepDangChon = useDiffStore((s) =>
+    repoId ? (s.selectedFileByRepo[repoId] ?? null) !== null : false,
+  )
 
   useEffect(() => {
     registerCommands([
@@ -130,6 +143,24 @@ export function DiffToolbar({ onNextHunk, onPrevHunk }: ToolbarProps = {}) {
         onClick={() => void runCommand('diff.toggleWhitespace')}
       >
         {showWhitespace ? 'Ẩn khoảng trắng' : 'Hiện khoảng trắng'}
+      </button>
+
+      {/*
+        Lịch sử tệp (DIFF-05). Lệnh `diff.toggleFileHistory` được **`FileHistory`**
+        đăng ký, không phải component này: nó là chủ của `historyOpen`, và đăng ký ở
+        hai nơi làm `registerCommand` ném khi trùng id.
+
+        Nút này không tự kiểm "có tệp đang chọn không" — `runCommand` đọc `enabled`
+        của lệnh và không làm gì khi lệnh không gọi được (PLAT-04). `disabled` dưới
+        đây chỉ để người dùng **thấy** điều đó, không phải để thực thi nó.
+      */}
+      <button
+        data-testid="diff-toggle-file-history"
+        aria-pressed={historyOpen}
+        disabled={!coTepDangChon}
+        onClick={() => void runCommand('diff.toggleFileHistory')}
+      >
+        {historyOpen ? 'Ẩn lịch sử tệp' : 'Lịch sử tệp'}
       </button>
 
       <span className="diff-toolbar-spacer" />

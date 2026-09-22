@@ -652,6 +652,41 @@ describe('chế độ hai cột — màu của DỰ ÁN phải thắng theme c�
         'dự án dùng spans của git cho word-level ở cả hai chế độ',
     ).toMatch(/\.cm-changedText/)
   })
+
+  it('quy tắc tắt .cm-changedText phải đủ ĐỘ CỤ THỂ để thắng thư viện', () => {
+    /*
+     * 🔴 Hồi quy thật, người dùng báo bằng ảnh chụp: gạch chân xanh 2px vẫn hiện
+     * dưới mỗi đoạn chữ ở chế độ hai cột **dù** quy tắc tắt đã tồn tại. Lý do
+     * không phải quy tắc thiếu — mà nó **thua độ cụ thể**:
+     *
+     *   thư viện:  "&dark.cm-merge-b .cm-changedText"
+     *              → ".ͼ1.ͼo.cm-merge-b .cm-changedText"   = BỐN class
+     *   dự án cũ:  ".cm-merge-b .cm-changedText"           = HAI class  ← thua
+     *
+     * Test trên chỉ hỏi "có nhắc tới `.cm-changedText` không", nên nó xanh cả
+     * khi quy tắc hoàn toàn vô tác dụng. Test này ghim phần còn thiếu: selector
+     * phải lặp `.cm-merge-a`/`.cm-merge-b` trên cùng một phần tử để cộng đủ độ
+     * cụ thể. Viết `.ͼ1` thay vào là không hợp lệ — đó là class băm sinh lúc
+     * chạy, đổi khi số lượng theme đổi.
+     */
+    expect(
+      cssKhongChuThich,
+      'quy tắc tắt .cm-changedText phải lặp class .cm-merge-b (ít nhất ba lần) để ' +
+        'thắng selector bốn class "&dark.cm-merge-b .cm-changedText" của @codemirror/merge — ' +
+        'không lặp thì quy tắc tồn tại nhưng vô tác dụng, và gạch chân xanh vẫn hiện',
+    ).toMatch(/\.cm-merge-b\.cm-merge-b\.cm-merge-b\s+\.cm-changedText/)
+
+    expect(
+      cssKhongChuThich,
+      'nhánh A (dòng xoá) cũng phải lặp class — thư viện khai "&dark.cm-merge-a .cm-changedText" ' +
+        'với cùng bốn class',
+    ).toMatch(/\.cm-merge-a\.cm-merge-a\.cm-merge-a\s+\.cm-changedText/)
+
+    expect(
+      cssKhongChuThich,
+      'không được dùng class băm .ͼ trong CSS tĩnh — nó đổi khi số lượng theme đổi',
+    ).not.toMatch(/\.ͼ/)
+  })
 })
 
 /*
@@ -828,5 +863,103 @@ describe('chế độ hai cột — chuỗi chiều cao phải đi hết xuống
         'ngang vẫn nằm ở đáy NỘI DUNG chứ không ở đáy KHUNG',
     ).not.toBeNull()
     expect(block).toMatch(/flex-grow:\s*1/)
+  })
+})
+
+/**
+ * Bố cục lịch sử tệp (DIFF-05) — **cùng** hai ràng buộc mà 03-04 đã phải học.
+ *
+ * 🔴 Bỏ chú thích TRƯỚC khi tìm. Doc comment của chính các quy tắc `.file-history`
+ * dẫn nguyên văn `minmax(0, ...)` để giải thích vì sao **không** dùng nó — nên một
+ * cổng tìm thô sẽ trúng chú thích và báo đỏ ở cài đặt **đúng**, hoặc (tệ hơn) xanh
+ * sau khi quy tắc bị xoá. Đây là lần thứ năm dự án gặp lớp lỗi này.
+ */
+describe('lịch sử tệp — containment cứng và sàn px, không minmax(0,', () => {
+  const cssSach = css.replace(/\/\*[\s\S]*?\*\//g, '')
+
+  /** Thân quy tắc có selector đúng bằng `selector`, trên nguồn đã bỏ chú thích. */
+  function thanFH(selector: string): string | null {
+    const i = cssSach.indexOf(`\n${selector} {`)
+    if (i === -1) return null
+    const mo = cssSach.indexOf('{', i)
+    const dong = cssSach.indexOf('}', mo)
+    if (mo === -1 || dong === -1) return null
+    return cssSach.slice(mo + 1, dong)
+  }
+
+  it('tiền đề: bỏ chú thích không ăn hết nguồn, và quy tắc .file-history tồn tại', () => {
+    // Không có khẳng định tiền đề này thì một phép lọc quá tay làm mọi cổng dưới
+    // đây xanh vì lý do sai — bài học wave 4.
+    expect(cssSach.length).toBeGreaterThan(5000)
+    expect(cssSach).toContain('.file-history {')
+    expect(cssSach).toContain('.file-version-row {')
+  })
+
+  it('.file-history có containment cứng: overflow hidden VÀ min-height: 0', () => {
+    /*
+     * Thiếu `min-height: 0`, một flex item không co xuống dưới kích thước nội dung
+     * của nó — panel lịch sử đẩy `.diff-pane` ra khỏi khung, và diff (thứ chính)
+     * mất chỗ. Cùng lỗi mà `.diff-viewer` và `.diff-pane` đã phải sửa.
+     */
+    const block = thanFH('.file-history')
+    expect(block, 'phải có quy tắc .file-history').not.toBeNull()
+    expect(block).toMatch(/overflow:\s*hidden/)
+    expect(block).toMatch(/min-height:\s*0/)
+  })
+
+  it('.file-version-list cuộn được và có min-height: 0', () => {
+    // Danh sách là vùng cuộn; nó chỉ cuộn được khi được phép co dưới nội dung.
+    const block = thanFH('.file-version-list')
+    expect(block, 'phải có quy tắc .file-version-list').not.toBeNull()
+    expect(block).toMatch(/overflow-y:\s*auto/)
+    expect(block).toMatch(/min-height:\s*0/)
+  })
+
+  it('🔴 KHÔNG có chuỗi `minmax(0,` trong bất kỳ quy tắc .file-* nào', () => {
+    /*
+     * `minmax(0, 1fr)` cho phép track co về **0**, và chữ **biến mất hoàn toàn** ở
+     * panel hẹp thay vì bị cắt kèm ellipsis. Chuỗi chính xác đó đã gây lỗi
+     * checkpoint vòng 1 của Phase 2 (`.commit-subject`).
+     */
+    const quyTacFH = cssSach
+      .split('\n')
+      .filter((d) => d.includes('minmax(0,'))
+      .join('\n')
+
+    // Chỉ quan tâm các quy tắc của plan này; quy tắc khác có thể dùng hợp lệ.
+    const iBatDau = cssSach.indexOf('.file-history {')
+    const phanFH = cssSach.slice(iBatDau)
+    expect(
+      phanFH,
+      `không được dùng minmax(0, trong quy tắc .file-*; chữ sẽ biến mất ở panel hẹp.\n${quyTacFH}`,
+    ).not.toContain('minmax(0,')
+  })
+
+  it('mỗi cột của một hàng phiên bản có SÀN px cứng, không chỉ flex-basis', () => {
+    /*
+     * `flex: 1 1 180px` một mình **không** đủ: `flex-shrink: 1` cho phép co xuống
+     * dưới basis. `min-width` là thứ thật sự dựng sàn. Đây đúng khuôn `.diff-path`
+     * (`flex: 1 1 120px` + `min-width: 120px`) mà 03-04 đã dùng.
+     */
+    for (const sel of [
+      '.file-history-title',
+      '.file-version-time',
+      '.file-version-author',
+      '.file-version-subject',
+      '.file-version-sha',
+    ]) {
+      const block = thanFH(sel)
+      expect(block, `phải có quy tắc ${sel}`).not.toBeNull()
+      expect(block, `${sel} thiếu min-width — flex-basis một mình không dựng sàn`).toMatch(
+        /min-width:\s*\d+px/,
+      )
+    }
+  })
+
+  it('hàng đang chọn dùng nền CÓ ALPHA để chữ còn đọc được', () => {
+    // Nền đục che chữ; khuôn `.diff-line-*` của 03-04 dùng alpha đúng vì lý do đó.
+    const block = thanFH('.file-version-row-active')
+    expect(block, 'phải có quy tắc .file-version-row-active').not.toBeNull()
+    expect(block).toMatch(/color-mix|rgba|\/\s*\d/)
   })
 })

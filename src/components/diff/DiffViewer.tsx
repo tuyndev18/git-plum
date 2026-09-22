@@ -59,6 +59,7 @@ import { measureFirstPaint } from '@/lib/perf'
 import { useDiffStore } from '@/stores/diffStore'
 import { useSelectionStore } from '@/stores/selectionStore'
 import { DiffNotice, DiffToolbar } from './DiffToolbar'
+import { FileHistory } from './FileHistory'
 
 /**
  * Bề rộng tối thiểu (px) của panel để chế độ **hai cột** còn dùng được.
@@ -99,7 +100,16 @@ interface Props {
 }
 
 export function DiffViewer({ repoId }: Props) {
-  const selectedCommitId = useSelectionStore((s) => s.selectedByRepo[repoId] ?? null)
+  const commitTrenDoThi = useSelectionStore((s) => s.selectedByRepo[repoId] ?? null)
+  /*
+   * Commit đang xem lịch sử tệp **ghi đè** commit đang chọn trên đồ thị (DIFF-05).
+   *
+   * Đọc ở đây, không ghi vào `selectionStore`: bấm một phiên bản trong lịch sử tệp
+   * không được làm người dùng mất chỗ của mình trên đồ thị commit. Lý do đầy đủ ở
+   * doc comment của `diffStore.historyCommitOverride`.
+   */
+  const historyCommitOverride = useDiffStore((s) => s.historyCommitOverride)
+  const selectedCommitId = historyCommitOverride ?? commitTrenDoThi
   const selectedFile = useDiffStore((s) => s.selectedFileByRepo[repoId] ?? null)
   const viewMode = useDiffStore((s) => s.viewMode)
   const showWhitespace = useDiffStore((s) => s.showWhitespace)
@@ -310,11 +320,27 @@ export function DiffViewer({ repoId }: Props) {
             {diff.path}
           </span>
         )}
-        <DiffToolbar onNextHunk={onNextHunk} onPrevHunk={onPrevHunk} />
+        <DiffToolbar onNextHunk={onNextHunk} onPrevHunk={onPrevHunk} repoId={repoId} />
         <button className="diff-close" onClick={() => clearFile(repoId)}>
           Đóng diff
         </button>
       </div>
+
+      {/*
+        Lịch sử tệp (DIFF-05) nằm **trong** `DiffViewer` chứ không thành panel riêng:
+        nó là một cách khác để chọn commit cho cùng một tệp, nên nó phải ở cạnh diff
+        mà nó điều khiển. Cùng lập luận đã chọn bố cục (a) ở 03-04 — không thêm panel
+        vì chế độ hai cột đã là ca hẹp tệ nhất.
+      */}
+      <FileHistory repoId={repoId} />
+
+      {historyCommitOverride && (
+        <div className="diff-notice diff-notice-hunk" data-testid="diff-history-override" role="status">
+          Đang xem tệp này ở commit{' '}
+          <code>{historyCommitOverride.slice(0, 8)}</code> từ lịch sử tệp. Commit đang
+          chọn trên đồ thị <strong>không đổi</strong>.
+        </div>
+      )}
 
       {forcedUnified && (
         <div className="diff-notice diff-notice-degraded" data-testid="diff-forced-unified" role="status">

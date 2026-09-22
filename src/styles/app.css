@@ -1767,3 +1767,121 @@ button:disabled {
 .file-row-selected {
   background: color-mix(in srgb, var(--row-highlight) 14%, transparent);
 }
+
+/* --- Lịch sử của một tệp (DIFF-05) -------------------------------------- */
+/*
+ * Áp **cùng** hai ràng buộc bố cục mà 03-04 đã phải học qua hai vòng checkpoint:
+ *
+ * 1. **Containment cứng** (`overflow: hidden` + `min-height: 0`) trên container.
+ *    Thiếu `min-height: 0`, một flex item mặc định không co xuống dưới kích thước
+ *    nội dung của nó, nên panel đẩy cả `.diff-pane` ra khỏi khung.
+ * 2. **Sàn px cứng** cho cột tiêu đề, KHÔNG `minmax(0, ...)`. Chuỗi chính xác đó
+ *    đã gây lỗi checkpoint vòng 1 của Phase 2: `minmax(0, 1fr)` cho phép track co
+ *    về 0 và chữ **biến mất hoàn toàn** ở panel hẹp thay vì bị cắt kèm ellipsis.
+ *
+ * Chặn trên 200 hàng (MAX_FILE_HISTORY) là lý do danh sách này cuộn được mà không
+ * cần ảo hoá — xem doc comment của `FileHistory.tsx`.
+ */
+.file-history {
+  display: flex;
+  flex-direction: column;
+  /* Không cho panel lịch sử chiếm hơn 40% chiều cao: diff là thứ chính. */
+  max-height: 40%;
+  flex: 0 1 auto;
+  overflow: hidden;
+  min-height: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.file-history-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.file-history-title {
+  /* Sàn px cứng — ràng buộc 2. */
+  flex: 1 1 160px;
+  min-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.file-version-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.file-version-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.file-version-row:hover {
+  background: var(--bg-inset);
+}
+
+.file-version-row-active {
+  /* Nền có alpha để chữ bên trên vẫn đọc được, khuôn `.diff-line-*` của 03-04. */
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.file-version-time {
+  /* Sàn px cứng cho mọi cột — ràng buộc 2 áp cho từng cột, không chỉ container. */
+  flex: 0 0 140px;
+  min-width: 140px;
+  color: var(--text-dim);
+}
+
+.file-version-author {
+  flex: 0 0 110px;
+  min-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.file-version-subject {
+  flex: 1 1 180px;
+  min-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-version-sha {
+  flex: 0 0 70px;
+  min-width: 70px;
+  color: var(--text-dim);
+}
+
+/*
+ * Chỗ đổi tên phải HIỆN RA — đây là thứ `--follow` mua được, và người dùng phải
+ * thấy được chứ không chỉ hưởng thụ im lặng. Xem doc comment của `FileHistory.tsx`.
+ */
+.file-version-rename {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
