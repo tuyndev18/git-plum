@@ -68,7 +68,7 @@ export type GitErrorCode =
    * điệp**, không tự thêm nội dung. Gộp nó vào `command_failed` sẽ khiến giao diện
    * hiện stderr thô của git cho một ca mà ta biết chính xác vấn đề là gì.
    */
-  | 'empty_message'
+  | 'empty_commit_message'
   /**
    * Không có gì để commit (không tệp nào đã stage).
    *

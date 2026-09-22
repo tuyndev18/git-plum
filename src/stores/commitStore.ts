@@ -183,7 +183,7 @@ async function ghi(
   if (get().isCommitting) return false
 
   // Chặn thông điệp rỗng **trước** khi gọi IPC. Phía Rust cũng chặn (mã
-  // `empty_message`) — hai lớp, có chủ ý: phía này cho phản hồi tức thì và không sinh
+  // `empty_commit_message`) — hai lớp, có chủ ý: phía này cho phản hồi tức thì và không sinh
   // một tiến trình git, phía kia là bất biến thật vì nó gần `git` hơn.
   // **Không tự sửa thông điệp** — R5. Không trim rồi gửi, không thêm nội dung.
   if (message.trim() === '') {
