@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react'
 
 import { describeError, ipc, type Commit, type CommitDetail as CommitDetailPayload } from '@/lib/ipc'
 import { useHistoryStore } from '@/stores/historyStore'
+import { useDiffStore } from '@/stores/diffStore'
 import { useSelectionStore } from '@/stores/selectionStore'
 import { FileList } from './FileList'
 
@@ -68,6 +69,16 @@ export function CommitDetail({ repoId }: Props) {
   const [detail, setDetail] = useState<CommitDetailPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+
+  // Đổi commit → bỏ chọn tệp của repo đó (plan 03-04). Tệp đang chọn có thể
+  // KHÔNG tồn tại trong commit mới, và giữ nó nghĩa là `DiffViewer` gọi
+  // `getFileDiff` với một path không có trong commit rồi hiện LỖI cho một thao
+  // tác hoàn toàn bình thường. `commitChanged` chỉ chạm `selectedFileByRepo` —
+  // `viewMode` và `showWhitespace` là lựa chọn người dùng và sống qua đây
+  // (bài học HIST-09).
+  useEffect(() => {
+    useDiffStore.getState().commitChanged(repoId)
+  }, [repoId, selectedCommitId])
 
   useEffect(() => {
     if (!selectedCommitId) {
@@ -187,7 +198,7 @@ export function CommitDetail({ repoId }: Props) {
         </dd>
       </dl>
 
-      <FileList files={detail?.files ?? []} truncated={detail?.truncated ?? false} />
+      <FileList files={detail?.files ?? []} truncated={detail?.truncated ?? false} repoId={repoId} />
     </div>
   )
 }

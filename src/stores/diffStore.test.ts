@@ -137,12 +137,19 @@ describe('viewMode — KHÔNG theo repo (khuôn uiStore, bài học HIST-09)', (
     useDiffStore.getState().selectFile('repoB', 'b.ts')
     expect(useDiffStore.getState().viewMode).toBe('split')
 
-    // Và khẳng định mạnh hơn: không có khoá nào mang chế độ theo repo.
-    const keys = Object.keys(useDiffStore.getState())
+    // Và khẳng định mạnh hơn: không có khoá TRẠNG THÁI nào mang chế độ theo
+    // repo. Lọc bỏ các hành động (giá trị là hàm) — `setViewMode`/`toggleViewMode`
+    // đều hợp lệ và đều khớp `/viewMode/i`, nên một cổng khớp trên MỌI khoá sẽ
+    // đỏ vì lý do sai (đã gặp: nó đỏ ngay ở cài đặt đúng).
+    const state = useDiffStore.getState() as unknown as Record<string, unknown>
+    const khoaTrangThai = Object.keys(state).filter((k) => typeof state[k] !== 'function')
     expect(
-      keys.filter((k) => /viewMode/i.test(k)),
-      `chỉ được có ĐÚNG một khoá viewMode (không theo repo), thấy: ${keys.join(', ')}`,
+      khoaTrangThai.filter((k) => /viewmode/i.test(k)),
+      `chỉ được có ĐÚNG một khoá trạng thái viewMode (không theo repo), ` +
+        `thấy: ${khoaTrangThai.join(', ')}`,
     ).toEqual(['viewMode'])
+    // Và không khoá trạng thái nào có hậu tố `ByRepo` ngoài `selectedFileByRepo`.
+    expect(khoaTrangThai.filter((k) => k.endsWith('ByRepo'))).toEqual(['selectedFileByRepo'])
   })
 })
 
@@ -166,11 +173,9 @@ describe('showWhitespace — cũng KHÔNG theo repo (DIFF-04)', () => {
     expect(useDiffStore.getState().showWhitespace).toBe(true)
   })
 
-  it('không có khoá nào mang cờ khoảng trắng theo repo', () => {
-    const keys = Object.keys(useDiffStore.getState())
-    expect(keys.filter((k) => /whitespace/i.test(k)).sort()).toEqual([
-      'showWhitespace',
-      'toggleWhitespace',
-    ])
+  it('không có khoá TRẠNG THÁI nào mang cờ khoảng trắng theo repo', () => {
+    const state = useDiffStore.getState() as unknown as Record<string, unknown>
+    const khoaTrangThai = Object.keys(state).filter((k) => typeof state[k] !== 'function')
+    expect(khoaTrangThai.filter((k) => /whitespace/i.test(k))).toEqual(['showWhitespace'])
   })
 })
