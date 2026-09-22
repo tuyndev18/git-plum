@@ -586,3 +586,247 @@ describe('chế độ hai cột — .cm-mergeView phải là vùng cuộn thật
     ).toContain('min-width: 0')
   })
 })
+
+/*
+ * 🔴 Ba lỗi nữa người dùng báo ở checkpoint **vòng 2** của plan 03-04, cả ba chỉ
+ * thấy được trong chế độ hai cột trên bản release thật.
+ *
+ * Chúng đến cùng một nguồn: `@codemirror/merge` mang **theme riêng** và theme đó
+ * thắng cascade của dự án trong chế độ hai cột. Đo bằng Chromium thật
+ * (Playwright, quy trình của 02-05) trên một hunk có 2 dòng thêm + 1 dòng xoá:
+ *
+ * | phần tử | class thật đo được | backgroundColor đo được | đáng ra |
+ * |---|---|---|---|
+ * | dòng xoá phía A | `cm-line diff-line-removed cm-changedLine` | `rgba(160,128,100,.08)` | màu `--danger` của dự án |
+ * | dòng thêm phía B | `cm-line diff-line-added cm-changedLine` | `rgba(100,160,128,.08)` | màu `--success` của dự án |
+ * | `.cm-mergeSpacer` | `cm-mergeSpacer` | `rgba(0,0,0,0)` + `background-image: none` | nền sọc chéo |
+ *
+ * Class của dự án **có** được gắn — nên `decorations.ts` không sai. Điều sai là
+ * **độ cụ thể**: selector của thư viện là `&.cm-merge-a .cm-changedLine`, tức
+ * hai class cộng một quan hệ hậu duệ, thắng `.diff-line-removed` một class.
+ * Trong chế độ hợp nhất không có `.cm-changedLine` nào nên màu của dự án đúng —
+ * đó là lý do lỗi này sống sót qua cả checkpoint vòng 1.
+ */
+describe('chế độ hai cột — màu của DỰ ÁN phải thắng theme của @codemirror/merge', () => {
+  /*
+   * Vì sao kiểm bằng "có `.cm-changedLine` trong selector" chứ không kiểm
+   * `!important`: `!important` là một cách thắng, nhưng nâng độ cụ thể là cách
+   * đúng hơn và không chặn theme sáng ghi đè sau. Cổng này đòi **có một selector
+   * đủ cụ thể**, không đòi một kỹ thuật cụ thể — miễn nó nhắc `.cm-changedLine`
+   * thì nó đã ở cùng hoặc trên mức của thư viện.
+   *
+   * 🔴 Phải tìm trên nguồn đã **bỏ chú thích**. Doc comment của chính mục này
+   * dẫn nguyên văn `cm-line diff-line-added cm-changedLine` trong bảng đo, nên
+   * tìm thô trúng chú thích và cổng thành **tự vô hiệu hoá** — đã chứng minh
+   * bằng đột biến: xoá hẳn quy tắc ghi đè mà cả ba cổng vẫn xanh.
+   */
+  const cssKhongChuThich = css.replace(/\/\*[\s\S]*?\*\//g, '')
+
+  it('có quy tắc ghi đè nền dòng THÊM trong ngữ cảnh .cm-changedLine', () => {
+    expect(
+      cssKhongChuThich,
+      'thiếu quy tắc này thì dòng thêm ở chế độ hai cột hiện màu lục-nâu ' +
+        'rgba(100,160,128,.08) của @codemirror/merge, không phải var(--success) của dự án',
+    ).toMatch(/\.diff-line-added\.cm-changedLine|\.cm-changedLine\.diff-line-added/)
+  })
+
+  it('có quy tắc ghi đè nền dòng XOÁ trong ngữ cảnh .cm-changedLine', () => {
+    expect(
+      cssKhongChuThich,
+      'thiếu quy tắc này thì dòng xoá ở chế độ hai cột hiện màu nâu ' +
+        'rgba(160,128,100,.08) của @codemirror/merge, không phải var(--danger) của dự án',
+    ).toMatch(/\.diff-line-removed\.cm-changedLine|\.cm-changedLine\.diff-line-removed/)
+  })
+
+  it('nền word-level cũng phải thắng .cm-changedText của thư viện', () => {
+    /*
+     * Thư viện tô `.cm-changedText` bằng một `linear-gradient` gạch chân
+     * (`bottom/100% 2px no-repeat`). Dự án dùng `spans` từ
+     * `git diff --word-diff-regex` cho **cả hai** chế độ (quyết định của
+     * `codemirrorRenderer.ts`), nên hai nguồn word-level không được trộn: người
+     * dùng sẽ thấy hai kết quả khác nhau cho cùng một dòng.
+     */
+    expect(
+      cssKhongChuThich,
+      'phải tắt .cm-changedText của @codemirror/merge trong chế độ hai cột — ' +
+        'dự án dùng spans của git cho word-level ở cả hai chế độ',
+    ).toMatch(/\.cm-changedText/)
+  })
+})
+
+/*
+ * 🔴 Vùng căn hàng phải có **nền sọc chéo**, không để trống trơn.
+ *
+ * Người dùng gửi hai ảnh tham chiếu: ở chỗ một phía thiếu dòng, phía kia hiện
+ * một khối gạch chéo cao đúng số dòng thiếu. Nó nói "bên này không có gì ở đây"
+ * thay vì để người đọc tự đoán khoảng trống nghĩa là gì.
+ *
+ * Phần khó **thư viện đã làm**: đo bằng Chromium thật thấy `@codemirror/merge`
+ * tự chèn widget `.cm-mergeSpacer` với chiều cao đúng bằng số dòng thiếu
+ * (36px cho hunk 2 dòng, 72px cho hunk 4 dòng — hai lần `line-height` 18px).
+ * Nên đây chỉ là việc tô nền, KHÔNG phải dựng widget.
+ */
+describe('chế độ hai cột — vùng căn hàng có nền sọc chéo', () => {
+  it('.cm-mergeSpacer có nền sọc chéo, không trống trơn', () => {
+    const start = css.indexOf('.cm-mergeSpacer {')
+    expect(
+      start,
+      'phải có quy tắc .cm-mergeSpacer. Đo được: thư viện chèn widget này để căn ' +
+        'hàng nhưng để nó TRONG SUỐT (background-image: none), nên người đọc không ' +
+        'biết khoảng trống đó nghĩa là "phía này không có dòng".',
+    ).toBeGreaterThan(-1)
+    const block = css.slice(start, css.indexOf('}', start))
+
+    expect(
+      block,
+      '.cm-mergeSpacer phải dùng repeating-linear-gradient để vẽ sọc chéo',
+    ).toContain('repeating-linear-gradient')
+  })
+})
+
+
+/*
+ * 🔴 Lỗi full-height, VÒNG 2 lần thứ hai: thanh cuộn ngang nằm GIỮA màn hình.
+ *
+ * Người dùng khoanh đỏ trong ảnh: thanh cuộn ngang của hai cột nằm ngay dưới
+ * dòng nội dung cuối (~2/3 chiều cao cửa sổ), rồi một dải trống lớn xuống đáy.
+ *
+ * # Vì sao vòng sửa trước không bắt được
+ *
+ * Phép đo trước dùng một tệp **DÀI** (60 dòng đệm). Nội dung dài tự lấp hết
+ * khung nên mọi mắt tình cờ cao bằng cha, và lỗi vô hình. Lỗi chỉ lộ với tệp
+ * **NGẮN**, nơi nội dung KHÔNG lấp hết khung. Harness đo có cờ `?short=1` đúng
+ * vì lý do này.
+ *
+ * # Đo bằng Chromium thật, tệp NGẮN, cửa sổ 1600×900 — TRƯỚC khi sửa
+ *
+ * | mắt | chiều cao | ghi chú |
+ * |---|---|---|
+ * | `.diff-pane` | 794.5 (bottom 875) | đúng |
+ * | `.diff-host` | 794.5 | đúng |
+ * | `.cm-mergeView` | 794.5 | đúng — `height: 100%` của vòng 1 CÓ hiệu lực |
+ * | `.cm-mergeViewEditors` | **314** | 🔴 ĐỨT — co theo nội dung |
+ * | `.cm-editor` | 314 | theo cha |
+ * | `.cm-scroller` | 314, **bottom 394** | thanh cuộn ngang ở y=394 |
+ *
+ * `.diff-pane` bottom 875 − `.cm-scroller` bottom 394 = **khoảng hở đáy 481px**,
+ * đúng dải trống người dùng khoanh.
+ *
+ * # Nguyên nhân gốc
+ *
+ * Thư viện khai `.cm-mergeViewEditors { display: flex; align-items: stretch }`
+ * nhưng **không** đặt `height`, và đặt `height: auto !important` cho
+ * `.cm-mergeView &` (tức `.cm-editor`) cùng `.cm-scroller`. `align-items:
+ * stretch` căng các **con** theo trục ngang của một flex-row — nó không cho bản
+ * thân phần tử chiều cao. Nên cả chuỗi dưới `.cm-mergeView` rơi về `auto` = co
+ * theo nội dung.
+ *
+ * # 🔴 `min-height`, KHÔNG phải `height` — bẫy của bản sửa này
+ *
+ * Bản sửa đầu dùng `height: 100%` và nó **làm hỏng việc cuộn dọc**. Đo được:
+ *
+ * | tệp | `height: 100%` | `min-height: 100%` |
+ * |---|---|---|
+ * | NGẮN | hở đáy 0px ✅ | hở đáy 0px ✅ |
+ * | DÀI | scrollH 795 = clientH 795 → **KHÔNG cuộn**, 1394px nội dung bị cắt 🔴 | scrollH 1394 > clientH 795 → cuộn ĐÚNG ✅ |
+ *
+ * `.cm-mergeView` là vùng cuộn; nó chỉ biết phải cuộn khi **con** cao hơn nó.
+ * Kẹp con về đúng 100% thì không bao giờ có overflow — thanh cuộn dọc không bao
+ * giờ hiện và nội dung dư bị cắt im lặng, tệ hơn lỗi ban đầu.
+ *
+ * Nên cổng dưới đây đòi **`min-height`** và đòi **không** có `height: 100%`.
+ * Một cổng chỉ kiểm "có chiều cao" sẽ xanh với chính bản sửa gây hồi quy.
+ */
+describe('chế độ hai cột — chuỗi chiều cao phải đi hết xuống .cm-scroller', () => {
+  /*
+   * 🔴 Phải bỏ chú thích TRƯỚC khi tìm.
+   *
+   * Doc comment của chính các quy tắc này dẫn nguyên văn khai báo của thư viện
+   * (`.cm-mergeViewEditors { display: flex; align-items: stretch }`) và cả
+   * chuỗi `height: 100%` trong bảng so sánh ở trên — nên tìm thô sẽ trúng **chú
+   * thích** trước khi trúng quy tắc thật. Cổng tự vô hiệu hoá, đã gặp thật ở lần
+   * chạy đầu. Cùng bài học `interface-boundary.test.ts` đã ghi cho phía TS.
+   */
+  const cssKhongChuThich = css.replace(/\/\*[\s\S]*?\*\//g, '')
+
+  /**
+   * Thân quy tắc có selector **đúng bằng** `selector`, trên nguồn đã bỏ chú thích.
+   *
+   * Cắt và tìm `}` **trên cùng một chuỗi**: trộn offset của chuỗi đã bỏ chú
+   * thích với chuỗi gốc cho ra một đoạn nằm giữa hai quy tắc khác nhau — đã gặp
+   * thật, và nó làm cổng báo đỏ vì lý do sai.
+   *
+   * `\n` trước selector để `.cm-mergeViewEditor` không trúng
+   * `.cm-mergeViewEditors`.
+   */
+  function than(selector: string): string | null {
+    const i = cssKhongChuThich.indexOf(`\n${selector} {`)
+    if (i === -1) return null
+    const mo = cssKhongChuThich.indexOf('{', i)
+    return cssKhongChuThich.slice(mo + 1, cssKhongChuThich.indexOf('}', mo))
+  }
+
+  it('.cm-mergeViewEditors dùng min-height: 100% (căng khi ngắn, giãn khi dài)', () => {
+    const block = than('.cm-mergeViewEditors')
+    expect(
+      block,
+      'phải có quy tắc .cm-mergeViewEditors. Đo được bằng Chromium trên tệp NGẮN: ' +
+        'thư viện đặt display:flex + align-items:stretch nhưng KHÔNG đặt height, nên ' +
+        'nó cao 314px trong khi .cm-mergeView cao 794.5px — thanh cuộn ngang nằm giữa ' +
+        'màn hình và còn 481px trống bên dưới.',
+    ).not.toBeNull()
+
+    expect(block, '.cm-mergeViewEditors phải có min-height: 100%').toMatch(
+      /min-height:\s*100%/,
+    )
+  })
+
+  it('🔴 .cm-mergeViewEditors KHÔNG được dùng height: 100% — nó chặn cuộn dọc', () => {
+    /*
+     * Đây là cổng chống đúng bản sửa sai mà tôi đã viết ra một lần: `height:
+     * 100%` kẹp con về bằng vùng cuộn, nên `.cm-mergeView` không bao giờ thấy
+     * overflow (đo được: scrollHeight 795 = clientHeight 795 trên tệp có 1394px
+     * nội dung) và phần dư bị cắt im lặng.
+     */
+    const block = than('.cm-mergeViewEditors')
+    expect(block).not.toBeNull()
+    expect(
+      block,
+      'height: 100% ở đây làm .cm-mergeView không còn overflow để cuộn — tệp dài ' +
+        'bị cắt mất phần dưới. Dùng min-height: 100%.',
+    ).not.toMatch(/(^|[^-])height:\s*100%/)
+  })
+
+  it('.cm-editor trong .cm-mergeView có min-height: 100%', () => {
+    /*
+     * Thư viện đặt `height: auto !important` cho `.cm-mergeView &`. `min-height`
+     * thắng được nó vì đây là **hai thuộc tính khác nhau** — `!important` của
+     * `height` không nói gì về `min-height`, và `min-height` luôn thắng `height`
+     * trong thuật toán tính kích thước. Đó là điều làm bản vá không cần
+     * `!important` cho chính nó.
+     */
+    const block = than('.cm-mergeView .cm-editor')
+    expect(
+      block,
+      'phải có .cm-mergeView .cm-editor { min-height: 100% } — thiếu nó thì editor ' +
+        'co theo nội dung dù .cm-mergeViewEditors đã cao đủ khung',
+    ).not.toBeNull()
+    expect(block).toMatch(/min-height:\s*100%/)
+  })
+
+  it('.cm-scroller trong .cm-mergeView có flex-grow: 1', () => {
+    /*
+     * Đo được: `.cm-editor` là `display: flex; flex-direction: column` và
+     * `.cm-scroller` là con duy nhất với `flex: 0 1 auto`. Thiếu `flex-grow`
+     * thì editor cao đủ khung mà scroller vẫn co theo nội dung — thanh cuộn
+     * ngang lại nằm giữa khung, đúng chỗ người dùng khoanh đỏ.
+     */
+    const block = than('.cm-mergeView .cm-scroller')
+    expect(
+      block,
+      'phải có .cm-mergeView .cm-scroller { flex-grow: 1 } — nếu không thanh cuộn ' +
+        'ngang vẫn nằm ở đáy NỘI DUNG chứ không ở đáy KHUNG',
+    ).not.toBeNull()
+    expect(block).toMatch(/flex-grow:\s*1/)
+  })
+})

@@ -272,3 +272,68 @@ describe('App', () => {
     })
   })
 })
+
+/*
+ * 🔴 Lỗi 2 người dùng báo ở checkpoint vòng 2 plan 03-04: trình xem diff "chưa
+ * full height" — nó cao khoảng nửa cửa sổ, còn khoảng trống bên dưới.
+ *
+ * # Nguyên nhân gốc, đo bằng Chromium thật (Playwright), KHÔNG phải đọc CSS
+ *
+ * Chuỗi chiều cao `.app` → … → `.cm-mergeView` **không hề đứt**. Đi ngược cây
+ * từ `.cm-mergeView` lên `body` ở cửa sổ 1600×900, mọi mắt đều truyền đúng:
+ *
+ * | # | mắt | chiều cao đo được |
+ * |---|---|---|
+ * | 2 | `.app` | 900 |
+ * | 3 | `.body` | 831.5 |
+ * | 4 | `.layout` | 831.5 |
+ * | 5 | `[data-panel=top]` `flex: 70 1 0px` | **581.3** ← tụt 250px ở ĐÂY |
+ * | 7 | `.pane-group` | 581.3 |
+ * | 10 | `.main` | 581.3 |
+ * | 11 | `.diff-viewer` | 581.3 |
+ * | 14 | `.cm-mergeView` | 544.3 (scrollHeight 1394, `overflow-y: auto` — cuộn ĐÚNG) |
+ *
+ * Nên đây **không** phải lỗi CSS. Chỗ tụt 250px là `Panel id="bottom"` —
+ * **nhật ký lệnh** — chiếm 30% chiều cao dọc (đo được: 249.2px) ngay từ lần mở
+ * đầu, trong khi nội dung nó hiện chỉ là dòng *"Chưa có lệnh nào được chạy."*
+ *
+ * `logVisible` khởi tạo `useState(true)`. PLAT-08 đòi người dùng **nhìn thấy
+ * được** những lệnh git đã chạy — nó không đòi panel đó mở sẵn. Một panel chẩn
+ * đoán mở mặc định lấy 30% chiều cao của Core Value ("đọc lịch sử phải tức
+ * thì") là một đánh đổi sai, và nó đúng thứ người dùng chụp ảnh gửi lại.
+ *
+ * Sửa: mặc định **ẩn**. Nút thanh công cụ và `Ctrl+\`` vẫn mở được, nên PLAT-08
+ * vẫn trọn.
+ */
+describe('nhật ký lệnh — mặc định ẩn để trình xem diff được full height', () => {
+  it('lần mở đầu KHÔNG hiện panel nhật ký lệnh', () => {
+    render(<App />)
+
+    /*
+     * Tìm theo **role heading**, không theo chữ: nút thanh công cụ mang đúng
+     * nhãn "Nhật ký lệnh", nên `queryByText` khớp cả nút và làm cổng này vô
+     * nghĩa (đã gặp thật ở lần chạy đầu). `<h2>` là thứ chỉ `CommandLogPanel`
+     * render, tức nó có mặt đúng khi panel đang mở và đang chiếm 30% chiều cao.
+     */
+    expect(
+      screen.queryByRole('heading', { name: 'Nhật ký lệnh' }),
+      'panel nhật ký lệnh mở mặc định lấy ~250px (30%) chiều cao ở cửa sổ 900px, ' +
+        'làm trình xem diff chỉ còn ~581px — đúng lỗi "chưa full height" người dùng báo',
+    ).toBeNull()
+  })
+
+  it('bấm nút thanh công cụ thì nhật ký hiện ra — PLAT-08 vẫn trọn', async () => {
+    render(<App />)
+
+    const nut = screen.getByRole('button', { name: 'Nhật ký lệnh' })
+    await act(async () => {
+      nut.click()
+    })
+
+    expect(
+      screen.queryByRole('heading', { name: 'Nhật ký lệnh' }),
+      'PLAT-08 đòi người dùng nhìn thấy được lệnh git đã chạy — mặc định ẩn ' +
+        'chỉ hợp lệ nếu vẫn mở được',
+    ).not.toBeNull()
+  })
+})

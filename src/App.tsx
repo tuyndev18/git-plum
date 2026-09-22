@@ -42,7 +42,20 @@ export function App() {
 
   const [gitVersion, setGitVersion] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [logVisible, setLogVisible] = useState(true)
+  /*
+   * Nhật ký lệnh mặc định **ẩn** — lỗi 2 của checkpoint vòng 2 plan 03-04.
+   *
+   * Người dùng báo trình xem diff "chưa full height". Đo bằng Chromium thật cho
+   * thấy chuỗi CSS không đứt ở đâu cả: `.app` 900 → `.body` 831.5 → `.layout`
+   * 831.5 → `[data-panel=top]` **581.3**. Chỗ tụt 250px là `Panel id="bottom"`,
+   * tức panel này, chiếm 30% chiều cao dọc (đo được 249.2px) ngay từ lần mở đầu
+   * — trong khi nội dung nó hiện chỉ là "Chưa có lệnh nào được chạy."
+   *
+   * PLAT-08 đòi người dùng **nhìn thấy được** lệnh git đã chạy; nó không đòi
+   * panel mở sẵn. Nút thanh công cụ và `Ctrl+\`` vẫn mở được nên PLAT-08 trọn,
+   * còn Core Value ("đọc lịch sử phải tức thì") lấy lại đủ 830px.
+   */
+  const [logVisible, setLogVisible] = useState(false)
   const [logRefreshKey, setLogRefreshKey] = useState(0)
   const commitListRef = useRef<CommitListHandle>(null)
 

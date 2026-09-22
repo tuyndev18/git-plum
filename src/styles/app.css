@@ -1493,8 +1493,210 @@ button:disabled {
   height: 100%;
 }
 
+/*
+ * 🔴 Chuỗi chiều cao phải đi HẾT xuống, không dừng ở `.cm-mergeView`.
+ *
+ * Lỗi người dùng khoanh đỏ ở vòng 2 lần hai: thanh cuộn ngang nằm giữa màn hình,
+ * dưới nó một dải trống lớn. Đo bằng Chromium thật trên một tệp **NGẮN** (ca bắt
+ * buộc — tệp dài tự lấp hết khung nên che mất lỗi), cửa sổ 1600×900:
+ *
+ *   .diff-host            794.5   ✅
+ *   .cm-mergeView         794.5   ✅  ← `height: 100%` của vòng 1 CÓ hiệu lực
+ *   .cm-mergeViewEditors  314     🔴  ← ĐỨT ở đây, co theo nội dung
+ *   .cm-scroller          314, bottom = 394   (còn .diff-pane bottom = 875)
+ *
+ * → khoảng hở đáy **481px**, đúng dải trống trong ảnh.
+ *
+ * Nguyên nhân: thư viện khai `.cm-mergeViewEditors { display: flex;
+ * align-items: stretch }` nhưng **không** đặt `height`. `align-items: stretch`
+ * căng các **con** theo trục ngang của một flex-row — nó không cho bản thân
+ * phần tử một chiều cao. Nên nó rơi về `height: auto` = co theo nội dung, và
+ * `height: 100%` đặt cho `.cm-mergeView` thành vô nghĩa với mọi thứ dưới nó.
+ *
+ * Đây đúng ràng buộc 1 ở đầu mục này: `height: 100%` chỉ ăn khi **cha** có
+ * chiều cao thật. Một mắt `auto` ở giữa làm sập cả chuỗi — và vì `MergeView`
+ * chưa bao giờ render trong một test nào, chỉ phép đo Chromium thấy được.
+ */
+/*
+ * 🔴 `min-height`, KHÔNG phải `height`. Đây là chỗ dễ sai nhất của cả bản sửa.
+ *
+ * `height: 100%` ở đây **làm hỏng việc cuộn dọc**, và đo được:
+ *
+ *   | tệp | height: 100% | min-height: 100% |
+ *   |---|---|---|
+ *   | NGẮN | hở đáy 0px ✅ | hở đáy 0px ✅ |
+ *   | DÀI | scrollH 795 = clientH 795 → **KHÔNG cuộn**, nội dung 1394px bị cắt 🔴 | scrollH 1394 > clientH 795 → cuộn ĐÚNG ✅ |
+ *
+ * Lý do: `.cm-mergeView` là vùng cuộn (`overflow-y: auto`). Nó chỉ biết mình
+ * phải cuộn khi **con** cao hơn nó. Kẹp con về đúng 100% nghĩa là không bao giờ
+ * có overflow, nên thanh cuộn dọc không bao giờ xuất hiện và phần nội dung dư bị
+ * cắt im lặng — tệ hơn lỗi ban đầu.
+ *
+ * `min-height: 100%` cho cả hai hành vi từ một khai báo: **căng** khi nội dung
+ * ngắn hơn khung, **giãn** khi nội dung dài hơn.
+ *
+ * `height: auto !important` là để trung hoà chính khai báo `height: auto
+ * !important` mà thư viện đặt cho `.cm-mergeView &` — giữ nguyên ý định của thư
+ * viện (editor cao theo nội dung, cuộn dồn về `.cm-mergeView`) nhưng thêm một
+ * sàn bằng chiều cao khung.
+ */
+.cm-mergeViewEditors {
+  height: auto !important;
+  min-height: 100%;
+}
+
 .cm-mergeViewEditor {
   min-width: 0;
+  /*
+   * Để `height` là `auto` một cách tường minh. Nó là con flex của
+   * `.cm-mergeViewEditors` (flex-row), nên `align-items: stretch` của cha đã
+   * căng nó theo trục dọc — không cần và không nên kẹp thêm.
+   */
+  height: auto !important;
+}
+
+/*
+ * Hai mắt cuối của chuỗi: `.cm-editor` và `.cm-scroller`.
+ *
+ * Thư viện đặt `height: auto !important` cho cả hai (`".cm-mergeView &
+ * .cm-scroller, .cm-mergeView &"`) để dồn việc cuộn về `.cm-mergeView` — đó là
+ * thiết kế đúng, vì hai cột phải cuộn cùng nhau nên chỉ MỘT vùng cuộn mới giữ
+ * được chúng thẳng hàng. Không chống lại ý định đó; chỉ thêm một **sàn**.
+ *
+ * `min-height` thắng được `height: auto !important` vì chúng là **hai thuộc
+ * tính khác nhau** — `!important` của `height` không nói gì về `min-height`, và
+ * theo thuật toán tính kích thước thì `min-height` luôn thắng `height`. Đó là
+ * điều làm bản vá này không cần một `!important` nào cho chính mình.
+ *
+ * `flex-grow: 1` cho `.cm-scroller`: `.cm-editor` là `display: flex;
+ * flex-direction: column` và scroller là con duy nhất với `flex: 0 1 auto` (đo
+ * được). Thiếu `flex-grow` thì editor cao đủ khung mà scroller vẫn co theo nội
+ * dung — thanh cuộn ngang lại nằm giữa khung, đúng chỗ người dùng khoanh đỏ.
+ */
+.cm-mergeView .cm-editor {
+  min-height: 100%;
+}
+
+.cm-mergeView .cm-scroller {
+  flex-grow: 1;
+}
+
+/*
+ * 🔴 Chế độ hai cột, lỗi vòng 2: theme của `@codemirror/merge` THẮNG màu dự án.
+ *
+ * Đo bằng Chromium thật (Playwright) trên một hunk 2 dòng thêm + 1 dòng xoá.
+ * Class của dự án **có** được gắn — `decorations.ts` không sai:
+ *
+ *   dòng xoá phía A: class = "cm-line diff-line-removed cm-changedLine"
+ *                    backgroundColor đo được = rgba(160, 128, 100, .08)   ← thư viện
+ *   dòng thêm phía B: class = "cm-line diff-line-added cm-changedLine"
+ *                    backgroundColor đo được = rgba(100, 160, 128, .08)   ← thư viện
+ *
+ * Điều sai là **độ cụ thể**. Thư viện khai:
+ *
+ *   "&.cm-merge-a .cm-changedLine, .cm-deletedChunk": { backgroundColor: … }
+ *   "&.cm-merge-b .cm-changedLine, .cm-inlineChangedLine": { backgroundColor: … }
+ *
+ * tức hai class cộng quan hệ hậu duệ — thắng `.diff-line-removed` một class.
+ *
+ * Vì sao lỗi này sống sót qua checkpoint vòng 1: chế độ **hợp nhất** không có
+ * `.cm-changedLine` nào (dự án không để CodeMirror tính lại diff ở đó), nên màu
+ * dự án đúng ở chế độ mặc định. Chỉ hai cột mới lộ.
+ *
+ * Sửa bằng cách nâng độ cụ thể lên hai class thay vì dùng `!important`: giữ
+ * `!important` dành cho ca thật sự cần, và không chặn nhánh theme sáng ghi đè.
+ * Màu vẫn đọc từ cùng một biến CSS, nên bảng màu vẫn chỉ có MỘT nguồn.
+ */
+/*
+ * 🔴 Độ cụ thể phải khớp thư viện, và selector thật của nó đo được bằng CDP
+ * (`CSS.getMatchedStylesForNode`) — KHÔNG phải thứ đọc được từ mã nguồn:
+ *
+ *   mã nguồn thư viện:  "&.cm-merge-b .cm-changedLine"
+ *   selector đã sinh:   ".ͼ1.cm-merge-b .cm-changedLine"   ← BA class
+ *
+ * CodeMirror thay `&` bằng class băm của chính nó (`.ͼ1`), nên
+ * `.diff-line-added.cm-changedLine` (HAI class) **thua**. Đây là lý do lần sửa
+ * đầu không có tác dụng dù selector trông đã đủ cụ thể.
+ *
+ * `.cm-merge-a`/`.cm-merge-b` là class mà `MergeView` gắn cho editor từng phía,
+ * nên dùng chúng cho ta ba class mà **không** phải viết `.ͼ1` — một class băm
+ * sinh lúc chạy, sẽ đổi khi số lượng theme đổi và không được phép xuất hiện
+ * trong CSS tĩnh.
+ *
+ * Đặt `background-color`, không phải `background`: thư viện khai đúng
+ * `background-color`, và một shorthand ở cùng mức cụ thể vẫn bị longhand cụ thể
+ * hơn ghi đè — đo được ở lần thử đầu.
+ */
+.cm-merge-b .diff-line-added.cm-changedLine,
+.cm-merge-a .diff-line-added.cm-changedLine {
+  background-color: color-mix(in srgb, var(--success) 16%, transparent);
+}
+
+.cm-merge-a .diff-line-removed.cm-changedLine,
+.cm-merge-b .diff-line-removed.cm-changedLine {
+  background-color: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+/*
+ * Tắt word-level của THƯ VIỆN, giữ word-level của GIT.
+ *
+ * Thư viện gạch chân `.cm-changedText` bằng một `linear-gradient` 2px. Dự án
+ * dùng `spans` từ `git diff --word-diff-regex=…` (wave 3) cho **cả hai** chế độ
+ * — xem doc comment đầu `codemirrorRenderer.ts`. Để cả hai nguồn cùng chạy
+ * nghĩa là người dùng thấy hai kết quả word-level khác nhau cho cùng một dòng,
+ * vì thư viện tự tìm biên từ còn git dùng biên đã kiểm bằng byte thật.
+ */
+.cm-merge-a .cm-changedText,
+.cm-merge-b .cm-changedText,
+.cm-deletedChunk .cm-deletedText {
+  background: none;
+}
+
+/*
+ * Vùng căn hàng: nền **sọc chéo**, không để trống trơn.
+ *
+ * Đo bằng Chromium thật: `@codemirror/merge` tự chèn widget `.cm-mergeSpacer`
+ * cao đúng bằng số dòng mà phía này thiếu (36px cho hunk 2 dòng, 72px cho hunk
+ * 4 dòng — hai lần `line-height` 18px), nhưng để nó **trong suốt**
+ * (`background-image: none`, `backgroundColor: rgba(0,0,0,0)`).
+ *
+ * Nên phần khó — tính chiều cao và giữ hai cột thẳng hàng — thư viện đã làm; ở
+ * đây chỉ còn việc tô. Một khoảng trống không tô là một khoảng trống **không
+ * mang nghĩa**: người đọc không biết nó là "phía này không có dòng" hay chỉ là
+ * chỗ hở của bố cục.
+ *
+ * `--border-strong` chứ không phải một màu mới: sọc là tín hiệu **cấu trúc**
+ * ("không có nội dung ở đây"), không phải tín hiệu thêm/xoá — nên nó không được
+ * dùng `--success`/`--danger`, và nó phải đi theo nhánh theme sáng như mọi viền
+ * khác. 8px là bước sọc còn nhận ra được ở `line-height: 18px` mà không thành
+ * một vùng rối mắt.
+ */
+.cm-mergeSpacer {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 3px,
+    color-mix(in srgb, var(--border-strong) 55%, transparent) 3px 4px,
+    transparent 4px 8px
+  );
+}
+
+/*
+ * Gutter dấu `+` / `−` — `gutterDau()` trong `codemirrorRenderer.ts`.
+ *
+ * Vì sao có nó: phân biệt thêm/xoá **không chỉ bằng màu**. Nền dòng của dự án
+ * cố ý nhạt (`16%` alpha) để nền word-level đậm hơn còn nổi lên được — nhưng hai
+ * nền nhạt đỏ/lục là ca mà người mù màu đỏ-lục không phân biệt được, và đây là
+ * công cụ mã nguồn mở nên ca đó là ca thật.
+ *
+ * Màu đi theo dấu, không theo nền dòng: `gutterDau` chỉ đặt ký tự nên không có
+ * class riêng cho `+`/`−`. Một màu trung tính giữ gutter đọc được ở cả hai và
+ * không nhân đôi bảng màu thêm/xoá.
+ */
+.cm-diffSignGutter {
+  min-width: 1ch;
+  padding-right: 3px;
+  text-align: center;
+  color: var(--text-dim);
 }
 
 .diff-loading {
