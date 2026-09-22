@@ -49,7 +49,7 @@ hẳn), **một cổng xanh sai** phải sửa, và **một giới hạn đã bi
 lấp bằng một cờ tệ hơn.
 
 **⏸️ Task 3 (EXIT GATE dogfood) CHƯA CHẠY** — chờ chủ dự án. Bản release đã dựng:
-**2026-09-22 11:27:48 +0700**, commit `d1b59cc`.
+**2026-09-22 11:38:59 +0700**, commit `0845b24`.
 
 ---
 
@@ -569,6 +569,7 @@ Tệp đã kiểm tồn tại, số dòng đọc bằng `wc -l`:
 Chuỗi commit RED→GREEN đầy đủ trong `git log`:
 
 ```
+0845b24 docs(03-05): complete the file history plan, phase 3 not closed
 d1b59cc docs(03-05): add the phase 3 exit gate dogfood record
 fc4c851 docs(03-05): pin the merge-commit gap and why first-parent is not the fix
 807d942 feat(03-05): add the file history panel with rename labels

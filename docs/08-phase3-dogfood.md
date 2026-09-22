@@ -184,7 +184,7 @@ Hai mục đã có, từ phép đo chứ không từ việc dùng:
 
 | Dựng lúc | Commit | Ghi chú |
 |---|---|---|
-| **2026-09-22 11:27:48 +0700** | `d1b59cc` | `npx tauri build --no-bundle`, 4 620 800 byte. Gồm **toàn bộ** DIFF-05 (backend + giao diện). |
+| **2026-09-22 11:38:59 +0700** | `0845b24` | `npx tauri build --no-bundle`, 4 620 800 byte. Gồm **toàn bộ** DIFF-05 (backend + giao diện). |
 
 Đối chiếu trước khi báo lỗi:
 
