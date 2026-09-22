@@ -44,6 +44,19 @@ export type GitErrorCode =
   | 'stdin_write_failed'
   | 'command_failed'
   | 'not_a_repository'
+  /**
+   * `.git/index.lock` đang bị một tiến trình git khác giữ — WORK-02.
+   *
+   * 🔴 Mã **riêng**, không gộp vào `command_failed`, vì giao diện phải nói một câu
+   * khác hẳn: đây không phải lỗi mà là một trạng thái **tạm thời có thể phục hồi**.
+   * Người dùng đang chạy git ở terminal (chủ dự án làm việc như vậy — đó là cả điểm
+   * của WORK-10), nên câu đúng là "đang chờ một tiến trình git khác, thử lại sau",
+   * không phải "git thoát với mã 128".
+   *
+   * Phía Rust đã thử lại có giãn cách (tổng dưới 1 giây) trước khi trả mã này, và nó
+   * **không bao giờ** xoá tệp lock — xem `commands::worktree`.
+   */
+  | 'index_locked'
   | 'no_repository_open'
   | 'unknown_repository'
   | 'parse_failed'
@@ -392,6 +405,82 @@ export interface FileHistory {
    */
   truncated: boolean
 }
+// --- Kiểu của trạng thái thư mục làm việc (Phase 4) -----------------------
+//
+// Khớp `domain::status` bên Rust, `#[serde(rename_all = "camelCase")]`. Tên khoá đã
+// được ghim bằng test ở phía Rust (`domain/status.rs`). Lưu ý cùng cái bẫy mà khối
+// diff ở trên ghi lại: đặt `rename_all` ở **cấp enum** chỉ đổi tên biến thể, không
+// đổi tên trường bên trong.
+
+/**
+ * Ba nhóm tệp của WORK-01. Khớp `domain::StatusGroup`.
+ *
+ * Phép phân nhóm nằm ở **Rust**, không ở đây: suy ra nhóm từ hai ký tự XY (`.M` là
+ * chưa stage, `M.` là đã stage, `MM` là **cả hai**) là *logic*, không phải trình bày,
+ * và để nó ở giao diện nghĩa là nó không có một test Rust nào.
+ */
+export type StatusGroup = 'staged' | 'unstaged' | 'untracked'
+
+/**
+ * Một tệp trong một nhóm trạng thái. Khớp `domain::StatusEntry`.
+ *
+ * 🔴 Một tệp XY = `MM` sinh **hai** phần tử — một `staged`, một `unstaged` — vì nó
+ * thật sự xuất hiện ở cả hai nhóm trên giao diện (khuôn GitHub Desktop). Nên `path`
+ * **không** phải khoá duy nhất của danh sách; khoá React phải gồm cả `group`.
+ */
+export interface StatusEntry {
+  /** Đường dẫn hiện tại, tương đối gốc repo, dấu `/` như git in ra. */
+  path: string
+  /**
+   * Đường dẫn **cũ** của tệp đổi tên/sao chép (bản ghi `--porcelain=v2` dạng `2`).
+   * `null` cho mọi dạng khác. git in **mới trước, cũ sau** — đã đo bằng `od -c`.
+   */
+  oldPath: string | null
+  /** Hai ký tự XY, ví dụ `M.`, `.M`, `MM`, `R.`, `??`, `UU`. */
+  xy: string
+  group: StatusGroup
+  /**
+   * `true` khi đường dẫn phải giải mã lossy (byte không phải UTF-8 hợp lệ).
+   *
+   * Giao diện **không** được dùng `path` của phần tử này làm đối số cho `stageFiles`:
+   * chuỗi đã mất byte gốc và git sẽ không khớp tệp nào.
+   */
+  hasInvalidUtf8: boolean
+}
+
+/** Nhánh hiện tại và quan hệ với upstream. Khớp `domain::BranchInfo`. */
+export interface BranchInfo {
+  /** `null` khi HEAD tách rời. */
+  head: string | null
+  /** SHA của HEAD; `null` ở repo chưa có commit nào. */
+  oid: string | null
+  upstream: string | null
+  /**
+   * 🔴 `null` ≠ `0`. Dòng `# branch.ab` **vắng mặt hoàn toàn** khi nhánh không có
+   * upstream; git **không** in `+0 -0`.
+   *
+   * WORK-09 phải phân biệt "chưa từng push" (`null` — amend vô hại) với "đã push và
+   * đang đồng bộ" (`0` — amend viết lại lịch sử người khác đã thấy, phải cảnh báo).
+   */
+  ahead: number | null
+  behind: number | null
+}
+
+/** Số đếm hàng WIP của WORK-11 (`✏3 +1`). Khớp `domain::WipCounts`. */
+export interface WipCounts {
+  modified: number
+  added: number
+}
+
+/** Trạng thái thư mục làm việc. Khớp `domain::RepoStatus`. */
+export interface RepoStatus {
+  branch: BranchInfo
+  /** Mọi phần tử, **giữ nguyên thứ tự git in ra**. Xem `StatusEntry` về tệp `MM`. */
+  entries: StatusEntry[]
+  /** `true` khi có xung đột chưa giải quyết — nó **chặn** commit của WORK-08. */
+  hasConflicts: boolean
+}
+
 // --- Các lệnh -------------------------------------------------------------
 
 export const ipc = {
@@ -455,4 +544,43 @@ export const ipc = {
   // khi `localStorage.gitPlumPerf === '1'`.
   spikeBlobPair: (repoId: string, commitId: string, path: string) =>
     invoke<SpikeBlobPair>('spike_blob_pair', { repoId, commitId, path }),
+
+  // --- Thư mục làm việc (Phase 4) ---
+  //
+  // 🔴 `stageFiles` và `unstageFiles` trả **`RepoStatus` mới**, không trả `void`.
+  //
+  // Đây là ràng buộc 2.5 của CONTEXT.md, và kiểu trả về là cách bảo đảm nó. Một lệnh
+  // ghi trả `void` **buộc** giao diện phải chờ watcher, và hai thứ hỏng theo: trễ
+  // 250–300 ms sau **mỗi** cú bấm (khoảng gộp-và-trì-hoãn của watcher), và nếu watcher
+  // chết thì danh sách đứng im mà không ai biết — không lỗi, không thông báo.
+  //
+  // Nên `statusStore.stage` ghi `RepoStatus` **từ giá trị trả về** và **không** gọi
+  // `getStatus` sau đó. Có test ghim (`statusStore.test.ts`).
+
+  /** Trạng thái thư mục làm việc — WORK-01. */
+  getStatus: (repoId: string) => invoke<RepoStatus>('get_status', { repoId }),
+
+  /** Stage các tệp — WORK-02. Trả trạng thái **mới**. */
+  stageFiles: (repoId: string, paths: string[]) =>
+    invoke<RepoStatus>('stage_files', { repoId, paths }),
+
+  /** Bỏ stage các tệp — WORK-02. Trả trạng thái **mới**. */
+  unstageFiles: (repoId: string, paths: string[]) =>
+    invoke<RepoStatus>('unstage_files', { repoId, paths }),
+
+  /**
+   * Diff của **thư mục làm việc** — WORK-01 tiêu chí 2.
+   *
+   * `staged: true` → `git diff --cached` ("thứ sẽ vào commit tới");
+   * `staged: false` → `git diff` ("thứ chưa stage").
+   *
+   * 🔴 **Không đặt `staleTime` dài cho lời gọi này.** Khác `getFileDiff` (bất biến
+   * theo `(commitId, path)`, nên `staleTime: Infinity` là đúng), diff thư mục làm việc
+   * đổi **mỗi lần người dùng gõ**. Phía Rust cố ý **không** cache nó — xem
+   * `commands::diff::lay_diff_thu_muc_lam_viec`. Đặt cache ở đây sẽ dựng lại đúng lớp
+   * dữ liệu cũ mà phía Rust vừa từ chối tạo ra, và ở phase này dữ liệu cũ **nguy
+   * hiểm**: người dùng quyết định stage cái gì dựa trên diff họ đang xem.
+   */
+  getWorktreeDiff: (repoId: string, path: string, staged: boolean) =>
+    invoke<FileDiff>('get_worktree_diff', { repoId, path, staged }),
 }
