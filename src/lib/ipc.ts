@@ -189,6 +189,46 @@ export interface CommitDetail {
 export type LineKind = 'context' | 'added' | 'removed'
 
 /**
+ * Khoảng **byte** vào `DiffLine.content` — phần chữ thay đổi trong dòng (diff mức từ).
+ * Khớp `domain::diff::Span`.
+ *
+ * ## ⚠️ Đơn vị là BYTE, còn CodeMirror đánh chỉ số theo UTF-16 code unit
+ *
+ * Hai hệ này **khác nhau** ngay khi dòng có ký tự ngoài ASCII:
+ *
+ * | ký tự | byte (UTF-8) | UTF-16 code unit |
+ * |---|---|---|
+ * | `a`   | 1 | 1 |
+ * | `é`   | 2 | 1 |
+ * | `ỏ`   | 3 | 1 |
+ * | emoji ngoài BMP | 4 | **2** |
+ *
+ * Nên **không** truyền thẳng `start`/`end` làm offset cho decoration của CodeMirror.
+ * Phải chuyển hệ trước, ví dụ bằng cách đếm lại trên chuỗi JS:
+ *
+ * ```ts
+ * // byte offset -> UTF-16 index, dùng chính `content` mà Rust gửi kèm
+ * const utf16 = new TextDecoder().decode(
+ *   new TextEncoder().encode(content).slice(0, byteOffset),
+ * ).length
+ * ```
+ *
+ * Byte được chọn làm hệ gốc vì đó là hệ mà git nói, và mọi phép chuyển ở phía Rust
+ * cũng chỉ là một cơ hội lệch một nấc nữa.
+ *
+ * ## Bất biến do phía Rust bảo đảm
+ *
+ * Hai đầu luôn nằm trên **biên ký tự** — không bao giờ cắt một ký tự nhiều byte làm
+ * đôi. Có test ghim ở `git::parsers::word_diff` trên nội dung tiếng Việt.
+ */
+export interface Span {
+  /** Chỉ số byte đầu, **bao gồm**. */
+  start: number
+  /** Chỉ số byte cuối, **không** bao gồm. */
+  end: number
+}
+
+/**
  * Một dòng trong một hunk. Khớp `domain::diff::DiffLine`.
  *
  * `oldLine` và `newLine` là hai trường riêng vì chế độ **hai cột** (DIFF-02) dựng bố
@@ -205,6 +245,20 @@ export interface DiffLine {
   newLine: number | null
   /** `true` khi ngay sau dòng này git in `\ No newline at end of file`. */
   noNewlineAtEof: boolean
+  /**
+   * Khoảng chữ **thay đổi** trong dòng — diff mức từ.
+   *
+   * Mảng **rỗng** nghĩa là "không có thông tin mức từ cho dòng này", và đó là ca
+   * bình thường chứ không phải lỗi:
+   *
+   * - dòng `context` không bao giờ có khoảng (nó không đổi);
+   * - tệp **chỉ thêm** hoặc **chỉ xoá** bỏ hẳn lệnh word-diff — mọi dòng đều mới
+   *   hoặc đều mất, nên "phần chữ thay đổi" là cả dòng;
+   * - tệp sửa quá 2000 dòng bỏ hẳn word-level (suy giảm có chủ ý).
+   *
+   * Giao diện **phải** vẽ được dòng khi mảng rỗng: tô cả dòng là suy giảm đúng.
+   */
+  spans: Span[]
 }
 
 /** Một khối thay đổi liền mạch. Khớp `domain::diff::Hunk`. */

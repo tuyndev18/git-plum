@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 import { invoke } from '@tauri-apps/api/core'
-import { ipc, type DiffKind, type FileDiff, type Hunk } from './ipc'
+import { ipc, type DiffKind, type DiffLine, type FileDiff, type Hunk, type Span } from './ipc'
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -117,9 +117,30 @@ describe('hình dạng dữ liệu mà giao diện 03-04 dựng bố cục từ 
       newCount: 4,
       heading: 'fn main()',
       lines: [
-        { kind: 'context', content: 'a', oldLine: 3, newLine: 3, noNewlineAtEof: false },
-        { kind: 'removed', content: 'b', oldLine: 4, newLine: null, noNewlineAtEof: false },
-        { kind: 'added', content: 'B', oldLine: null, newLine: 4, noNewlineAtEof: false },
+        {
+          kind: 'context',
+          content: 'a',
+          oldLine: 3,
+          newLine: 3,
+          noNewlineAtEof: false,
+          spans: [],
+        },
+        {
+          kind: 'removed',
+          content: 'b',
+          oldLine: 4,
+          newLine: null,
+          noNewlineAtEof: false,
+          spans: [],
+        },
+        {
+          kind: 'added',
+          content: 'B',
+          oldLine: null,
+          newLine: 4,
+          noNewlineAtEof: false,
+          spans: [],
+        },
       ],
     }
 
@@ -130,6 +151,81 @@ describe('hình dạng dữ liệu mà giao diện 03-04 dựng bố cục từ 
     const cotPhai = h.lines.filter((l) => l.newLine !== null).map((l) => l.newLine)
     expect(cotTrai).toEqual([3, 4])
     expect(cotPhai).toEqual([3, 4])
+  })
+
+  it('spans rỗng là ca BÌNH THƯỜNG, không phải lỗi — giao diện phải vẽ được', () => {
+    const nguCanh: DiffLine = {
+      kind: 'context',
+      content: 'khong doi',
+      oldLine: 1,
+      newLine: 1,
+      noNewlineAtEof: false,
+      spans: [],
+    }
+    // Dòng của một tệp CHỈ THÊM: không lệnh word-diff nào chạy nên `spans` rỗng, và
+    // giao diện tô cả dòng — suy giảm đúng, không phải trường hợp lỗi.
+    const themMoi: DiffLine = {
+      kind: 'added',
+      content: 'ca dong nay deu moi',
+      oldLine: null,
+      newLine: 7,
+      noNewlineAtEof: false,
+      spans: [],
+    }
+
+    for (const l of [nguCanh, themMoi]) {
+      expect(Array.isArray(l.spans)).toBe(true)
+      expect(l.spans).toHaveLength(0)
+    }
+  })
+
+  it('ca của chủ dự án: khoảng HẸP HƠN cả dòng, không tô cả dòng', () => {
+    // Đúng ca chủ dự án nêu tên: `==` → `===`, chỉ phần đó được tô.
+    const content = '  if (typeof cellData === "object") {'
+    const dong: DiffLine = {
+      kind: 'added',
+      content,
+      oldLine: null,
+      newLine: 2,
+      noNewlineAtEof: false,
+      spans: [{ start: content.indexOf('==='), end: content.indexOf('===') + 3 }],
+    }
+
+    expect(dong.spans).toHaveLength(1)
+    const s = dong.spans[0]!
+    expect(content.slice(s.start, s.end)).toBe('===')
+    // Khẳng định then chốt: một khoảng phủ toàn dòng qua được mọi phép kiểm "có
+    // span" nhưng làm sai đúng điều chủ dự án yêu cầu.
+    expect(s.end - s.start).toBeLessThan(content.length)
+  })
+
+  it('🔴 chỉ số BYTE khác chỉ số UTF-16 — 03-04 phải chuyển hệ trước khi vẽ', () => {
+    // Đây là cái bẫy mà tầng vẽ của 03-04 phải biết. Rust gửi chỉ số **byte**;
+    // `String.prototype.slice` của JS đánh chỉ số theo **UTF-16 code unit**. Dùng
+    // thẳng con số của Rust làm offset cho CodeMirror sẽ tô lệch trên mọi dòng có
+    // ký tự ngoài ASCII — và tiếng Việt thì có ở khắp nơi trong dự án này.
+    const content = 'xéy dỏng TEST'
+
+    const byte = new TextEncoder().encode(content)
+    // `é` 2 byte, `ỏ` 3 byte → `TEST` bắt đầu ở **byte 12** nhưng ở **UTF-16 index 9**.
+    // Tính ra chứ không gõ số: một hằng gõ tay sai làm test xanh vì lý do sai.
+    const batDauByte = new TextEncoder().encode(content.slice(0, content.indexOf('TEST'))).length
+    const spanByte: Span = { start: batDauByte, end: batDauByte + 4 }
+    expect(spanByte.start).toBe(12)
+
+    const catTheoByte = new TextDecoder().decode(byte.slice(spanByte.start, spanByte.end))
+    expect(catTheoByte).toBe('TEST')
+
+    // Cắt THẲNG bằng chỉ số byte trên chuỗi JS cho kết quả SAI.
+    expect(content.slice(spanByte.start, spanByte.end)).not.toBe('TEST')
+
+    // Phép chuyển đúng: giải mã phần byte đứng trước rồi lấy độ dài.
+    const sang16 = (offsetByte: number) =>
+      new TextDecoder().decode(byte.slice(0, offsetByte)).length
+    expect(content.slice(sang16(spanByte.start), sang16(spanByte.end))).toBe('TEST')
+
+    // Và hai hệ thật sự khác nhau ở ca này — nếu không, test trên vô nghĩa.
+    expect(sang16(spanByte.start)).not.toBe(spanByte.start)
   })
 
   it('FileDiff mang oldPath chỉ khi tệp bị đổi tên', () => {

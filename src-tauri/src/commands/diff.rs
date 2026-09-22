@@ -39,10 +39,11 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::cache::DiffKey;
-use crate::domain::diff::{DiffKind, FileDiff};
+use crate::domain::diff::{DiffKind, FileDiff, Hunk, LineKind};
 use crate::error::{GitError, Result};
 use crate::git::exec::DEFAULT_TIMEOUT;
 use crate::git::parsers::patch::parse_patch;
+use crate::git::parsers::word_diff::{parse_word_diff, WORD_DIFF_REGEX};
 use crate::git::GitCommand;
 use crate::state::{AppState, RepoHandle};
 
@@ -312,14 +313,193 @@ pub async fn lay_diff_tep(
         );
     }
 
+    // --- Bước 8: diff mức TỪ (03-03) --------------------------------------
+    //
+    // Nằm SAU `parse_patch` và **TRƯỚC** `put_diff`. Thứ tự này là hợp đồng, không
+    // phải sở thích: `spans` phải nằm trong mục cache, nếu không lần mở thứ hai của
+    // cùng một tệp mất word-level — và đó đúng là thao tác thường gặp nhất (bấm qua
+    // lại giữa các tệp trong một commit).
+    let mut hunks = phan_tich.hunks;
+    gan_khoang_muc_tu(state, &repo, &ve_trai, commit_id, path, &mut hunks).await;
+
     let kind = DiffKind::Text {
-        hunks: phan_tich.hunks,
+        hunks,
         truncated: phan_tich.truncated,
     };
 
     Ok(ket_thuc_voi_ten_cu(
         state, khoa, path, &status, old_path, kind,
     ))
+}
+
+/// Chặn trên số dòng **đã sửa** để còn chạy word-level — T-03-19, T-03-20.
+///
+/// Vượt thì bỏ hẳn lệnh git thứ hai và để mọi `spans` rỗng.
+///
+/// # Vì sao có chặn trên, và vì sao là 2000
+///
+/// Word-level tốn **một lệnh git thứ hai** cho mỗi lần mở diff, và `spans` làm payload
+/// JSON phình theo số dòng sửa. Một tệp với 50 nghìn dòng sửa (tệp sinh tự động bị ghi
+/// đè toàn bộ, tệp lock) thì:
+///
+/// * không ai đọc word-level trên nó — ở mức đó người dùng đọc "cả tệp đổi", không
+///   đọc "chữ nào trong dòng đổi";
+/// * `spans` cho 50 nghìn dòng là hàng trăm nghìn cặp số trong JSON.
+///
+/// 2000 dòng sửa là ngưỡng mà một người còn cuộn qua được trong một lần đọc. Vượt thì
+/// **suy giảm có chủ ý**: giao diện vẫn đúng, chỉ bớt mịn — cùng khuôn với
+/// `MAX_VISIBLE_LANES` và chỉ báo `+N cha nữa` của Phase 2.
+pub const WORD_DIFF_MAX_CHANGED_LINES: usize = 2_000;
+
+/// Chạy lệnh word-diff và gắn khoảng vào các `DiffLine` đã phân tích — 03-03.
+///
+/// Không trả `Result`: word-level là phần **trang trí**. Mọi đường thất bại đều để
+/// `spans` rỗng và ghi `tracing::warn!`, không bao giờ làm hỏng cả lời gọi. Mất phần
+/// tô chữ thì người dùng vẫn đọc được diff; mất cả diff thì không.
+async fn gan_khoang_muc_tu(
+    state: &AppState,
+    repo: &Arc<RepoHandle>,
+    ve_trai: &str,
+    commit_id: &str,
+    path: &str,
+    hunks: &mut [Hunk],
+) {
+    // --- Ba cổng bỏ qua, mỗi cổng tránh một loại lệnh git vô ích -----------
+    //
+    // Đếm trước khi chạy. `added == 0` (tệp bị xoá) và `removed == 0` (tệp mới) đều
+    // làm word-level vô nghĩa: không có cặp dòng nào để so chữ. Chạy lệnh rồi vứt kết
+    // quả trả về CÙNG một `FileDiff`, nên khác biệt duy nhất quan sát được nằm trong
+    // `CommandLog` — đó là lý do test của bước này đọc nhật ký lệnh.
+    let mut them = 0usize;
+    let mut xoa = 0usize;
+    for l in hunks.iter().flat_map(|h| &h.lines) {
+        match l.kind {
+            LineKind::Added => them += 1,
+            LineKind::Removed => xoa += 1,
+            LineKind::Context => {}
+        }
+    }
+
+    if them == 0 || xoa == 0 || them + xoa > WORD_DIFF_MAX_CHANGED_LINES {
+        return;
+    }
+
+    // --- Lệnh git thứ hai --------------------------------------------------
+    //
+    // `--word-diff=porcelain` với dấu **BẰNG**. Dạng `--word-diff-porcelain` không
+    // tồn tại: git thoát 129 và in usage (đã đo). Xem tài liệu của
+    // `git::parsers::word_diff` để biết cả phép đo lẫn vì sao lỗi này ồn chứ không
+    // im lặng như `%x1f` của 02-04.
+    //
+    // `--word-diff-regex` là bắt buộc, không phải tinh chỉnh: biên từ mặc định của
+    // git **mất** khoảng trắng ngăn cách và làm việc dựng lại dòng nguồn sai. Hằng
+    // sống ở module bộ phân tích để hai bên không bao giờ lệch nhau.
+    //
+    // `--unified=3` phải KHỚP lệnh diff chính ở bước 7. Lệch thì hai đầu ra có tập
+    // dòng khác nhau và phép khớp theo số dòng trượt ở biên hunk.
+    //
+    // Dùng `read` chứ không `read_ok`: lệnh này thất bại thì ta mất phần trang trí,
+    // không được mất cả lời gọi.
+    let runner = state.runner(Arc::clone(repo));
+    let mut lenh = GitCommand::new(&repo.path)
+        .args([
+            "-c",
+            "core.quotepath=false",
+            "diff",
+            "--word-diff=porcelain",
+            &format!("--word-diff-regex={WORD_DIFF_REGEX}"),
+            "--unified=3",
+            "--find-renames",
+            ve_trai,
+            commit_id,
+        ])
+        // `--` NGĂN CÁCH revision với pathspec (T-02-11, T-03-07), như mọi lệnh khác
+        // trong tệp này mang pathspec.
+        .arg("--")
+        .arg(PATHSPEC_SAU_DAU_GACH(path));
+    lenh = lenh.timeout(DEFAULT_TIMEOUT);
+
+    let ra = match runner.read(lenh).await {
+        Ok(ra) => ra,
+        Err(e) => {
+            tracing::warn!(
+                repo = %repo.id,
+                loi = %e,
+                "không chạy được lệnh diff mức từ; bỏ qua word-level cho tệp này"
+            );
+            return;
+        }
+    };
+
+    if !ra.is_success() {
+        tracing::warn!(
+            repo = %repo.id,
+            "lệnh diff mức từ thất bại; `spans` để rỗng và diff vẫn trả về bình thường"
+        );
+        return;
+    }
+
+    // `parse_word_diff` chỉ nhận **stdout**. Git in cảnh báo CRLF ra stderr, và một
+    // cảnh báo lọt vào stdout sẽ được đọc thành một đoạn từ giả (T-03-22).
+    let wd = parse_word_diff(&ra.stdout);
+
+    if wd.skipped > 0 {
+        // T-03-23: đầu ra không đọc được hết nghĩa là ta không hiểu định dạng, và gán
+        // khoảng theo một phép đọc sai còn tệ hơn không gán. Bỏ TOÀN BỘ, ghi log.
+        tracing::warn!(
+            repo = %repo.id,
+            skipped = wd.skipped,
+            "bộ phân tích diff mức từ bỏ qua một số dòng; bỏ toàn bộ `spans` cho tệp này"
+        );
+        return;
+    }
+
+    // --- Khớp vào `DiffLine` theo SỐ DÒNG ----------------------------------
+    //
+    // Khớp theo số dòng, **không** theo nội dung: hai dòng giống hệt nhau trong một
+    // hunk là chuyện thường (fixture `dup-lines.txt` tồn tại để ghim đúng điều đó), và
+    // khớp theo nội dung sẽ gán khoảng của dòng này cho dòng kia — đúng dòng, sai chỗ.
+    for dong in hunks.iter_mut().flat_map(|h| &mut h.lines) {
+        let (ds, so) = match dong.kind {
+            LineKind::Removed => (&wd.old_lines, dong.old_line),
+            LineKind::Added => (&wd.new_lines, dong.new_line),
+            // Dòng ngữ cảnh không đổi nên không có chữ nào để tô. Bỏ qua tường minh
+            // chứ không dựa vào "tình cờ không có khoảng": một `WordLine` ngữ cảnh
+            // vẫn tồn tại ở cả hai phía, chỉ là `spans` rỗng.
+            LineKind::Context => continue,
+        };
+        let Some(so) = so else { continue };
+        let Some(w) = ds.iter().find(|w| w.line_no == so) else {
+            continue;
+        };
+
+        // --- Cổng an toàn: chỉ gán khi hai bộ phân tích ĐỒNG Ý về dòng đó ---
+        //
+        // `Span` là chỉ số byte vào `DiffLine::content`, nhưng nó được **tính** trên
+        // `WordLine::content`. Hai chuỗi lệch nhau thì gán khoảng sang là tô sai chỗ
+        // — hoặc panic ở 03-04 khi chỉ số vượt biên (T-03-17).
+        //
+        // Có test tích hợp khẳng định hai chuỗi bằng nhau từng byte trên bảy hình
+        // dạng tệp, nên đường này KHÔNG được mong đợi chạy. Nó tồn tại vì hậu quả
+        // của việc sai là panic ở tầng giao diện, và một repo thật có thể mang hình
+        // dạng mà fixture chưa có.
+        if w.content != dong.content {
+            // T-03-21: log ghi `repo.id` và **số dòng**, KHÔNG ghi nội dung — khuôn
+            // T-02-24 của Phase 2. Nội dung dòng là mã nguồn của người dùng.
+            tracing::warn!(
+                repo = %repo.id,
+                dong = so,
+                "hai bộ phân tích bất đồng về nội dung một dòng; bỏ `spans` của dòng đó"
+            );
+            continue;
+        }
+
+        // ⚠️ Gán **chỉ** `spans`. KHÔNG chạm `no_newline_at_eof`: porcelain không
+        // cung cấp trường đó (nó in `~` bình thường và không in
+        // `\ No newline at end of file` — đã đo), nên mọi giá trị suy từ đây đều sai.
+        // Trường đó do `parse_patch` đặt ở bước 7.
+        dong.spans.clone_from(&w.spans);
+    }
 }
 
 /// Dựng `FileDiff`, đặt vào cache, trả `Arc`.
@@ -712,11 +892,12 @@ mod tests {
 
         let so_moc = ma.matches("PATHSPEC_SAU_DAU_GACH").count();
         assert_eq!(
-            so_moc, 3,
-            "ba vị trí pathspec trong `lay_diff_tep`: lệnh --numstat, và HAI đường dẫn \
-             của lệnh diff thật (tên mới cộng tên cũ khi đổi tên). Lệnh --name-status \
-             cố ý KHÔNG có pathspec — xem tài liệu của `trang_thai_va_ten_cu`. \
-             Số mốc khác 3 nghĩa là một lệnh mất mốc hoặc có lệnh mới chưa được kiểm"
+            so_moc, 4,
+            "bốn vị trí pathspec từ `lay_diff_tep` tới hết phần không-test: lệnh \
+             --numstat, HAI đường dẫn của lệnh diff thật (tên mới cộng tên cũ khi đổi \
+             tên), và lệnh --word-diff của bước mức từ (03-03). Lệnh --name-status cố \
+             ý KHÔNG có pathspec — xem tài liệu của `trang_thai_va_ten_cu`. \
+             Số mốc khác 4 nghĩa là một lệnh mất mốc hoặc có lệnh mới chưa được kiểm"
         );
 
         // Kiểm **từng lệnh một**, không kiểm cả thân hàm như một khối.
@@ -770,11 +951,11 @@ mod tests {
         }
 
         assert_eq!(
-            so_lenh_co_pathspec, 2,
-            "đúng hai lệnh mang pathspec: `--numstat` và lệnh diff thật. Lệnh \
-             `--name-status` cố ý không mang (xem `trang_thai_va_ten_cu`). Con số \
-             khác 2 nghĩa là phép cắt theo `GitCommand::new` đã lệch và vòng lặp \
-             trên không còn kiểm đúng thứ nó tưởng"
+            so_lenh_co_pathspec, 3,
+            "đúng ba lệnh mang pathspec: `--numstat`, lệnh diff thật, và lệnh \
+             `--word-diff` của bước mức từ (03-03). Lệnh `--name-status` cố ý không \
+             mang (xem `trang_thai_va_ten_cu`). Con số khác 3 nghĩa là phép cắt theo \
+             `GitCommand::new` đã lệch và vòng lặp trên không còn kiểm đúng thứ nó tưởng"
         );
     }
 
@@ -899,6 +1080,98 @@ mod tests {
             "nhánh trả `TooLarge` phải `return` TRƯỚC mọi lệnh `diff`. Chặn-trước và \
              lọc-sau trả về CÙNG một giá trị, nên chỉ vị trí của `return` này phân \
              biệt được chúng (T-03-10)"
+        );
+    }
+
+    /// **Bước word-level phải nằm TRƯỚC khi mục được đặt vào cache** — 03-03.
+    ///
+    /// Đặt sau thì lần gọi **đầu** vẫn trả đúng `spans` và chỉ lần thứ hai trở đi mới
+    /// mất — tức lỗi chỉ hiện ra khi người dùng bấm lại vào cùng một tệp, thao tác
+    /// thường gặp nhất khi đọc một commit.
+    ///
+    /// Cổng neo vào **quyết định** (lời gọi `gan_khoang_muc_tu` và lời gọi
+    /// `ket_thuc_voi_ten_cu` đặt mục vào cache), không vào phép **đo**. Bài học
+    /// mutation #6 của 03-02: bản đầu của cổng kích thước neo vào lời gọi *đo kích
+    /// thước* và **xanh** dưới đúng đột biến nó phải bắt, vì đột biến dời khối
+    /// `return` mà để nguyên lời gọi đo.
+    ///
+    /// Test tích hợp `goi_lan_hai_dung_cache_va_giu_nguyen_spans` là cổng chính; cổng
+    /// này là cổng thứ hai, rẻ, chạy cả khi không có fixture.
+    #[test]
+    fn buoc_muc_tu_nam_truoc_khi_dat_vao_cache() {
+        let src = include_str!("diff.rs");
+        let (_, than) = src
+            .split_once("pub async fn lay_diff_tep")
+            .expect("phải có hàm lay_diff_tep");
+        // Cắt ở cuối hàm — `ket_thuc_voi_ten_cu` cũng xuất hiện ở định nghĩa hàm phía
+        // dưới, và một lần xuất hiện ngoài thân hàm làm phép so vị trí vô nghĩa.
+        let ma: String = than
+            .lines()
+            .take_while(|l| !l.starts_with("/// Chặn trên số dòng"))
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        // Tiền đề: phép lọc phải giữ lại được thân hàm thật. Không có khẳng định này
+        // thì một phép cắt ăn mất mã làm cổng luôn xanh.
+        assert!(
+            ma.contains("parse_patch"),
+            "tiền đề: phép cắt phải giữ lại thân hàm `lay_diff_tep`"
+        );
+
+        let phan_tich = ma.find("parse_patch(&ra_diff.stdout)").expect("phải phân tích bản vá");
+        let muc_tu = ma
+            .find("gan_khoang_muc_tu(")
+            .expect("phải gọi bước diff mức từ");
+        let vao_cache = ma
+            .find("ket_thuc_voi_ten_cu(")
+            .expect("phải đặt mục vào cache ở cuối");
+
+        assert!(
+            phan_tich < muc_tu,
+            "phải phân tích bản vá TRƯỚC khi gắn khoảng — khoảng được khớp vào \
+             `DiffLine` đã có"
+        );
+        assert!(
+            muc_tu < vao_cache,
+            "bước diff mức từ phải chạy TRƯỚC khi mục được đặt vào cache. Đặt sau thì \
+             lần gọi ĐẦU vẫn đúng và chỉ lần thứ hai mất `spans` — một lỗi chỉ hiện \
+             ra khi người dùng bấm lại vào cùng một tệp"
+        );
+    }
+
+    /// **Bước word-level KHÔNG được chạm `no_newline_at_eof`.**
+    ///
+    /// Porcelain không cung cấp trường đó (đã đo: nó in `~` bình thường và không in
+    /// `\ No newline at end of file`, khác `--unified` trên cùng tệp). Mọi giá trị suy
+    /// từ đầu ra porcelain đều sai, và ghi đè sẽ xoá mất giá trị đúng mà `parse_patch`
+    /// đã đặt.
+    ///
+    /// Đọc thân hàm vì đây là thứ dễ "tiện tay" thêm vào khi ai đó mở rộng `WordLine`.
+    #[test]
+    fn buoc_muc_tu_khong_ghi_de_no_newline_at_eof() {
+        let src = include_str!("diff.rs");
+        let (_, than) = src
+            .split_once("async fn gan_khoang_muc_tu")
+            .expect("phải có hàm gan_khoang_muc_tu");
+        let ma: String = than
+            .lines()
+            .take_while(|l| !l.starts_with("#[cfg(test)]"))
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(
+            ma.contains("dong.spans"),
+            "tiền đề: hàm phải thật sự gán `spans`, nếu không khẳng định dưới vô nghĩa"
+        );
+        assert!(
+            !ma.contains("no_newline_at_eof"),
+            "bước diff mức từ KHÔNG được chạm `no_newline_at_eof`. Porcelain không \
+             cung cấp trường đó (đã đo), nên mọi giá trị suy từ nó đều sai và sẽ xoá \
+             mất giá trị đúng mà `parse_patch` đặt. Hệ quả: trình xem mất chỉ báo \
+             \"không kết thúc bằng dòng mới\", và Phase 5 dựng lại bản vá thiếu dòng \
+             `\\ No newline...` — bản vá như vậy `git apply` từ chối"
         );
     }
 
