@@ -7,11 +7,13 @@
 pub mod diff;
 pub mod diff_spike;
 pub mod history;
+pub mod commit;
 pub mod repo;
 pub mod worktree;
 
 pub use diff::*;
 pub use diff_spike::*;
 pub use history::*;
+pub use commit::*;
 pub use repo::*;
 pub use worktree::*;
