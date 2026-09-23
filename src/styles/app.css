@@ -816,50 +816,13 @@ button:disabled {
 }
 
 /*
- * Hàng xen kẽ đậm/nhạt, như tham chiếu — giúp mắt lần theo một hàng ngang qua
- * cột đồ thị sang cột thông điệp. Dùng `:nth-child(odd)` chứ không phải chỉ số
- * hàng thật, nên dải màu có thể "nhảy" khi virtualizer dựng lại các hàng; điều
- * đó chấp nhận được vì đây thuần trang trí, và bám theo chỉ số thật sẽ buộc
- * truyền thêm một prop chỉ để tô nền.
+ * KHÔNG nền sọc xen kẽ, KHÔNG tô màu lane cả hàng — như GitKraken (ảnh tham
+ * chiếu 2026-09-23). Hai lớp đó từng ở đây (`:nth-child(odd)` và gradient
+ * `--lane-color` 7%) và làm mọi hàng trông như đang được highlight cố định,
+ * kể cả ở cột nhãn trống. Mỏ neo nối nút với dòng thông điệp giờ chỉ là dải
+ * màu lane từ nút tới mép cột đồ thị cộng vạch màu lane ở mép đó — cả hai do
+ * canvas vẽ (`drawRow`). Nền hàng chỉ xuất hiện khi rê chuột hoặc chọn.
  */
-.commit-row:nth-child(odd) {
-  background: color-mix(in srgb, var(--bg-raised) 40%, transparent);
-}
-
-/*
- * Dải nền ám MÀU NHÁNH, trải suốt bề ngang hàng.
- *
- * # Vì sao cần, sau khi cap lane lên 20
- *
- * Lần theo *một* nhánh bằng cách bám sợi đường 1,5px trong cột đồ thị là việc
- * khó ở 20 lane — mắt phải giữ một đường mảnh qua hàng chục hàng, và các đường
- * cạnh nhau chỉ cách 14px. Dải nền cho mắt một mỏ neo rộng hơn nhiều, và nó
- * chạy sang tận cột thông điệp nên đọc tới hàng nào cũng biết hàng đó thuộc
- * nhánh nào mà không phải liếc ngược về cột đồ thị. Đây là thứ ảnh tham chiếu
- * người dùng gửi làm (vùng teal và đỏ trầm trải ngang các hàng).
- *
- * # 🔴 Alpha phải RẤT thấp, và đây không phải chuyện thẩm mỹ
- *
- * Nền hàng nằm **TRÊN** canvas đồ thị (`.graph-canvas` có `z-index: 0`, các
- * hàng đến sau trong DOM). Mọi phần đục sẽ **xoá** đường lane phía sau. Đó
- * đúng là lỗi `.commit-row:hover` từng mắc với `--bg-inset` đục — rê chuột qua
- * một hàng làm cả đoạn đồ thị của hàng đó biến mất thành vệt đen ngang.
- *
- * 7% là mức đo được: đủ để phân biệt hai nhánh cạnh nhau khi nhìn cả trang,
- * vẫn để nguyên đường lane xuyên qua. Tăng con số này là quay lại lỗi cũ.
- *
- * `--lane-color` do `CommitList` đặt inline từ `colorFor(graphRow.color)`.
- * Hàng chưa nạp dữ liệu đồ thị không có biến này, nên `color-mix` sẽ hỏng —
- * `@supports` không cứu được ca đó, vì thế dùng `var(--lane-color, transparent)`
- * để giá trị thiếu suy biến thành "không tô gì" thay vì thành màu rác.
- */
-.commit-row {
-  background-image: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--lane-color, transparent) 7%, transparent),
-    color-mix(in srgb, var(--lane-color, transparent) 7%, transparent)
-  );
-}
 
 /*
  * Nền hàng PHẢI trong suốt một phần — canvas đồ thị nằm DƯỚI các hàng

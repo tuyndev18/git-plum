@@ -510,19 +510,9 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
           const isSelected = commit !== undefined && commit.id === selectedCommitId
 
           /*
-           * Màu nhánh của hàng, đẩy sang CSS qua biến để `.commit-row` tô một
-           * dải nền rất nhạt theo nhánh.
-           *
-           * Vì sao có: ở 20 lane, lần theo *một* nhánh bằng cách bám sợi đường
-           * trong cột đồ thị là việc khó — mắt phải giữ một đường mảnh 1,5px
-           * qua hàng chục hàng. Một dải nền ám màu nhánh trải suốt bề ngang
-           * hàng cho mắt một mỏ neo rộng hơn nhiều, và nó chạy sang tận cột
-           * thông điệp nên đọc hàng nào cũng biết hàng đó thuộc nhánh nào. Đây
-           * là thứ tham chiếu người dùng gửi làm (vùng teal/đỏ trầm trong ảnh).
-           *
-           * Alpha phải RẤT thấp (`app.css` dùng 7%): nền hàng nằm TRÊN canvas
-           * đồ thị, nên mọi phần đục sẽ xoá đường lane phía sau — cùng lỗi mà
-           * `.commit-row:hover` từng mắc với `--bg-inset` đục.
+           * Màu nhánh của hàng, đẩy sang CSS qua biến `--lane-color` cho nhãn
+           * tag (nền ám màu lane) và đường nối nhãn → nút. **Không** tô nền cả
+           * hàng nữa — xem comment "KHÔNG nền sọc" trong `app.css`.
            *
            * `graphRows` là mảng thưa (`mergePage` để lỗ `undefined` ở trang
            * chưa nạp), nên phải kiểm trước khi đọc `.color`.
