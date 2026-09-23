@@ -2084,6 +2084,12 @@ button:disabled {
   color: var(--syn-definition);
 }
 
+/* Key object (`crypto:`) mang CẢ `tok-propertyName tok-definition` — giữ màu
+   property như Dark+, không để rule `definition` phía trên đè thành trắng. */
+.diff-viewer .tok-propertyName.tok-definition {
+  color: var(--syn-property);
+}
+
 .diff-viewer .tok-heading,
 .diff-viewer .tok-macroName,
 .diff-viewer .tok-deleted {
