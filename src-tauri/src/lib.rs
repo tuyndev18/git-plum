@@ -52,6 +52,8 @@ pub fn run() {
             commands::get_status,
             commands::stage_files,
             commands::unstage_files,
+            commands::stage_hunk,
+            commands::unstage_hunk,
             commands::create_commit,
             commands::amend_commit,
             commands::avatar_hash,

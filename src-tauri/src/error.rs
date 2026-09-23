@@ -116,6 +116,34 @@ pub enum GitError {
 
     #[error("Lỗi nhập xuất: {0}")]
     Io(String),
+
+    /// Tệp đã đổi trên đĩa giữa lúc giao diện vẽ diff và lúc người dùng bấm stage —
+    /// WORK-05, rủi ro R4.
+    ///
+    /// # Vì sao ca này KHÔNG được gộp vào `CommandFailed`
+    ///
+    /// Với người dùng đây **không phải một lỗi của ứng dụng**: tệp của họ đổi, và việc
+    /// cần làm là **làm mới** rồi chọn lại khối. `git thoát với mã 1` không nói điều
+    /// đó. Giao diện phải phân nhánh được để hiện nút "làm mới", nên nó cần một mã ổn
+    /// định chứ không phải một phép so khớp chuỗi.
+    ///
+    /// Chủ dự án **chạy git ở terminal song song** — đó là cả điểm của WORK-10 — nên
+    /// ca này là đường đi thường ngày, không phải phòng xa.
+    ///
+    /// # 🔴 Thông điệp là NGUYÊN VĂN ROADMAP
+    ///
+    /// *"tệp đã đổi từ lúc bạn xem khác biệt này, hãy làm mới"*. Tiêu chí thành công 3
+    /// của Phase 5 được kiểm bằng **chính chuỗi này**; đổi chữ ở đây làm tiêu chí đó
+    /// không còn kiểm được.
+    ///
+    /// # 🔴 Sau lỗi này KHÔNG BAO GIỜ có một lần thử lại lỏng hơn
+    ///
+    /// ROADMAP xếp "không thương lượng": không `--whitespace=fix`, không `--3way`,
+    /// không khớp mờ. Một bản vá không khớp được áp bằng khớp mờ là cách làm **hỏng
+    /// tệp của người dùng**, và đây là phase đầu tiên ghi vào nội dung tệp. Cổng
+    /// `duong_apply_khong_bao_gio_khop_mo` trong `commands/hunk.rs` ghim điều này.
+    #[error("Tệp đã đổi từ lúc bạn xem khác biệt này, hãy làm mới")]
+    FileChanged { path: String },
 }
 
 impl GitError {
@@ -135,6 +163,7 @@ impl GitError {
             Self::UnknownRepository(_) => "unknown_repository",
             Self::ParseFailed(_) => "parse_failed",
             Self::Io(_) => "io",
+            Self::FileChanged { .. } => "file_changed",
         }
     }
 
@@ -278,6 +307,9 @@ mod tests {
             GitError::UnknownRepository(String::new()),
             GitError::ParseFailed(String::new()),
             GitError::Io(String::new()),
+            GitError::FileChanged {
+                path: String::new(),
+            },
         ];
 
         let mut ma: Vec<&str> = mau.iter().map(|e| e.code()).collect();
@@ -290,10 +322,11 @@ mod tests {
             "có hai variant dùng cùng một mã lỗi: {ma:?}"
         );
         assert_eq!(
-            so_luong, 13,
-            "mười ba variant; thêm variant phải cập nhật test này. Lịch sử con số: \
+            so_luong, 14,
+            "mười bốn variant; thêm variant phải cập nhật test này. Lịch sử con số: \
              10 (hết 04-02) → 13 (04-03 thêm EmptyCommitMessage, NothingToCommit, \
-             HookRejected cho vòng commit của WORK-08). Cập nhật con số là ĐÚNG khi \
+             HookRejected cho vòng commit của WORK-08) → 14 (05-02 thêm FileChanged \
+             cho WORK-05). Cập nhật con số là ĐÚNG khi \
              thêm variant thật; nới nó thành `>=` thì KHÔNG — phép so bằng tuyệt đối \
              là thứ bắt được một variant thêm vào mà quên khai mã lỗi"
         );
@@ -353,6 +386,97 @@ mod tests {
             "🔴 ca thông điệp rỗng phải bị chặn TRƯỚC khi sinh lệnh git, nên nó không \
              có lệnh để hiện. Có lệnh ở đây nghĩa là git đã chạy — tức hook pre-commit \
              (thường là linter cả cây) vừa chạy cho một lệnh chắc chắn thất bại"
+        );
+    }
+
+    /// `FileChanged` có mã **riêng** `file_changed` — WORK-05, tiêu chí thành công 3.
+    ///
+    /// 🔴 Khẳng định mã **không** phải `command_failed`: gộp hai ca lại thì giao diện
+    /// không phân nhánh được để hiện nút "làm mới", và người dùng nhận "git thoát với
+    /// mã 1" cho một tình huống hoàn toàn bình thường (họ vừa sửa tệp ở terminal).
+    #[test]
+    fn file_changed_co_ma_rieng() {
+        let err = GitError::FileChanged {
+            path: "src/App.tsx".into(),
+        };
+        let json = serde_json::to_value(&err).unwrap();
+
+        assert_eq!(json["code"], "file_changed");
+        assert_ne!(
+            json["code"], "command_failed",
+            "ca tệp-đã-đổi KHÔNG được gộp vào command_failed — giao diện phải phân \
+             nhánh được để hiện đường làm mới"
+        );
+        assert_eq!(err.code(), "file_changed");
+    }
+
+    /// 🔴 Liệt kê **TOÀN BỘ** khoá JSON rồi so **bằng**, không chỉ kiểm khoá mình mong
+    /// có mặt.
+    ///
+    /// # Vì sao phép so bằng, không phải `contains_key`
+    ///
+    /// Đây là cách `binary_khong_mang_byte_noi_dung` bắt được lỗi `rename_all` ở
+    /// Phase 3 (ghi trong `domain/diff.rs`): một phép kiểm "có khoá `code`" vẫn **xanh**
+    /// khi serde thêm một khoá thứ tư, hay khi ai đó đổi `#[serde(rename_all)]` và làm
+    /// `command` thành `commandArgs` **cộng thêm** một khoá cũ. Phía TypeScript đọc
+    /// đúng ba khoá này; một khoá thừa là một hợp đồng đã đổi mà không ai thấy.
+    ///
+    /// Và `command` phải là `null` — `FileChanged` **không** sinh từ một lệnh git cụ
+    /// thể (phép kiểm blob hash chạy trước, và bản vá chưa bao giờ được áp), nên
+    /// `command_args()` để nó rơi vào nhánh `_ => None`.
+    #[test]
+    fn file_changed_serialize_dung_ba_khoa_va_khong_thua() {
+        let err = GitError::FileChanged {
+            path: "a.txt".into(),
+        };
+        let json = serde_json::to_value(&err).unwrap();
+
+        let mut khoa: Vec<&str> = json
+            .as_object()
+            .expect("lỗi phải serialize thành một object JSON")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        khoa.sort_unstable();
+
+        assert_eq!(
+            khoa,
+            vec!["code", "command", "message"],
+            "🔴 TOÀN BỘ khoá phải đúng ba cái này. Một khoá THỪA nghĩa là hợp đồng với \
+             TypeScript đã đổi mà không ai thấy; một khoá THIẾU nghĩa là giao diện đọc \
+             `undefined`. Phép kiểm 'có khoá X' xanh ở cả hai ca — đó là lý do test \
+             này so BẰNG. Đọc được {khoa:?}"
+        );
+
+        assert!(
+            json["command"].is_null(),
+            "🔴 `FileChanged` bị chặn TRƯỚC khi áp bản vá, nên không có lệnh git nào \
+             để hiện. Có lệnh ở đây nghĩa là một `git apply` đã chạy rồi — tức phép \
+             kiểm blob hash không còn đứng trước nó"
+        );
+    }
+
+    /// Thông điệp chứa **nguyên văn** câu ROADMAP đòi — tiêu chí thành công 3.
+    ///
+    /// 🔴 Tiêu chí *"tệp đổi ở nơi khác → báo và đòi làm mới"* được kiểm bằng **chính
+    /// chuỗi này**. Đổi chữ ở đây (dù chỉ thành "hãy tải lại") làm tiêu chí đó không
+    /// còn kiểm được bằng máy, và không ai sẽ nhận ra cho tới lúc có người đọc lại
+    /// ROADMAP.
+    #[test]
+    fn file_changed_noi_nguyen_van_hay_lam_moi() {
+        let msg = GitError::FileChanged {
+            path: "a.txt".into(),
+        }
+        .to_string();
+
+        assert!(
+            msg.contains("hãy làm mới"),
+            "🔴 thông điệp phải chứa NGUYÊN VĂN `hãy làm mới` — đó là việc người dùng \
+             cần làm, và là chuỗi mà tiêu chí thành công 3 kiểm: {msg:?}"
+        );
+        assert!(
+            msg.contains("đã đổi"),
+            "thông điệp phải nói tệp đã đổi, không chỉ nói phải làm mới: {msg:?}"
         );
     }
 
