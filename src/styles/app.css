@@ -24,8 +24,8 @@
   --border-strong: #cfcdc4; /* hairline-strong */
 
   --text: #26251e; /* ink */
-  --text-dim: #5a5852; /* body */
-  --text-faint: #807d72; /* muted */
+  --text-dim: #4a4843; /* body — đậm hơn token Cursor #5a5852 để đạt ≥7:1 ở cỡ 11–12px */
+  --text-faint: #65625a; /* muted — #807d72 gốc chỉ 3.3:1 trên --bg-inset, dưới AA */
   /* Chỉ thêm vì có chỗ dùng thật (Task 2, .file-list-count/.hunk-table-count
      đọc --text-faint hiện có) — không thêm biến mồ côi cho disabled text vì
      dự án chưa có input disabled dùng riêng token này. */
@@ -37,8 +37,8 @@
   --warn: #c08532; /* vàng ấm — mới, CONTEXT.md */
 
   --font-ui:
-    'Inter', system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+    'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
 
   /*
    * Chiều cao hàng commit là hằng số của JS, KHÔNG phải của CSS: canvas đồ thị
@@ -134,8 +134,8 @@
     --border-strong: #46443b; /* hairline strong */
 
     --text: #f0efe9;
-    --text-dim: #b3b0a5; /* dim */
-    --text-faint: #807d72; /* faint — giữ nguyên giữa hai theme (CONTEXT.md) */
+    --text-dim: #c4c1b6; /* dim — ≥8:1 trên --bg-raised */
+    --text-faint: #9d9a8f; /* faint — #807d72 chỉ 3.9:1 trên --bg-raised tối */
 
     --accent: #ff6a1f; /* Cursor Orange sáng hơn cho nền tối */
     --accent-dim: #d04200;
