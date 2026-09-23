@@ -25,6 +25,25 @@ function classFor(kind: GitRef['kind']): string {
   return 'ref-badge--other'
 }
 
+/** Icon tag 10px sau tên tag, như GitKraken. `aria-hidden`: tên đã đủ nghĩa. */
+function IconTag() {
+  return (
+    <svg
+      className="ref-badge-icon"
+      width="10"
+      height="10"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      aria-hidden="true"
+    >
+      <path d="M2 2h6l6 6-6 6-6-6z" strokeLinejoin="round" />
+      <circle cx="5.5" cy="5.5" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
 export function RefBadges({ refs }: Props) {
   if (refs.length === 0) return null
 
@@ -35,8 +54,9 @@ export function RefBadges({ refs }: Props) {
     <span className="ref-badges">
       {visible.map((r) => (
         <span key={r.fullName} className={`ref-badge ${classFor(r.kind)}`} title={r.fullName}>
-          {r.shortName}
+          {r.kind === 'tag' ? <span className="ref-badge-name">{r.shortName}</span> : r.shortName}
           {r.isHead && <span className="ref-badge-head"> HEAD</span>}
+          {r.kind === 'tag' && <IconTag />}
         </span>
       ))}
       {overflow.length > 0 && (

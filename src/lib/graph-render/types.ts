@@ -45,6 +45,14 @@ export interface GraphRenderRow {
         mauNen: string
       }
     | undefined
+
+  /**
+   * Hàng có nhãn nhánh/tag ở cột nhãn → bộ vẽ kẻ đường nối từ mép trái cột đồ
+   * thị tới nút, như GitKraken: nhãn ở cột bên trái, nút có thể ở lane xa, và
+   * mắt cần một sợi chỉ để biết nhãn thuộc nút nào. Không bắt buộc (`undefined`
+   * = không nhãn) để các chỗ dựng hàng cũ không phải đổi.
+   */
+  hasRefs?: boolean
 }
 
 /**

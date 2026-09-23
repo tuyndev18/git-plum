@@ -70,11 +70,22 @@ export interface CommitListHandle {
 
 const OVERSCAN = 10
 
+/*
+ * `04/22/2026 @ 10:02 AM` — kiểu GitKraken: ngày số cố định bề rộng (đọc dọc cột
+ * thẳng hàng, khác `medium` có tên tháng dài ngắn khác nhau), giờ tách bằng `@`.
+ * Thứ tự ngày/tháng và 12/24 giờ vẫn theo locale người dùng. Tạo formatter một
+ * lần: hàm này chạy cho mọi hàng đang thấy ở mỗi lần render khi cuộn.
+ */
+const DATE_FMT = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
+
 function formatTime(unixSeconds: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(unixSeconds * 1000))
+  const d = new Date(unixSeconds * 1000)
+  return `${DATE_FMT.format(d)} @ ${TIME_FMT.format(d)}`
 }
 
 export const CommitList = forwardRef<CommitListHandle, Props>(function CommitList(
@@ -242,7 +253,7 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
   const renderRows: GraphRenderRow[] = useMemo(
     () =>
       virtualItems
-        .map((v) => {
+        .map((v): GraphRenderRow | null => {
           const row = graphRows[v.index]
           if (!row) return null
           /*
@@ -259,10 +270,17 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
            */
           const commit = commits[v.index]
           const avatar = commit ? avatarTuSinh(commit.authorName, commit.authorEmail) : undefined
-          return { row, index: v.index, y: commitRowY(v.start, scrollTop, hasWip), avatar }
+          const hasRefs = commit ? (refsByCommit?.get(commit.id)?.length ?? 0) > 0 : false
+          return {
+            row,
+            index: v.index,
+            y: commitRowY(v.start, scrollTop, hasWip),
+            avatar,
+            hasRefs,
+          }
         })
         .filter((r): r is GraphRenderRow => r !== null),
-    [virtualItems, graphRows, commits, scrollTop, hasWip],
+    [virtualItems, graphRows, commits, scrollTop, hasWip, refsByCommit],
   )
 
   /**
@@ -511,11 +529,12 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
            */
           const graphRow = graphRows[v.index]
           const laneColor = graphRow ? colorFor(graphRow.color) : undefined
+          const refs = commit ? (refsByCommit?.get(commit.id) ?? []) : []
 
           return (
             <div
               key={v.key}
-              className={`commit-row${isSelected ? ' selected' : ''}`}
+              className={`commit-row${isSelected ? ' selected' : ''}${refs.length > 0 ? ' has-refs' : ''}`}
               style={
                 {
                   position: 'absolute',
@@ -552,7 +571,7 @@ export const CommitList = forwardRef<CommitListHandle, Props>(function CommitLis
                     hiển thị 0%).
                   */}
                   <span className="commit-ref-cell">
-                    <RefBadges refs={refsByCommit?.get(commit.id) ?? []} />
+                    <RefBadges refs={refs} />
                   </span>
                   <span className="commit-graph-gutter" style={{ width: graphColWidth }} />
                   <span className="commit-subject" title={commit.subject}>

@@ -82,6 +82,9 @@ export interface CanvasRendererOptions {
  */
 const CORNER_RADIUS = 4
 
+/** Bề rộng vạch màu lane ở mép phải cột đồ thị (px). */
+const ROW_ACCENT_WIDTH = 2
+
 /**
  * Màu tô lòng nút, lấy từ `--graph-node-fill` của host để khớp nền thật ở cả
  * theme sáng và tối. Rơi về `NODE_FILL` khi không có DOM (test) hoặc khi biến
@@ -265,6 +268,18 @@ function drawRow(
   if (width > nodeX) {
     ctx.fillStyle = `${colorFor(row.color)}33`
     ctx.fillRect(nodeX, yCenter - NODE_RADIUS, width - nodeX, NODE_RADIUS * 2)
+    // Vạch dọc đặc màu lane ở mép phải cột: điểm dải nền "cập bến" cột thông
+    // điệp, như GitKraken — đọc cột chữ vẫn thấy màu nhánh của từng hàng.
+    ctx.fillStyle = colorFor(row.color)
+    ctx.fillRect(width - ROW_ACCENT_WIDTH, yCenter - NODE_RADIUS, ROW_ACCENT_WIDTH, NODE_RADIUS * 2)
+  }
+
+  // Hàng có nhãn: đường mảnh từ mép trái cột (nơi đoạn nối CSS của cột nhãn
+  // dừng) tới nút. Vẽ trước nút nên quầng nền của nút cắt gọn đầu đường. Alpha
+  // 60% khớp `.commit-ref-cell::after` để hai nửa trông là một đường.
+  if (item.hasRefs && nodeX > 0) {
+    ctx.fillStyle = `${colorFor(row.color)}99`
+    ctx.fillRect(0, Math.round(yCenter) - 0.5, nodeX, 1)
   }
 
   // `passthrough` chứa HAI loại cạnh, không phải một:

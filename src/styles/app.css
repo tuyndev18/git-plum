@@ -1040,7 +1040,28 @@ button:disabled {
   flex-shrink: 0;
   width: 10px;
   height: 1px;
-  background: var(--border-strong);
+  background: color-mix(in srgb, var(--lane-color, var(--border-strong)) 60%, transparent);
+}
+
+/*
+ * Nửa giữa của đường nối nhãn → nút: lấp khe `gap` 10px giữa cột nhãn và cột
+ * đồ thị. Nửa đầu là `::after` ở trên (trong ô nhãn, bị `overflow: hidden` của
+ * ô cắt nên không tự vươn qua khe được), nửa cuối do canvas vẽ từ mép trái cột
+ * đồ thị tới nút (`hasRefs` trong `canvasRenderer`). Ba đoạn cùng màu lane 60%.
+ *
+ * `position: absolute` trên pseudo của grid container nên nó KHÔNG thành ô grid
+ * — số ô của hàng không đổi (xem comment `.commit-ref-cell`). Hàng đã
+ * `position: absolute` (inline) nên là khối chứa.
+ */
+.commit-row.has-refs::after {
+  content: '';
+  position: absolute;
+  left: calc(10px + var(--ref-col-width));
+  top: 50%;
+  width: 10px;
+  height: 1px;
+  background: color-mix(in srgb, var(--lane-color, var(--border-strong)) 60%, transparent);
+  pointer-events: none;
 }
 
 .ref-badges {
@@ -1103,6 +1124,32 @@ button:disabled {
      không thêm một biến --color-tag mồ côi chỉ cho một component. */
   background: color-mix(in srgb, var(--warn) 25%, var(--bg-inset));
   color: var(--warn);
+}
+
+/*
+ * Tag theo kiểu GitKraken: nền ám màu LANE của commit (không phải một màu cố
+ * định), chữ sáng, icon tag sau tên. Nhãn vì thế "thuộc về" nhánh mà đường nối
+ * dẫn tới. Vẫn phân biệt được với nhánh local/remote (HIST-06) nhờ icon. Hàng
+ * chưa có dữ liệu đồ thị (thiếu `--lane-color`) rơi về màu `--warn` ở trên.
+ */
+.commit-row .ref-badge--tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: color-mix(in srgb, var(--lane-color, var(--warn)) 28%, var(--bg-inset));
+  color: var(--text);
+}
+
+/* `inline-flex` tắt ellipsis trên text node trần — tên nằm trong span riêng. */
+.ref-badge-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ref-badge-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .ref-badge--other,
