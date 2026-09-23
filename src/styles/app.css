@@ -5,25 +5,40 @@
  * loại, nhưng không sao chép phần nhìn của chúng.
  */
 
+/*
+ * Theme sáng cream (Cursor) là MẶC ĐỊNH — quyết định D-01 của
+ * `260923-kzl-CONTEXT.md`. Bản trước (Phase 1) có tối làm mặc định và sáng
+ * dưới media query; nhánh dưới đây ĐẢO LẠI: `@media (prefers-color-scheme:
+ * dark)` giờ giữ theme tối, không còn `light`.
+ */
 :root {
-  --bg: #16161a;
-  --bg-raised: #1e1e24;
-  --bg-inset: #121215;
-  --border: #2c2c35;
-  --border-strong: #3a3a46;
+  /* Bảng sáng — canvas cream, không bao giờ trắng thuần (skills/design/Cursor). */
+  --bg: #f7f7f4; /* canvas */
+  --bg-raised: #ffffff; /* surface-card */
+  /* canvas-soft (#fafaf7) sát --bg tới mức không tách được trên nền lớn —
+     dùng surface-strong (#e6e5e0) cho --bg-inset để vùng inset (ô nhập, mã
+     nguồn, khối trích dẫn) thật sự lùi một bậc so với --bg, đúng vai trò
+     "khoét sâu" mà --bg-inset đang giữ trong toàn bộ stylesheet. */
+  --bg-inset: #e6e5e0;
+  --border: #e6e5e0; /* hairline */
+  --border-strong: #cfcdc4; /* hairline-strong */
 
-  --text: #e4e4ea;
-  --text-dim: #9a9aa8;
-  --text-faint: #6a6a78;
+  --text: #26251e; /* ink */
+  --text-dim: #5a5852; /* body */
+  --text-faint: #807d72; /* muted */
+  /* Chỉ thêm vì có chỗ dùng thật (Task 2, .file-list-count/.hunk-table-count
+     đọc --text-faint hiện có) — không thêm biến mồ côi cho disabled text vì
+     dự án chưa có input disabled dùng riêng token này. */
 
-  --accent: #9d7cd8;
-  --accent-dim: #6f5a99;
-  --danger: #e06c75;
-  --success: #86b384;
+  --accent: #f54e00; /* Cursor Orange */
+  --accent-dim: #d04200; /* active/press */
+  --danger: #cf2d56;
+  --success: #1f8a65;
+  --warn: #c08532; /* vàng ấm — mới, CONTEXT.md */
 
   --font-ui:
-    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  --font-mono: 'Cascadia Code', 'JetBrains Mono', Consolas, 'Courier New', monospace;
+    'Inter', system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
 
   /*
    * Chiều cao hàng commit là hằng số của JS, KHÔNG phải của CSS: canvas đồ thị
@@ -45,22 +60,29 @@
    * Giá trị trùng `--bg` vì hàng chẵn không có nền riêng; hàng lẻ phủ thêm
    * `--bg-raised` ở 40% alpha, lệch đủ nhỏ để lòng nút không lộ viền.
    */
-  --graph-node-fill: #16161a;
+  --graph-node-fill: var(--bg);
 
   /*
-   * Màu phủ hàng đang trỏ/đang chọn — **đo từ ảnh tham chiếu**.
-   *
-   * `docs/screenshots/main-4.png` cho hàng đang chọn màu `#1b2b32` trên nền
-   * `#1c1e23`: đỏ giảm 1, lục +13, lam +15 — một lớp phủ **xanh teal sáng
-   * lên**, không phải tối đi. Giải ngược ở alpha 10% ra đúng `rgb(18,160,185)`.
-   *
-   * Vì sao lift chứ không phải darken: canvas đồ thị nằm DƯỚI các hàng, nên
-   * nền hàng phải trong suốt để lane xuyên qua (xem `.commit-row:hover`). Một
-   * lớp phủ sáng mờ giữ được cả hai — thấy rõ hàng nào đang trỏ, mà đường lane
-   * và nút vẫn nguyên. Tham chiếu làm đúng vậy: đo pixel hàng đang chọn vẫn
-   * thấy nguyên các lane chạy qua nó.
+   * Vòng tròn đánh dấu hàng đang được chọn trên canvas đồ thị — đọc bởi
+   * `canvasRenderer.readSelectionRing()` theo đúng pattern `readNodeFill`.
+   * Trung tính (không theo `--accent`, vốn dành riêng cho CTA/trạng thái
+   * chọn chính — đúng "dùng tiết kiệm" của CONTEXT.md), nhưng đủ tối để đọc
+   * được trên nền cream — khác hẳn `#e6edf3` gần-trắng cũ vốn vô hình trên
+   * `--bg` sáng.
    */
-  --row-highlight: #12a0b9;
+  --graph-selection-ring: var(--border-strong);
+
+  /*
+   * Màu phủ hàng đang trỏ/đang chọn.
+   *
+   * Nền giờ SÁNG (cream) nên logic đảo ngược so với bản Phase 1: lớp phủ phải
+   * TỐI đi mới đọc được, không còn "sáng lên" như trên nền tối cũ. Giá trị là
+   * Claude's Discretion (CONTEXT.md mục "Claude's Discretion" — cường độ
+   * color-mix/màu chính xác) — dùng `color-mix` với `--text` (ink) thay vì một
+   * hex cố định để lớp phủ tự nhất quán với theme, alpha thấp giữ đúng ràng
+   * buộc "lane vẫn xuyên qua" như bản gốc.
+   */
+  --row-highlight: color-mix(in srgb, var(--text) 55%, var(--accent) 45%);
 
   /*
    * Bề rộng cột nhãn nhánh/tag — PHẢI khớp `REF_COL_WIDTH` ở
@@ -77,33 +99,78 @@
    * Có test ghim hai phía, đúng tiền lệ `--ref-col-width`.
    */
   --min-split-width: 720px;
+
+  /*
+   * `--color-*`/`--warn`/`--ok` — trước bản reskin này chỉ tồn tại dưới dạng
+   * fallback trong `var(--color-x, #hex)` rải rác ở component rules (Task 2),
+   * chưa bao giờ có giá trị THẬT ở :root. Mỗi biến trỏ về đúng token ngữ nghĩa
+   * đã khai ở trên — suy luận từ tên biến và nơi nó được dùng (đọc lại các
+   * `var(--color-*, ...)` trong Task 2 để đối chiếu ngữ cảnh).
+   */
+  --color-danger: var(--danger);
+  --color-danger-bg: color-mix(in srgb, var(--danger) 12%, transparent);
+  --color-bg-subtle: var(--bg-inset);
+  --color-row-hover: color-mix(in srgb, var(--text) 6%, transparent);
+  --color-row-selected: color-mix(in srgb, var(--accent) 18%, transparent);
+  --color-selected-bg: color-mix(in srgb, var(--accent) 14%, transparent);
+  --color-accent: var(--accent);
+  --color-warn: var(--warn);
+  --color-notice-bg: color-mix(in srgb, var(--accent) 10%, transparent);
+  --color-border: var(--border);
+  --color-subtle-bg: color-mix(in srgb, var(--text) 8%, transparent);
+  --color-added: var(--success);
+  --color-removed: var(--danger);
+  --ok: var(--success);
 }
 
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) {
-    --bg: #fbfbfd;
-    --bg-raised: #ffffff;
-    --bg-inset: #f2f2f5;
-    --border: #e0e0e6;
-    --border-strong: #c8c8d2;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    /* Bảng tối ấm — đảo mực/giấy kiểu pricing-tier-featured (SKILL.md), KHÔNG
+       phải theme tím lạnh của bản Phase 1. */
+    --bg: #1b1a16; /* nền */
+    --bg-raised: #23221d; /* raised */
+    --bg-inset: #151410; /* inset */
+    --border: #34322b; /* hairline */
+    --border-strong: #46443b; /* hairline strong */
 
-    --text: #1c1c22;
-    --text-dim: #5a5a68;
-    --text-faint: #8a8a98;
+    --text: #f0efe9;
+    --text-dim: #b3b0a5; /* dim */
+    --text-faint: #807d72; /* faint — giữ nguyên giữa hai theme (CONTEXT.md) */
 
-    --accent: #6b46a8;
-    --accent-dim: #8f6fc4;
-    --danger: #c0392b;
-    --success: #4a7c47;
+    --accent: #ff6a1f; /* Cursor Orange sáng hơn cho nền tối */
+    --accent-dim: #d04200;
+    /* Semantic giữ nguyên qua cả hai theme — Claude's Discretion: đủ tương
+       phản trên cả nền tối lẫn sáng nên không cần một bộ giá trị riêng. */
+    --danger: #cf2d56;
+    --success: #1f8a65;
+    --warn: #c08532;
 
-    /* Theo `--bg` của theme sáng — hằng số tối cứng của bản trước cho một đốm
-       gần đen giữa lòng mỗi nút commit trên nền trắng. */
-    --graph-node-fill: #fbfbfd;
+    /* Theo `--bg` của theme tối — hằng số cứng của bản trước cho một đốm sáng
+       giữa lòng mỗi nút commit trên nền tối mới. */
+    --graph-node-fill: var(--bg);
 
-    /* Trên nền sáng, lớp phủ phải **tối đi** mới thấy được — cùng hue teal để
-       giữ nhất quán, nhưng đậm hơn hẳn. Alpha ở các quy tắc dùng chung nên chỉ
-       cần đổi màu ở đây. */
-    --row-highlight: #0b6478;
+    /* Sáng, tương phản trên nền tối — cùng vai trò với nhánh sáng, ngược cực
+       độ sáng. */
+    --graph-selection-ring: var(--border-strong);
+
+    /* Nền lại tối nên logic "lift sáng lên" của bản Phase 1 áp dụng lại ở
+       đây — giữ nguyên hue cam/ink ấm, chỉ đổi hướng alpha. */
+    --row-highlight: color-mix(in srgb, var(--text) 25%, var(--accent) 20%);
+
+    --color-danger: var(--danger);
+    --color-danger-bg: color-mix(in srgb, var(--danger) 18%, transparent);
+    --color-bg-subtle: var(--bg-inset);
+    --color-row-hover: color-mix(in srgb, var(--text) 8%, transparent);
+    --color-row-selected: color-mix(in srgb, var(--accent) 22%, transparent);
+    --color-selected-bg: color-mix(in srgb, var(--accent) 18%, transparent);
+    --color-accent: var(--accent);
+    --color-warn: var(--warn);
+    --color-notice-bg: color-mix(in srgb, var(--accent) 14%, transparent);
+    --color-border: var(--border);
+    --color-subtle-bg: color-mix(in srgb, var(--text) 10%, transparent);
+    --color-added: var(--success);
+    --color-removed: var(--danger);
+    --ok: var(--success);
   }
 }
 
