@@ -76,20 +76,47 @@ Caused by: Access is denied. (os error 5)
 > thời gian trôi**, và **luôn in `CommandLine`** — một trong các tiến trình tôi suýt
 > giết nhầm là `tauri dev` của chủ dự án.
 
-Lần thử thứ hai (sau khi commit) còn gặp **nguyên nhân thứ hai**: lệnh chạy quá 10 phút
-mà stdout vẫn 0 byte. Phân biệt "bị chặn" với "đang làm" bằng **CPU, không bằng thời
-gian trôi** (CONTEXT.md mục 5):
+### 🔴 Nguyên nhân thứ hai: `LNK1318` — ĐĨA ĐẦY, không phải xếp hàng khoá
+
+Lần thử thứ hai chạy quá 10 phút với stdout 0 byte. Tôi **chẩn đoán sai lần đầu**: thấy
+CPU 0,1–1 giây sau nhiều phút, tôi kết luận "đang xếp hàng trên `target/debug/.cargo-lock`
+sau các phiên khác". Khi tiến trình nền kết thúc và tôi đọc được đầu ra thật, nó nói
+khác:
 
 ```text
-ProcessId Name      CPUs
-    58932 cargo.exe  0.2
-    65396 rustc.exe  1.0
-    16804 cargo.exe  0.1
+error: could not compile `git-plum` (bin "git-plum")
+error: linking with `link.exe` failed: exit code: 1318
+  = note: LINK : fatal error LNK1318: Unexpected PDB error; LIMIT (12)
+          '...\target\debug\deps\refs_fixtures-4f18604862439be2.pdb'
 ```
 
-0,1–1 giây CPU sau nhiều phút = **bị chặn**, đang xếp hàng trên
-`target/debug/.cargo-lock` sau các phiên Claude khác (3–5 phiên dùng chung một `target/`).
-Không phải lỗi của thay đổi này. `--lib --tests` vẫn **chưa đo**.
+Và ngay sau đó, ở cây dựng riêng:
+
+```text
+error: failed to build archive at `...\scratchpad\tgt\debug\deps\git_plum_lib.lib`:
+       There is not enough space on the disk. (os error 112)
+```
+
+Đĩa lúc đó: **7,9 GB trống / 96,4% đã dùng**. `LNK1318` và `os error 1455` là đúng hai
+triệu chứng CONTEXT.md mục 5 liệt kê cho ca đĩa đầy, kèm lệnh **dừng và báo cáo**.
+
+**Bài học, và nó đúng lớp lỗi phase này đang chống:** CPU thấp *có* nghĩa là "không làm
+việc", nhưng tôi nhảy từ đó sang **một nguyên nhân cụ thể** mà không đọc đầu ra. Đó là
+suy luận thay cho phép đo — đúng thứ CONTEXT.md 2.2 ghi lại ở một ca khác ("tôi suy ra
+ca kiểm từ lập luận về cách git hoạt động thay vì chạy git").
+
+**Cây dựng riêng của tôi là một phần nguyên nhân.** `CARGO_TARGET_DIR` trong scratchpad
+tốn **4,0 GB**, và mỗi lần dựng lại tốn lại từ đầu (đo được: xoá → 11,8 GB trống; dựng
+lại → 7,6 GB). Tôi đã xoá nó sau khi đo xong (chỉ là cache dựng; mã và test đã commit).
+Đĩa về **11,5 GB trống / 94,9%**.
+
+🔴 **Việc cho người đọc:** đĩa vẫn ở ~95%. `target/debug/incremental` là cache thuần và
+CONTEXT.md mục 5 ghi rõ xoá được **không mất gì** (hôm nay đã giải phóng 6,5 GB bằng
+cách đó). Tôi **không tự làm** vì `target/` dùng chung với 3–5 phiên đang chạy và
+CONTEXT.md bảo dừng-và-báo ở `LNK1318`.
+
+`--lib --tests` vẫn **chưa đo**, giờ vì **hai** lý do độc lập: `git-plum.exe` đang giữ
+binary, **và** đĩa không đủ chỗ để link. Không suy ra tổng.
 
 ### Cách chạy được test tích hợp mà không kill app
 
@@ -97,6 +124,11 @@ Không phải lỗi của thay đổi này. `--lib --tests` vẫn **chưa đo**.
 khoá. Đặt `CARGO_TARGET_DIR` sang thư mục scratchpad tránh hoàn toàn đường đó: cargo
 dựng vào cây khác, không đụng `target/debug/git-plum.exe`. Giá phải trả là một lần biên
 dịch lại đầy đủ (1 phút 57), nhưng nó **không** đòi giết tiến trình của ai.
+
+🔴 **Giá thật của cách này là 4,0 GB đĩa, và nó đã góp phần làm hỏng một lần dựng** —
+xem mục `LNK1318` ở trên. Ai dùng lại mẹo này nên **xoá cây dựng riêng ngay sau khi đo
+xong** (`rm -rf` — nó là cache thuần), và kiểm đĩa trước khi bắt đầu. Test tích hợp đã
+chạy lại **sau** khi dọn: vẫn **7 passed, 0 failed**.
 
 ## Bảng đột biến — chạy thật, dán đầu ra đỏ
 
@@ -287,6 +319,15 @@ CONTEXT.md mục 0.3 cấm ghi "Đạt" cho tiêu chí hình ảnh dựa trên t
 2. **M11 "dự đoán: không đỏ".** Sai — **đỏ**, vì Test G hỏi đúng về thuộc tính đó.
 3. **M10 → "Test A hoặc C".** Sai. `git diff` cho stderr rỗng ở các fixture này, nên
    đột biến không biểu diễn được ở tầng hành vi.
+
+## Điều TÔI nói mà hoá ra sai
+
+**"`--lib --tests` bị chặn vì xếp hàng trên `.cargo-lock`".** Sai, và tôi đã ghi nó vào
+bản SUMMARY đầu tiên như một phép đo. Nguyên nhân thật là **`LNK1318` do đĩa đầy**
+(96,4%), đọc được khi tiến trình nền kết thúc. Tôi suy ra nguyên nhân từ một dấu hiệu
+gián tiếp (CPU thấp) thay vì đọc đầu ra — đúng lớp lỗi "suy luận thay cho phép đo".
+Đã sửa ở mục trên, giữ lại cả chẩn đoán sai lẫn cách phát hiện, vì phần có giá trị là
+**cách nó bị bắt**, không phải con số cuối.
 
 ## Self-Check: PASSED
 
