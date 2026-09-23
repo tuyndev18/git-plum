@@ -11,8 +11,10 @@ pub mod commit;
 pub mod diff;
 pub mod refs;
 pub mod status;
+pub mod trash;
 
 pub use commit::Commit;
 pub use diff::{DiffKind, DiffLine, FileDiff, FileHistory, FileVersion, Hunk, LineKind};
 pub use refs::{Ref, RefKind};
 pub use status::{BranchInfo, RepoStatus, StatusEntry, StatusGroup, WipCounts, STATUS_ARGS};
+pub use trash::{dong_tu_cho, BienNhan, DongTu, MucThungRac, TIEN_TO_REF};

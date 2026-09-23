@@ -11,6 +11,7 @@ pub mod history;
 pub mod hunk;
 pub mod commit;
 pub mod repo;
+pub mod trash;
 pub mod worktree;
 
 pub use avatar::*;
@@ -20,4 +21,5 @@ pub use history::*;
 pub use hunk::*;
 pub use commit::*;
 pub use repo::*;
+pub use trash::*;
 pub use worktree::*;
