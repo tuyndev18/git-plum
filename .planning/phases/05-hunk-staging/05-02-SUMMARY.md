@@ -46,7 +46,7 @@ cần mở ứng dụng** — đúng ràng buộc "tầng Rust tự đứng đư
 | `cargo test --lib` | 321 | **331** (+10) | `cd src-tauri && cargo test --lib` |
 | `cargo test --test hunk_commands` | — | **7 passed, 0 failed** | `CARGO_TARGET_DIR=<scratch> cargo test --test hunk_commands` |
 | `cargo clippy --lib` | sạch | **sạch** | `cargo clippy --lib` |
-| `cargo test --lib --tests` | 425 (lần đo gần nhất được) | 🔴 **CHƯA ĐO** | xem dưới |
+| `cargo test --lib --tests` | 425 (Phase 4) | ✅ **454 passed, 1 ignored** | orchestrator đo sau, xem dưới |
 
 `--lib --tests` **chưa đo được**. Bản **debug** `git-plum.exe` (PID 16124, CommandLine
 `"target\debug\git-plum.exe"`) đang chạy từ `tauri dev` của một phiên khác, nên cargo
@@ -59,6 +59,22 @@ Caused by: Access is denied. (os error 5)
 
 **Không kill** — tiến trình không phải của phase này, và cổng dogfood của Phase 4 cần
 ứng dụng chạy được. Ghi "chưa đo", **không** suy ra tổng.
+
+> ✅ **Đo bổ sung 2026-09-23, orchestrator.** Sau khi ứng dụng đóng và tôi dọn ba tiến
+> trình `cargo` bị kẹt:
+>
+> ```text
+> cargo test --lib --tests
+> cargo test: 454 passed, 1 ignored (18 suites, 40.19s)
+> ```
+>
+> Từ 425 (cuối Phase 4) lên **454** — cộng đúng phần wave 1 và wave 2 thêm vào. **0 đỏ.**
+>
+> Ba tiến trình kẹt đã dọn: 62 phút / 45 phút / 10 phút, tất cả ở **0,15–0,33 giây CPU**
+> — xếp hàng trên `target/debug/.cargo-lock`, không biên dịch gì. Đây là ca thứ ba
+> trong ngày và nó xác nhận quy tắc ở `CONTEXT.md` §5: **phân biệt bằng CPU, không bằng
+> thời gian trôi**, và **luôn in `CommandLine`** — một trong các tiến trình tôi suýt
+> giết nhầm là `tauri dev` của chủ dự án.
 
 Lần thử thứ hai (sau khi commit) còn gặp **nguyên nhân thứ hai**: lệnh chạy quá 10 phút
 mà stdout vẫn 0 byte. Phân biệt "bị chặn" với "đang làm" bằng **CPU, không bằng thời
