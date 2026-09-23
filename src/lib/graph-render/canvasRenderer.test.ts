@@ -10,7 +10,7 @@ import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createCanvasRenderer } from './canvasRenderer'
-import { ROW_HEIGHT, colorFor } from './geometry'
+import { ROW_HEIGHT, colorFor, SELECTION_RING } from './geometry'
 import type { GraphRenderRow } from './types'
 import type { GraphRow } from '@/lib/ipc'
 
@@ -524,5 +524,64 @@ describe('nút commit là avatar tác giả', () => {
     expect(src, 'không được dùng Image/drawImage trong bộ vẽ').not.toMatch(
       /new Image\(|drawImage|createImageBitmap/,
     )
+  })
+})
+
+/*
+ * Vòng chọn (`SELECTION_RING`) đọc từ biến CSS `--graph-selection-ring` theo
+ * đúng pattern `readNodeFill` — vô hình trên nền cream mới nếu cứ dùng hằng
+ * số cũ `#e6edf3` (gần-trắng), đúng vấn đề CONTEXT.md của quick task này nêu.
+ *
+ * Test dùng `host` là một `HTMLElement` thật gắn vào `document.body` (khác
+ * `fakeHost` ở trên, vốn là object giả để `getComputedStyle` NÉM lỗi — đúng
+ * nhánh phòng thủ mà test thứ hai dưới đây kiểm) để `window.getComputedStyle`
+ * đọc được CSS custom property thật gán qua `style.setProperty`.
+ */
+describe('vòng chọn đọc --graph-selection-ring', () => {
+  it('có biến CSS --graph-selection-ring -> draw() dùng đúng giá trị đó cho vòng chọn', () => {
+    const ctx = fakeContext()
+    const realHost = document.createElement('div')
+    realHost.style.setProperty('--graph-selection-ring', '#123456')
+    document.body.appendChild(realHost)
+
+    // `host.appendChild(canvas)` chạy trên DOM THẬT ở đây (khác `fakeHost` ở
+    // trên, nơi `host` tự nó là object giả) — canvas tiêm vào phải là một
+    // Node thật, chỉ `getContext` được thay bằng bối cảnh vẽ giả.
+    const canvasEl = document.createElement('canvas')
+    canvasEl.getContext = vi.fn(() => ctx) as unknown as typeof canvasEl.getContext
+    const renderer = createCanvasRenderer(realHost, {
+      createCanvasElement: () => canvasEl,
+    })
+    renderer.resize(400, 400, 1)
+
+    const row = baseRow({ commitId: 'c1' })
+    renderer.draw([renderRow(row)], 'c1')
+
+    expect(
+      ctx.strokeStyles,
+      'draw() phải dùng --graph-selection-ring (#123456) cho vòng chọn, không phải hằng số SELECTION_RING cứng',
+    ).toContain('#123456')
+
+    document.body.removeChild(realHost)
+  })
+
+  it('getComputedStyle rỗng/ném lỗi -> draw() rơi về fallback SELECTION_RING từ geometry.ts', () => {
+    const ctx = fakeContext()
+    // `host` giả (không phải Element thật) — `window.getComputedStyle` ném
+    // TypeError trên nó, đúng nhánh try/catch phòng thủ mà readNodeFill đã có
+    // và readSelectionRing phải lặp lại.
+    const { host, canvasEl } = fakeHost(ctx)
+    const renderer = createCanvasRenderer(host as unknown as HTMLElement, {
+      createCanvasElement: () => canvasEl as unknown as HTMLCanvasElement,
+    })
+    renderer.resize(400, 400, 1)
+
+    const row = baseRow({ commitId: 'c1' })
+    renderer.draw([renderRow(row)], 'c1')
+
+    expect(
+      ctx.strokeStyles,
+      'không có DOM/host giả không phải Element thật -> phải rơi về fallback SELECTION_RING',
+    ).toContain(SELECTION_RING)
   })
 })

@@ -284,6 +284,30 @@ describe('REF_COL_WIDTH phải khớp giữa geometry.ts và app.css', () => {
 })
 
 /*
+ * `--graph-selection-ring` — biến CSS mà `canvasRenderer.readSelectionRing()`
+ * đọc lúc chạy (260923-kzl). Khác `REF_COL_WIDTH`/`MIN_SPLIT_WIDTH` ở trên,
+ * biến này KHÔNG có hằng số TS song song để so khớp: TS chỉ đọc giá trị qua
+ * `getComputedStyle` lúc chạy, không có "REF_COL_WIDTH"-kiểu hằng số double
+ * bên geometry.ts cần bằng nhau. Cổng ở đây chỉ khẳng định biến TỒN TẠI và có
+ * giá trị không rỗng trong `:root` — thiếu nó thì `readSelectionRing` rơi về
+ * fallback `SELECTION_RING` tĩnh của geometry.ts một cách im lặng.
+ */
+describe('--graph-selection-ring tồn tại trong :root với giá trị không rỗng', () => {
+  it('có khai --graph-selection-ring trong khối :root', () => {
+    const rootStart = css.indexOf(':root {')
+    expect(rootStart, 'phải tìm thấy khối :root').toBeGreaterThan(-1)
+    const rootBlock = css.slice(rootStart, css.indexOf('\n}', rootStart))
+
+    const match = rootBlock.match(/--graph-selection-ring:\s*([^;]+);/)
+    expect(
+      match?.[1]?.trim(),
+      '--graph-selection-ring phải có giá trị không rỗng trong :root — thiếu nó thì ' +
+        'canvas rơi về fallback SELECTION_RING tĩnh của geometry.ts một cách im lặng',
+    ).toBeTruthy()
+  })
+})
+
+/*
  * Canvas đồ thị nằm DƯỚI các hàng commit (`.graph-canvas` có `z-index: 0`, các
  * `.commit-row` đến sau trong DOM). Nên **mọi** nền hàng phải trong suốt một
  * phần: một nền đục xoá sạch đoạn đồ thị của đúng hàng đó.
