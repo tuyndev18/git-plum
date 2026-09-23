@@ -47,6 +47,19 @@
   --success: #27a644; /* Linear semantic-success */
   --warn: #f2c94c; /* bản trầm hợp nền tối — ngữ nghĩa cảnh báo, không thay accent */
 
+  /* Màu cú pháp trình xem diff — gắn vào class `tok-*` của `classHighlighter`
+     (`codemirrorRenderer.ts`). Sắc nhạt, độ sáng cao để đọc được cả trên nền
+     dòng thêm/xoá; tất cả ≥7:1 trên --bg. */
+  --syn-keyword: #c4a7ff;
+  --syn-string: #9fd49a;
+  --syn-number: #f5b97f;
+  --syn-comment: #858b94;
+  --syn-type: #79d4cb;
+  --syn-property: #9cc2ff;
+  --syn-definition: #f7f8f8;
+  --syn-tag: #ff9fae;
+  --syn-meta: #d0d6e0;
+
   --font-ui:
     'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
@@ -176,6 +189,17 @@
     --danger: #d13a3a;
     --success: #1f8a3d;
     --warn: #a86a00;
+
+    /* Màu cú pháp — bản đậm cho nền sáng, ≥4.5:1 trên nền dòng thêm/xoá. */
+    --syn-keyword: #6a3fc8;
+    --syn-string: #2b7a2f;
+    --syn-number: #a65200;
+    --syn-comment: #6b6f76;
+    --syn-type: #0b7069;
+    --syn-property: #2d55a8;
+    --syn-definition: #1b1c1f;
+    --syn-tag: #b3264f;
+    --syn-meta: #3c4149;
 
     /* Theo `--bg` của nhánh sáng — đốm sáng giữa lòng mỗi nút commit khớp nền
        trắng thay vì nền tối. */
@@ -1977,6 +2001,98 @@ button:disabled {
 .diff-word-changed {
   background: color-mix(in srgb, var(--accent) 38%, transparent);
   border-radius: 4px;
+}
+
+/*
+ * Word-level theo MÀU CỦA DÒNG, không lavender: lavender trộn lên nền đỏ/lục
+ * ra một màu bùn khó đọc. Cùng sắc với nền dòng, chỉ đậm hơn — đúng kiểu
+ * GitHub/Linear. Lavender ở trên chỉ còn là fallback cho dòng không có class.
+ */
+.diff-line-added .diff-word-changed {
+  background: color-mix(in srgb, var(--success) 40%, transparent);
+}
+
+.diff-line-removed .diff-word-changed {
+  background: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+
+/*
+ * Số dòng — `theme.ts` để gutter `color: inherit`; đặt màu ở đây để đi theo
+ * theme. Ba class để thắng selector băm `.ͼ1 .cm-gutters` của CodeMirror.
+ */
+.diff-viewer .cm-editor .cm-gutters {
+  color: var(--text-faint);
+}
+
+/*
+ * Màu cú pháp — class `tok-*` do `classHighlighter` gắn. Toán tử/dấu câu/
+ * biến thường giữ `--text` để mã không thành "cầu vồng".
+ */
+.diff-viewer .tok-keyword,
+.diff-viewer .tok-operator.tok-keyword {
+  color: var(--syn-keyword);
+}
+
+.diff-viewer .tok-string,
+.diff-viewer .tok-string2,
+.diff-viewer .tok-url,
+.diff-viewer .tok-inserted {
+  color: var(--syn-string);
+}
+
+.diff-viewer .tok-number,
+.diff-viewer .tok-bool,
+.diff-viewer .tok-atom,
+.diff-viewer .tok-literal {
+  color: var(--syn-number);
+}
+
+.diff-viewer .tok-comment {
+  color: var(--syn-comment);
+  font-style: italic;
+}
+
+.diff-viewer .tok-typeName,
+.diff-viewer .tok-className,
+.diff-viewer .tok-namespace {
+  color: var(--syn-type);
+}
+
+.diff-viewer .tok-propertyName,
+.diff-viewer .tok-labelName {
+  color: var(--syn-property);
+}
+
+.diff-viewer .tok-definition {
+  color: var(--syn-definition);
+  font-weight: 500;
+}
+
+.diff-viewer .tok-heading,
+.diff-viewer .tok-macroName,
+.diff-viewer .tok-deleted {
+  color: var(--syn-tag);
+}
+
+.diff-viewer .tok-heading,
+.diff-viewer .tok-strong {
+  font-weight: 600;
+}
+
+.diff-viewer .tok-emphasis {
+  font-style: italic;
+}
+
+.diff-viewer .tok-link {
+  text-decoration: underline;
+}
+
+.diff-viewer .tok-meta {
+  color: var(--syn-meta);
+}
+
+.diff-viewer .tok-invalid {
+  color: var(--danger);
 }
 
 .diff-notice {

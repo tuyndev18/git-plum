@@ -43,7 +43,8 @@ import {
   type DecorationSet,
 } from '@codemirror/view'
 import { MergeView } from '@codemirror/merge'
-import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
+import { syntaxHighlighting } from '@codemirror/language'
+import { classHighlighter } from '@lezer/highlight'
 
 import { buildDecorations, type LineMeta } from './decorations'
 import { dauThemXoa, soDongThat, type GutterSide } from './gutterNumbers'
@@ -145,7 +146,10 @@ function extensionsCoDinh(
     gutterSoDong(lineMeta, side),
     gutterDau(lineMeta),
     diffTheme,
-    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    // `classHighlighter` gắn class ổn định `tok-*` thay vì màu cứng — màu cú
+    // pháp khai trong `app.css` theo biến theme. `defaultHighlightStyle` cũ
+    // là bảng cho nền SÁNG (#708, #a11, #164…), gần như vô hình trên nền tối.
+    syntaxHighlighting(classHighlighter),
     EditorView.editable.of(false),
     EditorState.readOnly.of(true),
     // Decoration dựng từ dữ liệu `git diff` — CodeMirror không tính lại gì.

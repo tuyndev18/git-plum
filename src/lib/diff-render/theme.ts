@@ -57,7 +57,8 @@ export const diffTheme: Extension = EditorView.theme({
     backgroundColor: 'transparent',
     color: 'inherit',
     border: 'none',
-    opacity: '0.55',
+    // Không hạ `opacity`: màu số dòng đặt ở `app.css` (`--text-faint`), vốn đã
+    // kiểm đạt tương phản; 0.55 cũ kéo nó xuống dưới mức đọc được trên nền tối.
   },
   '.cm-content': {
     // Con trỏ chèn không có nghĩa trên tài liệu chỉ-đọc.
