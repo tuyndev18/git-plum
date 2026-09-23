@@ -257,9 +257,15 @@ body {
   gap: 10px;
 }
 
+/*
+ * D-02 khoá: `.brand` KHÔNG đổi sang lavender đậm. `<Logo/>` (component riêng,
+ * xem `src/components/Logo.tsx`) đã tự dùng `var(--accent)` trong SVG của nó —
+ * chữ wordmark cạnh logo dùng `--text` (ink) thường, không cần trùng màu với
+ * icon để vẫn đọc như một khối thương hiệu nhất quán.
+ */
 .brand {
   font-weight: 600;
-  color: var(--accent);
+  color: var(--text);
   letter-spacing: 0.02em;
 }
 
@@ -287,9 +293,18 @@ button {
   cursor: pointer;
 }
 
+/*
+ * D-02 khoá: hover nút thường/phụ KHÔNG đổi màu chữ sang lavender đậm. File
+ * này không có class `.button-primary` riêng — mọi `button` hiện tại là "nút
+ * thường/phụ" theo nghĩa D-02, nên hover nâng surface + border-strong (lift
+ * trung tính), không đổi sắc. Nền mặc định của `button` là `--bg-inset`
+ * (= --surface-2 theo thang Linear) nên hover phải lên MỘT bậc nữa
+ * (`--surface-3`), không phải `--bg-raised` (surface-1 — một nhánh riêng của
+ * thang, không phải bậc kế tiếp của surface-2).
+ */
 button:hover:not(:disabled) {
-  border-color: var(--accent-dim);
-  color: var(--accent);
+  background: var(--surface-3);
+  border-color: var(--border-strong);
 }
 
 button:disabled {
@@ -404,6 +419,7 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 12px;
   word-break: break-all;
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Danh sách repository gần đây (PLAT-07) ----------------------------- */
@@ -594,6 +610,7 @@ button:disabled {
   text-align: right;
   font-family: var(--font-mono);
   color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Thanh trạng thái --------------------------------------------------- */
@@ -1066,6 +1083,11 @@ button:disabled {
   white-space: nowrap;
   font-size: 12px;
   color: var(--text-dim);
+}
+
+/* .commit-time hiển thị NGÀY/GIỜ — tabular-nums cho số thẳng cột khi cuộn. */
+.commit-time {
+  font-variant-numeric: tabular-nums;
 }
 
 .commit-sha {
