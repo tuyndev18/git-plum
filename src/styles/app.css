@@ -2637,3 +2637,307 @@ button:disabled {
   min-width: 0;
   white-space: pre-wrap;
 }
+
+/* --- Đường vào thứ hai: WorktreePane + HunkTable + TrashList (Phase 5) ----- */
+
+/*
+ * ⚠️ MỌI QUY TẮC DƯỚI ĐÂY LÀ "CÓ MÃ, CHƯA KIỂM".
+ *
+ * happy-dom không tính CSS layout và không có cuộn thật (CONTEXT.md 4.5), nên không
+ * một test nào của `WorktreePane.test.tsx`, `HunkTable.test.tsx` hay
+ * `TrashList.test.tsx` quan sát được thứ gì ở khối này. Cụ thể những điều SAU ĐÂY
+ * chưa ai xác nhận, và chúng đúng là những thứ checkpoint 05-05 hỏi:
+ *
+ *  - hai cột (danh sách tệp | bảng khối) không đè nhau và không tràn ở panel hẹp;
+ *  - khối đang chọn NHÌN RA KHÁC khối không chọn (câu bố cục thứ nhất của checkpoint);
+ *  - thanh nút của mỗi khối không đè lên nội dung khối (câu thứ hai);
+ *  - `TrashList` không tràn hoặc cắt chữ khi có nhiều mục (câu thứ ba);
+ *  - bảng khối cuộn được khi tệp có hàng chục khối, và `TrashList` không bị đẩy khuất.
+ *
+ * Lỗi `marginTop`→`paddingTop` của Phase 4 đi qua CẢ 666 test vì không test nào hỏi
+ * về thuộc tính đó, và cả NĂM lỗi hiển thị Phase 3 thoát toàn bộ test tự động.
+ */
+
+.toolbar-toggle {
+  padding: 2px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toolbar-toggle[aria-pressed='true'] {
+  font-weight: 600;
+}
+
+.worktree-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  gap: 8px;
+}
+
+.worktree-error {
+  padding: 6px 10px;
+  border-left: 3px solid var(--color-danger, #d9534f);
+  background: var(--color-danger-bg, rgba(217, 83, 79, 0.12));
+  white-space: pre-wrap;
+}
+
+/*
+ * Hai cột. `min-height: 0` trên vỏ VÀ trên từng cột là bắt buộc để con cuộn được —
+ * mặc định `min-height: auto` của flex item làm cột cao bằng nội dung và đẩy cuộn
+ * lên tổ tiên, tức cả pane cuộn thay vì riêng cột. Cùng lỗi `.diff-pane` đã gặp.
+ */
+.worktree-cols {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 10px;
+}
+
+.worktree-files {
+  flex: 0 0 280px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.worktree-hunks {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.worktree-files-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.worktree-files-head h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.worktree-group {
+  margin-bottom: 8px;
+}
+
+.worktree-group-heading {
+  margin: 6px 0 2px;
+  font-size: 11px;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.worktree-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 6px;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/*
+ * Tệp đang chọn phải NHÌN RA KHÁC — nền cộng viền trái, không chỉ nền. Nền một mình
+ * là thứ biến mất ở chế độ tương phản cao và ở người dùng mù màu. Cùng khuôn
+ * `.change-row-selected`. CHƯA KIỂM bằng mắt.
+ */
+.worktree-file-selected {
+  background: var(--color-selected-bg, rgba(120, 160, 255, 0.18));
+  box-shadow: inset 3px 0 0 var(--color-accent, #5a8dee);
+}
+
+/* `min-width: 0` để đường dẫn dài co được thay vì đẩy cảnh báo ⚠ ra ngoài khung. */
+.worktree-file-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.worktree-file-warn {
+  flex: 0 0 auto;
+  color: var(--color-warn, #d9a05b);
+}
+
+/* --- Bảng khối ------------------------------------------------------------ */
+
+.hunk-table-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.hunk-table-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.hunk-table-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.hunk-table-notice {
+  margin: 4px 0;
+  padding: 4px 8px;
+  background: var(--color-notice-bg, rgba(120, 160, 255, 0.1));
+}
+
+.hunk-table-notice-warn {
+  border-left: 3px solid var(--color-warn, #d9a05b);
+}
+
+.hunk-table-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hunk-table-row {
+  margin-bottom: 8px;
+  border: 1px solid var(--color-border, rgba(128, 128, 128, 0.35));
+  cursor: pointer;
+}
+
+/*
+ * 🔴 Khối đang chọn — câu bố cục THỨ NHẤT của checkpoint hỏi đúng điều này.
+ *
+ * Viền dày hơn CỘNG nền, không chỉ nền: bảng khối là chỗ người dùng quyết định ghi
+ * vào tệp của mình, và "tôi tưởng tôi đang chọn khối kia" là lỗi tốn nhất có thể.
+ * CHƯA KIỂM bằng mắt — happy-dom không tính cái nào trong hai thứ này.
+ */
+.hunk-table-row-selected {
+  border-color: var(--color-accent, #5a8dee);
+  box-shadow: inset 3px 0 0 var(--color-accent, #5a8dee);
+  background: var(--color-selected-bg, rgba(120, 160, 255, 0.1));
+}
+
+.hunk-table-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 8px;
+  font-size: 11px;
+  background: var(--color-subtle-bg, rgba(128, 128, 128, 0.12));
+}
+
+.hunk-table-row-range {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+/* Tên hàm dài co được thay vì đẩy khoảng dòng ra ngoài. */
+.hunk-table-row-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+/*
+ * `overflow-x: auto` chứ không `wrap`: một dòng mã dài xuống dòng làm số dòng hiện
+ * ra không còn khớp số dòng trong trình soạn thảo của người dùng, và đó là đúng thứ
+ * họ dùng để đối chiếu xem có chọn đúng khối không.
+ */
+.hunk-table-preview {
+  margin: 0;
+  padding: 4px 8px;
+  overflow-x: auto;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.hunk-line-added {
+  color: var(--color-added, #4a9c5a);
+}
+
+.hunk-line-removed {
+  color: var(--color-removed, #c65a5a);
+}
+
+.hunk-line-more {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+/* --- Danh sách Vừa huỷ gần đây -------------------------------------------- */
+
+.trash-list {
+  margin-top: 12px;
+  border-top: 1px solid var(--color-border, rgba(128, 128, 128, 0.35));
+  padding-top: 6px;
+}
+
+.trash-heading {
+  margin: 0 0 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.trash-error {
+  padding: 4px 8px;
+  border-left: 3px solid var(--color-danger, #d9534f);
+  background: var(--color-danger-bg, rgba(217, 83, 79, 0.12));
+  white-space: pre-wrap;
+}
+
+.trash-empty {
+  margin: 2px 0;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+/*
+ * Mỗi mục là một khối dọc, không một hàng ngang: nhãn có thể dài ("src/a.txt và 2 tệp
+ * nữa") và ba thứ nữa phải nằm cạnh nó. Ép một hàng ngang ở cột 280px là đúng ca
+ * "danh sách vừa huỷ tràn hoặc cắt chữ" mà câu bố cục thứ ba của checkpoint hỏi.
+ */
+.trash-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: 6px;
+  padding: 4px 6px;
+  border-left: 2px solid var(--color-border, rgba(128, 128, 128, 0.35));
+  font-size: 11px;
+}
+
+.trash-nhan {
+  min-width: 0;
+  /* `pre-wrap` chứ không `nowrap`: câu giải thích "chưa ghi lại tên tệp" dài hơn cột,
+     và cắt nó đi làm mất đúng thông tin nó tồn tại để nói. */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.trash-meta,
+.trash-time {
+  opacity: 0.7;
+}
+
+.trash-restore {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}

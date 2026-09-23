@@ -27,6 +27,7 @@ import { CommitSearch } from '@/components/history/CommitSearch'
 import { DiffViewer } from '@/components/diff/DiffViewer'
 import { ChangeList } from '@/components/worktree/ChangeList'
 import { CommitBox } from '@/components/worktree/CommitBox'
+import { WorktreePane } from '@/components/worktree/WorktreePane'
 import { useDiffStore } from '@/stores/diffStore'
 import { useCommitStore } from '@/stores/commitStore'
 import { noiWatcherVaoStore, useStatusStore } from '@/stores/statusStore'
@@ -88,6 +89,38 @@ export function App() {
    * người dùng vừa chuyển sang repo B. Nháp thì `commitStore.switchRepo` lo giữ.
    */
   const [commitBoxOpen, setCommitBoxOpen] = useState(false)
+
+  /**
+   * Vùng `main` đang hiện **đồ thị commit** hay **thay đổi chưa commit** (Phase 5).
+   *
+   * # 🔴 Vì sao đây là một công tắc ở thanh công cụ, KHÔNG phải một nút trong `DiffToolbar`
+   *
+   * Plan 05-05 viết *"bật/tắt bằng một nút trong `DiffToolbar` (\"Danh sách khối\")"*.
+   * Làm đúng chữ đó sẽ dựng lại **chính** vòng khoá chết mà cả plan tồn tại để tránh:
+   *
+   * `DiffToolbar` render bên trong `DiffViewer`; `DiffViewer` chỉ render khi
+   * `selectedFile` **và** `selectedCommitId` đều có (`App.tsx` dòng "activeRepo &&
+   * selectedFile", và `DiffViewer` tự `return` sớm khi thiếu `selectedCommitId`); đường
+   * duy nhất đặt `selectedFile` cho thư mục làm việc là bấm một hàng của `ChangeList`;
+   * `ChangeList` chỉ mount khi vùng soạn commit đã mở; vùng soạn chỉ mở khi bấm hàng
+   * WIP. **Năm** điều kiện — nhiều hơn cái vòng bốn điều kiện của Phase 4 một bậc, và
+   * mắt xích đầu tiên (`DiffViewer` cần một commit đang chọn) là thứ làm nó **không
+   * bao giờ** mở được cho diff thư mục làm việc.
+   *
+   * Nút ở thanh công cụ có **một** điều kiện: có repo đang mở. Xem `WorktreePane.tsx`,
+   * mục "ba câu hỏi vòng khoá chết", và `05-05-SUMMARY.md`.
+   *
+   * # Vì sao `main` chứ không thêm panel thứ tư
+   *
+   * Cùng lập luận và cùng tiền lệ với `DiffViewer` (03-04) và vùng soạn commit
+   * (04-05): đổi thứ render **bên trong** một vùng, **không** đổi một dòng nào trong
+   * `AppLayout.tsx`. Vùng `main` là vùng rộng nhất, và bảng khối cần bề ngang — nó
+   * hiện nội dung từng khối cạnh một thanh nút.
+   *
+   * 🔴 Đây là **thay đổi bố cục**, và cả Phase 2 lẫn Phase 3 cho thấy bố cục là chỗ
+   * hay sai nhất. Nó là bước của checkpoint Task 3 để chủ dự án xác nhận.
+   */
+  const [xemThayDoi, setXemThayDoi] = useState(false)
 
   // Trạng thái chọn commit nâng cấp lên `selectionStore` (từ `useState` của
   // plan 02-05) — ARCHITECTURE.md Pattern 3: vùng chi tiết (`CommitDetail`)
@@ -293,6 +326,9 @@ export function App() {
   useEffect(() => {
     if (!activeRepoId) return
     setCommitBoxOpen(false)
+    // Cùng lý do với `commitBoxOpen`: khung nhìn của repo A không nằm mở sẵn cho
+    // repo B. `WorktreePane` cũng tự bỏ chọn tệp khi `repoId` đổi (xem tệp đó).
+    setXemThayDoi(false)
     void useStatusStore.getState().refresh(activeRepoId)
     void useCommitStore.getState().switchRepo(activeRepoId)
   }, [activeRepoId])
@@ -394,6 +430,30 @@ export function App() {
               <IconClose />
             </button>
           )}
+          {activeRepo && (
+            /*
+             * 🔴 Công tắc "Thay đổi chưa commit" — ĐƯỜNG VÀO của staging theo khối.
+             *
+             * Nút có CHỮ chứ không icon, cố ý và ngược với quy ước của thanh này.
+             *
+             * Tiêu chí thành công 4 hỏi *"bạn **tìm thấy nó** mà không phải hỏi nó ở
+             * đâu?"*, và bước 8 của checkpoint hỏi đúng câu đó cho danh sách "Vừa huỷ
+             * gần đây" — thứ chỉ tới được **qua** nút này. Một icon không nhãn cho
+             * đường vào **duy nhất** tới cả staging theo khối lẫn danh sách vừa huỷ là
+             * đặt cược tiêu chí đó vào việc người dùng rê chuột đúng chỗ.
+             *
+             * `aria-pressed` vì đây là công tắc hai trạng thái, không phải một lệnh.
+             */
+            <button
+              className="toolbar-toggle"
+              data-testid="toolbar-xem-thay-doi"
+              aria-pressed={xemThayDoi}
+              onClick={() => setXemThayDoi((v) => !v)}
+              title={xemThayDoi ? 'Về đồ thị commit' : 'Xem thay đổi chưa commit theo từng khối'}
+            >
+              {xemThayDoi ? 'Đồ thị' : 'Thay đổi'}
+            </button>
+          )}
           <button
             className="icon-button"
             onClick={() => runCommand('view.toggleCommandLog')}
@@ -464,7 +524,24 @@ export function App() {
           }
           main={
             <main className={`pane main${activeRepo ? ' main-history' : ''}`}>
-              {activeRepo && selectedFile ? (
+              {/*
+                🔴 `WorktreePane` đứng TRƯỚC `DiffViewer` trong chuỗi điều kiện, và
+                thứ tự đó là một ràng buộc, không phải một sở thích.
+
+                Đặt nó sau nghĩa là `selectedFile` (state của Phase 3) quyết định
+                người dùng có thấy được vùng staging theo khối hay không — tức một
+                lựa chọn tệp còn sót lại từ trình xem diff **che mất** đường vào
+                thứ hai. `CONTEXT.md` mục 0 hệ quả 2 nói thẳng rằng đường này phải
+                dùng được **kể cả khi** tầng Phase 3/4 hỏng, nên nó không được nằm
+                sau một điều kiện do tầng đó đặt ra.
+
+                Hệ quả ngược lại — bật "Thay đổi" thì trình xem diff bị che — là
+                đánh đổi ĐÚNG chiều: nút "Đồ thị" đưa nó về ngay, và đó là cùng
+                đánh đổi mà 03-04 và 04-05 đã chọn cho vùng này.
+              */}
+              {activeRepo && xemThayDoi ? (
+                <WorktreePane repoId={activeRepo.info.id} />
+              ) : activeRepo && selectedFile ? (
                 <DiffViewer repoId={activeRepo.info.id} />
               ) : activeRepo ? (
                 <div className="main-history-body">
