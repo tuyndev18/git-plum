@@ -48,17 +48,25 @@
   --warn: #f2c94c; /* bản trầm hợp nền tối — ngữ nghĩa cảnh báo, không thay accent */
 
   /* Màu cú pháp trình xem diff — gắn vào class `tok-*` của `classHighlighter`
-     (`codemirrorRenderer.ts`). Sắc nhạt, độ sáng cao để đọc được cả trên nền
-     dòng thêm/xoá; tất cả ≥7:1 trên --bg. */
-  --syn-keyword: #c4a7ff;
-  --syn-string: #9fd49a;
-  --syn-number: #f5b97f;
-  --syn-comment: #858b94;
-  --syn-type: #79d4cb;
-  --syn-property: #9cc2ff;
-  --syn-definition: #f7f8f8;
-  --syn-tag: #ff9fae;
-  --syn-meta: #d0d6e0;
+     (`codemirrorRenderer.ts`). Theo bảng VS Code Dark+ (cũng là bảng GitKraken
+     dùng) — chủ dự án chọn làm tham chiếu vì quen mắt và dễ đọc. */
+  --syn-text: #d4d4d4;
+  --syn-keyword: #569cd6;
+  --syn-string: #ce9178;
+  --syn-regexp: #d16969;
+  --syn-number: #b5cea8;
+  --syn-comment: #6a9955;
+  --syn-type: #4ec9b0;
+  --syn-property: #9cdcfe;
+  --syn-definition: #d4d4d4; /* biến khai báo — trắng như tham chiếu */
+  --syn-tag: #569cd6;
+  --syn-meta: #9b9b9b;
+  /* Nền dòng thêm/xoá — đặc hơn bản 16% cũ để khối thay đổi nổi rõ như tham
+     chiếu; chữ Dark+ vẫn ≥4.5:1 trên đó. */
+  --diff-added-bg: color-mix(in srgb, #3fa34d 28%, transparent);
+  --diff-removed-bg: color-mix(in srgb, #e5534b 26%, transparent);
+  --diff-added-word: color-mix(in srgb, #3fa34d 50%, transparent);
+  --diff-removed-word: color-mix(in srgb, #e5534b 48%, transparent);
 
   --font-ui:
     'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
@@ -191,15 +199,22 @@
     --warn: #a86a00;
 
     /* Màu cú pháp — bản đậm cho nền sáng, ≥4.5:1 trên nền dòng thêm/xoá. */
-    --syn-keyword: #6a3fc8;
-    --syn-string: #2b7a2f;
-    --syn-number: #a65200;
-    --syn-comment: #6b6f76;
-    --syn-type: #0b7069;
-    --syn-property: #2d55a8;
-    --syn-definition: #1b1c1f;
-    --syn-tag: #b3264f;
-    --syn-meta: #3c4149;
+    /* Bảng VS Code Light+ — cặp sáng của Dark+ ở nhánh tối. */
+    --syn-text: #1f1f1f;
+    --syn-keyword: #0000ff;
+    --syn-string: #a31515;
+    --syn-regexp: #811f3f;
+    --syn-number: #098658;
+    --syn-comment: #008000;
+    --syn-type: #267f99;
+    --syn-property: #001080;
+    --syn-definition: #1f1f1f;
+    --syn-tag: #800000;
+    --syn-meta: #6b6f76;
+    --diff-added-bg: color-mix(in srgb, #2da44e 18%, transparent);
+    --diff-removed-bg: color-mix(in srgb, #cf222e 15%, transparent);
+    --diff-added-word: color-mix(in srgb, #2da44e 38%, transparent);
+    --diff-removed-word: color-mix(in srgb, #cf222e 32%, transparent);
 
     /* Theo `--bg` của nhánh sáng — đốm sáng giữa lòng mỗi nút commit khớp nền
        trắng thay vì nền tối. */
@@ -1640,7 +1655,7 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
-  color: var(--text);
+  color: var(--syn-text);
 }
 
 .diff-viewer-empty {
@@ -1892,12 +1907,12 @@ button:disabled {
  */
 .cm-merge-b .diff-line-added.cm-changedLine,
 .cm-merge-a .diff-line-added.cm-changedLine {
-  background-color: color-mix(in srgb, var(--success) 16%, transparent);
+  background-color: var(--diff-added-bg);
 }
 
 .cm-merge-a .diff-line-removed.cm-changedLine,
 .cm-merge-b .diff-line-removed.cm-changedLine {
-  background-color: color-mix(in srgb, var(--danger) 16%, transparent);
+  background-color: var(--diff-removed-bg);
 }
 
 /*
@@ -1986,11 +2001,11 @@ button:disabled {
 
 /* Nền dòng thêm/xoá — class do `decorations.ts` gắn qua `Decoration.line`. */
 .diff-line-added {
-  background: color-mix(in srgb, var(--success) 16%, transparent);
+  background: var(--diff-added-bg);
 }
 
 .diff-line-removed {
-  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  background: var(--diff-removed-bg);
 }
 
 /*
@@ -2009,11 +2024,11 @@ button:disabled {
  * GitHub/Linear. Lavender ở trên chỉ còn là fallback cho dòng không có class.
  */
 .diff-line-added .diff-word-changed {
-  background: color-mix(in srgb, var(--success) 40%, transparent);
+  background: var(--diff-added-word);
 }
 
 .diff-line-removed .diff-word-changed {
-  background: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: var(--diff-removed-word);
 }
 
 /*
@@ -2029,27 +2044,29 @@ button:disabled {
  * biến thường giữ `--text` để mã không thành "cầu vồng".
  */
 .diff-viewer .tok-keyword,
+.diff-viewer .tok-bool,
+.diff-viewer .tok-atom,
 .diff-viewer .tok-operator.tok-keyword {
   color: var(--syn-keyword);
 }
 
 .diff-viewer .tok-string,
-.diff-viewer .tok-string2,
 .diff-viewer .tok-url,
 .diff-viewer .tok-inserted {
   color: var(--syn-string);
 }
 
+.diff-viewer .tok-string2 {
+  color: var(--syn-regexp);
+}
+
 .diff-viewer .tok-number,
-.diff-viewer .tok-bool,
-.diff-viewer .tok-atom,
 .diff-viewer .tok-literal {
   color: var(--syn-number);
 }
 
 .diff-viewer .tok-comment {
   color: var(--syn-comment);
-  font-style: italic;
 }
 
 .diff-viewer .tok-typeName,
@@ -2065,7 +2082,6 @@ button:disabled {
 
 .diff-viewer .tok-definition {
   color: var(--syn-definition);
-  font-weight: 500;
 }
 
 .diff-viewer .tok-heading,
