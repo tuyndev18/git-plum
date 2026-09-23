@@ -325,6 +325,47 @@ describe('🔴 WORK-05: thông báo "hãy làm mới"', () => {
   })
 
   /**
+   * 🔴 Băng phải mang `role="alert"` — viết sau khi đo, không phải viết cho đủ.
+   *
+   * Đột biến **M26** (bỏ `role="alert"`) cho **0 đỏ trên 33 test** lúc đầu. Trước khi
+   * kết luận "mã đúng", tôi grep toàn bộ `src/**\/*.test.*` cho `role="alert"`: hai khớp,
+   * **cả hai ở `ChangeList.test.tsx`**, không khớp nào trong tệp này. Tức **không test
+   * nào hỏi về thuộc tính đó** — đó là **cổng thiếu**, không phải mã đúng.
+   *
+   * Đây đúng lỗi **#9** của `CONTEXT.md` §4.1, lỗi đắt nhất trong chín lỗi:
+   * `marginTop`→`paddingTop` đi qua **cả 666 test** vì cùng một lý do.
+   *
+   * Vì sao thuộc tính này đáng có cổng: băng `file_changed` là thứ **duy nhất** nói
+   * cho người dùng biết cú bấm của họ **không** có hiệu lực. Không có `role="alert"`,
+   * trình đọc màn hình **không đọc nó ra** — người dùng bấm "Đưa khối vào vùng chờ",
+   * không nghe gì, và tin rằng khối đã vào vùng chờ. Với một tính năng ghi vào tệp
+   * của họ, im lặng là chế độ hỏng tệ nhất.
+   */
+  it('băng mang role="alert" để trình đọc màn hình đọc ra', async () => {
+    stageHunkMock.mockRejectedValueOnce(loiFileChanged())
+
+    render(<HunkBar {...props()} />)
+    screen.getByRole('button', { name: 'Đưa khối vào vùng chờ' }).click()
+
+    const bang = await screen.findByRole('alert')
+    expect(bang.getAttribute('data-testid')).toBe('hunk-can-lam-moi')
+    expect(bang.textContent).toContain('hãy làm mới')
+  })
+
+  /**
+   * Đối chứng cho test trên: **không** có `alert` nào ở đường hạnh phúc.
+   *
+   * Không có nó, một cài đặt gắn `role="alert"` lên vỏ `hunk-bar` — tức thông báo
+   * "khẩn cấp" ở **mọi** trạng thái, kể cả lúc không có gì xảy ra — vẫn xanh ở trên.
+   * Đó là lỗi **#6**: mỏ neo có mặt ở mọi trạng thái.
+   */
+  it('không có lỗi → KHÔNG có phần tử role="alert" nào', () => {
+    render(<HunkBar {...props()} />)
+
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  /**
    * Nút làm mới **thật sự gọi** `onLamMoi`.
    *
    * 🔴 Không có test này, một nút nhãn "Làm mới" chỉ gỡ băng đi vẫn xanh ở test trên —

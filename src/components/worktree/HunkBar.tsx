@@ -132,6 +132,17 @@ export function HunkBar({
 
   return (
     <div className="hunk-bar" data-testid="hunk-bar">
+      {/*
+       * `data-testid` có mặt cho chỗ gọi tương lai, nhưng test của nút này truy vấn
+       * bằng **tên khả truy cập** (`getByRole('button', { name: … })`) chứ không bằng
+       * testid — có chủ ý: truy vấn theo tên khả truy cập **cũng** kiểm luôn rằng nhãn
+       * đúng, nên nó bắt được M21/M22/M23 mà một truy vấn testid sẽ bỏ qua.
+       *
+       * Nút huỷ thì ngược lại **phải** dùng testid: nhãn của nó là thứ đang được kiểm
+       * ("Xoá" vs "Huỷ bỏ"), nên truy vấn theo nhãn sẽ là truy vấn theo chính câu trả
+       * lời — test sẽ không tìm thấy nút thay vì đỏ ở phép so nhãn, và "không tìm thấy"
+       * là một thông điệp đỏ nói sai nguyên nhân.
+       */}
       <button
         type="button"
         className="hunk-bar-button"
