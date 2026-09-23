@@ -303,6 +303,7 @@ Toolchain đã đủ:
 | fast | Màu cú pháp diff theo VS Code Dark+/Light+ (tham chiếu GitKraken), nền dòng thêm/xoá đậm hơn | 2026-09-23 | aca0609 | — |
 | fast | Nút commit kiểu GitKraken: lane 22px, avatar 18px viền màu lane + chữ cái, merge chấm nhỏ, dải màu lane nối nút với hàng | 2026-09-23 | c8b0720 | — |
 | fast | Bấm tệp ở "Thay đổi chưa commit" hiện diff thư mục làm việc (getWorktreeDiff, staged theo nhóm) thay vì placeholder | 2026-09-23 | 02be0da | — |
+| fast | Đồ thị: --date-order + thuật toán straight branches (pvigier) thay lane chờ — hết bậc thang merge; list không còn cắt cụt ở ranh giới trang | 2026-09-23 | f7a3a25, 130fee5 | — |
 | 260923-na9 | README.md tiếng Việt: giới thiệu, tính năng hiện có (Phase 1–5 có mã, chưa kiểm), lộ trình, tech stack, cách chạy, cấu trúc, MIT | 2026-09-23 | cb2a20b | [260923-na9-vi-t-readme-md-cho-d-n-git-plum](./quick/260923-na9-vi-t-readme-md-cho-d-n-git-plum/) |
 
 Last activity: 2026-09-23 - Completed quick task 260923-na9: README.md tiếng Việt
