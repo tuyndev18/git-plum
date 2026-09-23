@@ -1052,6 +1052,10 @@ button:disabled {
  * `.commit-ref-cell` cắt khỏi vùng nhìn thấy thay vì teo lại thành một ký tự.
  */
 .ref-badge {
+  /* inline-flex: nhãn nào cũng có thể mang icon (HEAD ✓, local, remote, tag). */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 1;
   min-width: 48px;
   padding: 0 5px;
@@ -1096,9 +1100,6 @@ button:disabled {
  * chưa có dữ liệu đồ thị (thiếu `--lane-color`) rơi về màu `--warn` ở trên.
  */
 .commit-row .ref-badge--tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   background: color-mix(in srgb, var(--lane-color, var(--warn)) 28%, var(--bg-inset));
   color: var(--text);
 }
@@ -1122,7 +1123,40 @@ button:disabled {
 }
 
 .ref-badge-head {
-  font-weight: 700;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+/* `+N` không cần sàn 48px của badge thường — nó chỉ vài ký tự. */
+.ref-badge.ref-badge--overflow {
+  min-width: 0;
+}
+
+/*
+ * Danh sách đầy đủ khi rê chuột vào nhóm nhãn có `+N`. Render qua portal vào
+ * `body` với `position: fixed` (toạ độ tính từ `getBoundingClientRect`) vì
+ * hàng commit và ô nhãn đều `overflow: hidden`. `pointer-events: none`: nó
+ * chỉ để đọc, và không được "nuốt" `mouseleave` của nhóm nhãn bên dưới.
+ */
+.ref-popover {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  max-width: 320px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 35%);
+  pointer-events: none;
+}
+
+.ref-popover .ref-badge {
+  max-width: 100%;
+  min-width: 0;
 }
 
 .commit-author,
