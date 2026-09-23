@@ -302,6 +302,7 @@ Toolchain đã đủ:
 | fast | Màu diff preview dễ đọc trên nền tối: classHighlighter + --syn-*, word-level theo màu dòng, gutter bỏ opacity | 2026-09-23 | cffdfa5 | — |
 | fast | Màu cú pháp diff theo VS Code Dark+/Light+ (tham chiếu GitKraken), nền dòng thêm/xoá đậm hơn | 2026-09-23 | aca0609 | — |
 | fast | Nút commit kiểu GitKraken: lane 22px, avatar 18px viền màu lane + chữ cái, merge chấm nhỏ, dải màu lane nối nút với hàng | 2026-09-23 | c8b0720 | — |
+| fast | Bấm tệp ở "Thay đổi chưa commit" hiện diff thư mục làm việc (getWorktreeDiff, staged theo nhóm) thay vì placeholder | 2026-09-23 | 02be0da | — |
 
 Last activity: 2026-09-23 - Completed quick task 260923-lhl: Reskin giao diện theo design system Linear
 
