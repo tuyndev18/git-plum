@@ -159,6 +159,20 @@ describe('ensureRange', () => {
 
     expect(getCommitPage).toHaveBeenCalledTimes(1)
   })
+
+  it('dải vắt qua ranh giới trang nạp CẢ trang sau (lỗi cắt cụt ở hàng 4000)', async () => {
+    getCommitPage.mockResolvedValueOnce(page(['a'], 4037))
+    await useHistoryStore.getState().loadFirstPage('repo-1')
+    getCommitPage.mockClear()
+    getCommitPage.mockResolvedValue(page(['x'], 4037))
+
+    // Khung nhìn ở cuối repo 4037 commit: hàng 3992–4015.
+    await useHistoryStore.getState().ensureRange('repo-1', 3992, 4015)
+
+    expect(getCommitPage).toHaveBeenCalledWith('repo-1', 3 * PAGE_SIZE, PAGE_SIZE)
+    expect(getCommitPage).toHaveBeenCalledWith('repo-1', 4 * PAGE_SIZE, PAGE_SIZE)
+    getCommitPage.mockReset()
+  })
 })
 
 describe('reset', () => {

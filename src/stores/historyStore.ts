@@ -123,51 +123,22 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     const slice = get().byRepo[repoId] ?? emptySlice()
     if (isCovered(slice.loadedRanges, start, end)) return
 
-    // Đánh dấu dải này "đang bay" NGAY, trước khi `await`, để lệnh gọi thứ
-    // hai xảy ra trong lúc lệnh gọi đầu còn chưa xong không lặp lại IPC —
-    // đây là phần "và dải đang bay" của yêu cầu, không chỉ "dải đã nạp".
-    const page = Math.floor(start / PAGE_SIZE)
-    const skip = page * PAGE_SIZE
-    const inFlightEnd = skip + PAGE_SIZE
-
-    set((s) => {
-      const current = s.byRepo[repoId] ?? emptySlice()
-      return {
-        byRepo: {
-          ...s.byRepo,
-          [repoId]: { ...current, loadedRanges: [...current.loadedRanges, [skip, inFlightEnd]] },
-        },
-      }
-    })
-
-    try {
-      const result = await ipc.getCommitPage(repoId, skip, PAGE_SIZE)
-      const len = Math.min(result.commits.length, result.graphRows.length)
-
-      set((s) => ({
-        byRepo: {
-          ...s.byRepo,
-          [repoId]: mergePage(
-            s.byRepo[repoId] ?? emptySlice(),
-            skip,
-            result.commits.slice(0, len),
-            result.graphRows.slice(0, len),
-            result.total,
-          ),
-        },
-      }))
-    } catch (e) {
-      // Nuốt lỗi — cuộn nhanh qua vùng chưa nạp không được làm sập giao diện.
-      // Dải "đang bay" đã được ghi ở trên vẫn giữ nguyên trong `loadedRanges`
-      // để tránh bão lặp lại; `error` phản ánh lần thất bại gần nhất.
-      const message = e instanceof Error ? e.message : String(e)
-      set((s) => ({
-        byRepo: {
-          ...s.byRepo,
-          [repoId]: { ...(s.byRepo[repoId] ?? emptySlice()), error: message },
-        },
-      }))
+    // Nạp MỌI trang giao với [start, end), không chỉ trang chứa `start`.
+    //
+    // Bản trước chỉ tính trang từ `start`: khung nhìn vắt qua ranh giới trang
+    // (ví dụ hàng 3992–4015 trên repo 4037 commit) thì trang 3 đã nạp rồi,
+    // lệnh gọi lại chỉ nạp lại trang 3, và trang 4 không bao giờ được hỏi tới —
+    // danh sách "bị cắt cụt" ở đúng hàng 4000 dù `total` báo 4037.
+    const firstPage = Math.floor(start / PAGE_SIZE)
+    const lastPage = Math.floor((Math.max(end, start + 1) - 1) / PAGE_SIZE)
+    const pages: Promise<void>[] = []
+    for (let page = firstPage; page <= lastPage; page++) {
+      const skip = page * PAGE_SIZE
+      const { loadedRanges } = get().byRepo[repoId] ?? emptySlice()
+      if (isCovered(loadedRanges, Math.max(start, skip), Math.min(end, skip + PAGE_SIZE))) continue
+      pages.push(loadPage(repoId, skip))
     }
+    await Promise.all(pages)
   },
 
   reset: (repoId) =>
@@ -176,3 +147,51 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       return { byRepo: rest }
     }),
 }))
+
+/** Nạp một trang bắt đầu từ `skip` và gộp vào store. */
+async function loadPage(repoId: string, skip: number): Promise<void> {
+  const set = useHistoryStore.setState
+  // Đánh dấu dải này "đang bay" NGAY, trước khi `await`, để lệnh gọi thứ
+  // hai xảy ra trong lúc lệnh gọi đầu còn chưa xong không lặp lại IPC —
+  // đây là phần "và dải đang bay" của yêu cầu, không chỉ "dải đã nạp".
+  const inFlightEnd = skip + PAGE_SIZE
+
+  set((s) => {
+    const current = s.byRepo[repoId] ?? emptySlice()
+    return {
+      byRepo: {
+        ...s.byRepo,
+        [repoId]: { ...current, loadedRanges: [...current.loadedRanges, [skip, inFlightEnd]] },
+      },
+    }
+  })
+
+  try {
+    const result = await ipc.getCommitPage(repoId, skip, PAGE_SIZE)
+    const len = Math.min(result.commits.length, result.graphRows.length)
+
+    set((s) => ({
+      byRepo: {
+        ...s.byRepo,
+        [repoId]: mergePage(
+          s.byRepo[repoId] ?? emptySlice(),
+          skip,
+          result.commits.slice(0, len),
+          result.graphRows.slice(0, len),
+          result.total,
+        ),
+      },
+    }))
+  } catch (e) {
+    // Nuốt lỗi — cuộn nhanh qua vùng chưa nạp không được làm sập giao diện.
+    // Dải "đang bay" đã được ghi ở trên vẫn giữ nguyên trong `loadedRanges`
+    // để tránh bão lặp lại; `error` phản ánh lần thất bại gần nhất.
+    const message = e instanceof Error ? e.message : String(e)
+    set((s) => ({
+      byRepo: {
+        ...s.byRepo,
+        [repoId]: { ...(s.byRepo[repoId] ?? emptySlice()), error: message },
+      },
+    }))
+  }
+}
