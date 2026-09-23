@@ -6,35 +6,46 @@
  */
 
 /*
- * Theme sáng cream (Cursor) là MẶC ĐỊNH — quyết định D-01 của
- * `260923-kzl-CONTEXT.md`. Bản trước (Phase 1) có tối làm mặc định và sáng
- * dưới media query; nhánh dưới đây ĐẢO LẠI: `@media (prefers-color-scheme:
- * dark)` giờ giữ theme tối, không còn `light`.
+ * Theme TỐI kiểu Linear là MẶC ĐỊNH (`skills/design/Linear/SKILL.md`) — đảo
+ * lại quyết định D-01 của `260923-kzl-CONTEXT.md` (nơi cream sáng là mặc
+ * định). Linear guideline nói thẳng "Don't ship a light-mode marketing page";
+ * áp cho app này nghĩa là bảng tối là bản sắc chính, còn nhánh
+ * `@media (prefers-color-scheme: light)` dưới đây chỉ là một chế độ phụ giữ
+ * bảng sáng Linear-app (Linear tự thân không tài liệu hoá light mode — bảng
+ * sáng ở đây là suy diễn "sáng Linear-app" của quick task 260923-lhl, không
+ * phải bảng sáng chính thức của Linear).
  */
 :root {
-  /* Bảng sáng — canvas cream, không bao giờ trắng thuần (skills/design/Cursor). */
-  --bg: #f7f7f4; /* canvas */
-  --bg-raised: #ffffff; /* surface-card */
-  /* canvas-soft (#fafaf7) sát --bg tới mức không tách được trên nền lớn —
-     dùng surface-strong (#e6e5e0) cho --bg-inset để vùng inset (ô nhập, mã
-     nguồn, khối trích dẫn) thật sự lùi một bậc so với --bg, đúng vai trò
-     "khoét sâu" mà --bg-inset đang giữ trong toàn bộ stylesheet. */
-  --bg-inset: #e6e5e0;
-  --border: #e6e5e0; /* hairline */
-  --border-strong: #cfcdc4; /* hairline-strong */
+  /* Bảng tối — canvas gần #010102 của Linear nhưng lùi lên #08090a để tách
+     được lớp trong một app dày đặc (Linear SKILL.md cấm #000 thuần). */
+  --bg: #08090a; /* canvas */
+  --bg-raised: #0f1011; /* surface-1 */
+  /* --bg-inset chọn NÔNG hơn --bg-raised (chỉ một bậc dưới --bg), không phải
+     sâu hơn hai bậc: toàn bộ chỗ dùng hiện tại (ô nhập, khối mã nguồn,
+     .sidebar/.detail) cần LÙI một bậc so với --bg để tạo cảm giác "khoét sâu",
+     không cần một bậc tối riêng thứ ba. #050506 (tối hơn cả --bg) sẽ làm ô
+     nhập trông như một lỗ đen thay vì một bề mặt lùi — dùng #141516
+     (surface-2 theo thang Linear) thay vì #050506. */
+  --bg-inset: #141516;
+  /* --surface-2/--surface-3 CHỈ thêm vì Task 2 xác nhận có chỗ dùng thật:
+     --surface-2 trùng giá trị --bg-inset (dùng cho hover/menu lift bậc 2),
+     --surface-3 một bậc trên nữa cho dropdown/sub-nav lồng sâu hơn. */
+  --surface-2: #141516;
+  --surface-3: #191a1b;
+  --border: #23252a; /* hairline */
+  --border-strong: #34343a; /* hairline-strong */
 
-  --text: #26251e; /* ink */
-  --text-dim: #4a4843; /* body — đậm hơn token Cursor #5a5852 để đạt ≥7:1 ở cỡ 11–12px */
-  --text-faint: #65625a; /* muted — #807d72 gốc chỉ 3.3:1 trên --bg-inset, dưới AA */
-  /* Chỉ thêm vì có chỗ dùng thật (Task 2, .file-list-count/.hunk-table-count
-     đọc --text-faint hiện có) — không thêm biến mồ côi cho disabled text vì
-     dự án chưa có input disabled dùng riêng token này. */
+  --text: #f7f8f8; /* ink */
+  --text-dim: #d0d6e0; /* ink-muted — ≥4.5:1 trên --bg-raised và --bg-inset */
+  --text-faint: #8a9098; /* ink-subtle — nâng nhẹ từ #8a8f98 gốc của SKILL.md
+    để đạt ≥4.5:1 trên --bg-inset (#141516); #8a8f98 chỉ đạt ~4.3:1 tại đó */
 
-  --accent: #f54e00; /* Cursor Orange */
-  --accent-dim: #d04200; /* active/press */
-  --danger: #cf2d56;
-  --success: #1f8a65;
-  --warn: #c08532; /* vàng ấm — mới, CONTEXT.md */
+  --accent: #5e6ad2; /* Linear lavender-blue — CHỈ primary/focus/chọn chính/link */
+  --accent-dim: #5e69d1; /* focus/press — Linear primary-focus */
+  --accent-hover: #828fff; /* Linear primary-hover */
+  --danger: #eb5757; /* bản trầm hợp nền tối — ngữ nghĩa lỗi, không thay accent */
+  --success: #27a644; /* Linear semantic-success */
+  --warn: #f2c94c; /* bản trầm hợp nền tối — ngữ nghĩa cảnh báo, không thay accent */
 
   --font-ui:
     'Inter Variable', 'Inter', system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
@@ -65,24 +76,31 @@
   /*
    * Vòng tròn đánh dấu hàng đang được chọn trên canvas đồ thị — đọc bởi
    * `canvasRenderer.readSelectionRing()` theo đúng pattern `readNodeFill`.
-   * Trung tính (không theo `--accent`, vốn dành riêng cho CTA/trạng thái
-   * chọn chính — đúng "dùng tiết kiệm" của CONTEXT.md), nhưng đủ tối để đọc
-   * được trên nền cream — khác hẳn `#e6edf3` gần-trắng cũ vốn vô hình trên
-   * `--bg` sáng.
+   * Trung tính (không theo `--accent`, vốn dành riêng cho CTA/trạng thái chọn
+   * chính — D-02 khoá "lavender chỉ ở nút primary/focus/chọn chính/link").
+   * `--border-strong` (#34343a) quá gần `--bg` (#08090a) — cả hai đều tối nên
+   * tương phản thấp, vòng chọn gần như vô hình trên nền tối Linear mới; dùng
+   * `--text-faint`-tương đương sáng hơn để vòng chọn thực sự đọc được.
    */
-  --graph-selection-ring: var(--border-strong);
+  --graph-selection-ring: #5a5c66;
 
   /*
    * Màu phủ hàng đang trỏ/đang chọn.
    *
-   * Nền giờ SÁNG (cream) nên logic đảo ngược so với bản Phase 1: lớp phủ phải
-   * TỐI đi mới đọc được, không còn "sáng lên" như trên nền tối cũ. Giá trị là
-   * Claude's Discretion (CONTEXT.md mục "Claude's Discretion" — cường độ
-   * color-mix/màu chính xác) — dùng `color-mix` với `--text` (ink) thay vì một
-   * hex cố định để lớp phủ tự nhất quán với theme, alpha thấp giữ đúng ràng
-   * buộc "lane vẫn xuyên qua" như bản gốc.
+   * Nền tối Linear nên logic "lift sáng lên" áp dụng (ngược cream): lớp phủ
+   * phải SÁNG lên mới đọc được. D-02 khoá: lavender KHÔNG dùng ở đây — đây là
+   * hover hàng thường, không phải "trạng thái chọn chính". Dùng
+   * `color-mix(in srgb, var(--text) NN%, transparent)` thuần, bỏ vế
+   * `var(--accent)` mà bản Cursor trước có.
    */
-  --row-highlight: color-mix(in srgb, var(--text) 55%, var(--accent) 45%);
+  --row-highlight: color-mix(in srgb, var(--text) 10%, transparent);
+
+  /*
+   * Tô riêng cho `.commit-row.selected` — trạng thái CHỌN CHÍNH, được phép
+   * lavender theo D-02. Tách khỏi `--row-highlight` (hover) để hai trạng thái
+   * phân biệt rõ: hover trung tính, chọn có sắc lavender nhạt.
+   */
+  --row-selected-tint: color-mix(in srgb, var(--accent) 16%, transparent);
 
   /*
    * Bề rộng cột nhãn nhánh/tag — PHẢI khớp `REF_COL_WIDTH` ở
@@ -111,6 +129,8 @@
   --color-danger-bg: color-mix(in srgb, var(--danger) 12%, transparent);
   --color-bg-subtle: var(--bg-inset);
   --color-row-hover: color-mix(in srgb, var(--text) 6%, transparent);
+  /* row-selected/selected-bg giữ lavender — đây LÀ "trạng thái chọn chính"
+     theo nghĩa D-02 cho phép, khác --color-row-hover trung tính ở trên. */
   --color-row-selected: color-mix(in srgb, var(--accent) 18%, transparent);
   --color-selected-bg: color-mix(in srgb, var(--accent) 14%, transparent);
   --color-accent: var(--accent);
@@ -123,51 +143,63 @@
   --ok: var(--success);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    /* Bảng tối ấm — đảo mực/giấy kiểu pricing-tier-featured (SKILL.md), KHÔNG
-       phải theme tím lạnh của bản Phase 1. */
-    --bg: #1b1a16; /* nền */
-    --bg-raised: #23221d; /* raised */
-    --bg-inset: #151410; /* inset */
-    --border: #34322b; /* hairline */
-    --border-strong: #46443b; /* hairline strong */
+/*
+ * Nhánh sáng Linear-app CHỈ hiện qua media query — đảo lại tên nhánh
+ * (`dark` → `light`, `:not([data-theme='light'])` → `:not([data-theme='dark'])`)
+ * so với bản Cursor 260923-kzl, nơi media là `dark`. `data-theme` vẫn cho phép
+ * người dùng ép buộc theme thủ công bất kể hệ điều hành, đúng vai trò cũ.
+ */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    /* Bảng sáng Linear-app — Linear tự thân không tài liệu hoá light mode
+       (SKILL.md mục "Known Gaps": "Light mode is not documented because the
+       marketing site does not ship a light theme"), nên đây là suy diễn giữ
+       cùng cấu trúc token (surface ladder, hairline, ink) đảo cực sáng/tối,
+       không phải bảng màu Linear đã công bố. */
+    --bg: #fcfcfd;
+    --bg-raised: #ffffff;
+    --bg-inset: #f4f5f8;
+    --surface-2: #eef0f4;
+    --surface-3: #e6e8ee;
+    --border: #e1e3e8; /* hairline sáng Linear-app */
+    --border-strong: #c7cad3; /* một bậc đậm hơn --border, đủ tách trên nền trắng */
 
-    --text: #f0efe9;
-    --text-dim: #c4c1b6; /* dim — ≥8:1 trên --bg-raised */
-    --text-faint: #9d9a8f; /* faint — #807d72 chỉ 3.9:1 trên --bg-raised tối */
+    --text: #1b1c1f; /* ink */
+    --text-dim: #3c4149;
+    --text-faint: #6b6f76;
 
-    --accent: #ff6a1f; /* Cursor Orange sáng hơn cho nền tối */
-    --accent-dim: #d04200;
-    /* Semantic giữ nguyên qua cả hai theme — Claude's Discretion: đủ tương
-       phản trên cả nền tối lẫn sáng nên không cần một bộ giá trị riêng. */
-    --danger: #cf2d56;
-    --success: #1f8a65;
-    --warn: #c08532;
+    --accent: #5e6ad2; /* giữ nguyên — cùng lavender, không đổi theo theme */
+    --accent-dim: #5e69d1;
+    --accent-hover: #828fff;
+    /* Semantic làm đậm nhẹ cho nền sáng — Claude's Discretion, contrast tốt
+       hơn bản tối gốc trên nền trắng. */
+    --danger: #d13a3a;
+    --success: #1f8a3d;
+    --warn: #a86a00;
 
-    /* Theo `--bg` của theme tối — hằng số cứng của bản trước cho một đốm sáng
-       giữa lòng mỗi nút commit trên nền tối mới. */
+    /* Theo `--bg` của nhánh sáng — đốm sáng giữa lòng mỗi nút commit khớp nền
+       trắng thay vì nền tối. */
     --graph-node-fill: var(--bg);
 
-    /* Sáng, tương phản trên nền tối — cùng vai trò với nhánh sáng, ngược cực
-       độ sáng. */
-    --graph-selection-ring: var(--border-strong);
+    /* Tối vừa đủ tương phản trên nền sáng — khác giá trị nhánh tối (#5a5c66,
+       vốn là màu SÁNG cho nền tối). */
+    --graph-selection-ring: #b4b8c2;
 
-    /* Nền lại tối nên logic "lift sáng lên" của bản Phase 1 áp dụng lại ở
-       đây — giữ nguyên hue cam/ink ấm, chỉ đổi hướng alpha. */
-    --row-highlight: color-mix(in srgb, var(--text) 25%, var(--accent) 20%);
+    /* Nền sáng nên logic "lift tối đi" áp dụng — ngược nhánh tối phía trên. */
+    --row-highlight: color-mix(in srgb, var(--text) 6%, transparent);
+    --row-selected-tint: color-mix(in srgb, var(--accent) 12%, transparent);
 
     --color-danger: var(--danger);
-    --color-danger-bg: color-mix(in srgb, var(--danger) 18%, transparent);
+    --color-danger-bg: color-mix(in srgb, var(--danger) 12%, transparent);
     --color-bg-subtle: var(--bg-inset);
-    --color-row-hover: color-mix(in srgb, var(--text) 8%, transparent);
-    --color-row-selected: color-mix(in srgb, var(--accent) 22%, transparent);
-    --color-selected-bg: color-mix(in srgb, var(--accent) 18%, transparent);
+    --color-row-hover: color-mix(in srgb, var(--text) 5%, transparent);
+    --color-row-selected: color-mix(in srgb, var(--accent) 14%, transparent);
+    --color-selected-bg: color-mix(in srgb, var(--accent) 10%, transparent);
     --color-accent: var(--accent);
     --color-warn: var(--warn);
-    --color-notice-bg: color-mix(in srgb, var(--accent) 14%, transparent);
+    --color-notice-bg: color-mix(in srgb, var(--accent) 8%, transparent);
     --color-border: var(--border);
-    --color-subtle-bg: color-mix(in srgb, var(--text) 10%, transparent);
+    --color-subtle-bg: color-mix(in srgb, var(--text) 6%, transparent);
     --color-added: var(--success);
     --color-removed: var(--danger);
     --ok: var(--success);
@@ -191,6 +223,10 @@ body {
   font-family: var(--font-ui);
   font-size: 13px;
   line-height: 1.5;
+  /* cv11/ss01/ss03 bật các biến thể chữ số/glyph thay thế của Inter để tăng
+     độ dễ đọc ở cỡ nhỏ (13px) — theo hướng dẫn Linear SKILL.md. */
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  letter-spacing: -0.05px;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
@@ -221,9 +257,15 @@ body {
   gap: 10px;
 }
 
+/*
+ * D-02 khoá: `.brand` KHÔNG đổi sang lavender đậm. `<Logo/>` (component riêng,
+ * xem `src/components/Logo.tsx`) đã tự dùng `var(--accent)` trong SVG của nó —
+ * chữ wordmark cạnh logo dùng `--text` (ink) thường, không cần trùng màu với
+ * icon để vẫn đọc như một khối thương hiệu nhất quán.
+ */
 .brand {
   font-weight: 600;
-  color: var(--accent);
+  color: var(--text);
   letter-spacing: 0.02em;
 }
 
@@ -251,9 +293,18 @@ button {
   cursor: pointer;
 }
 
+/*
+ * D-02 khoá: hover nút thường/phụ KHÔNG đổi màu chữ sang lavender đậm. File
+ * này không có class `.button-primary` riêng — mọi `button` hiện tại là "nút
+ * thường/phụ" theo nghĩa D-02, nên hover nâng surface + border-strong (lift
+ * trung tính), không đổi sắc. Nền mặc định của `button` là `--bg-inset`
+ * (= --surface-2 theo thang Linear) nên hover phải lên MỘT bậc nữa
+ * (`--surface-3`), không phải `--bg-raised` (surface-1 — một nhánh riêng của
+ * thang, không phải bậc kế tiếp của surface-2).
+ */
 button:hover:not(:disabled) {
-  border-color: var(--accent-dim);
-  color: var(--accent);
+  background: var(--surface-3);
+  border-color: var(--border-strong);
 }
 
 button:disabled {
@@ -368,6 +419,7 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 12px;
   word-break: break-all;
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Danh sách repository gần đây (PLAT-07) ----------------------------- */
@@ -558,6 +610,7 @@ button:disabled {
   text-align: right;
   font-family: var(--font-mono);
   color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Thanh trạng thái --------------------------------------------------- */
@@ -788,13 +841,23 @@ button:disabled {
   background: color-mix(in srgb, var(--row-highlight) 10%, transparent);
 }
 
+/*
+ * `.selected` là trạng thái CHỌN CHÍNH (D-02 khoá: lavender được phép ở đây,
+ * khác `:hover` trung tính ở trên) — dùng `--row-selected-tint` thay vì tiếp
+ * tục pha `--row-highlight`, để hai trạng thái phân biệt rõ bằng sắc, không
+ * chỉ bằng độ đậm.
+ */
 .commit-row.selected {
-  background: color-mix(in srgb, var(--row-highlight) 18%, transparent);
+  background: color-mix(in srgb, var(--row-selected-tint) 100%, transparent);
 }
 
 /* Hàng vừa được chọn vừa được trỏ: cộng thêm sáng, không đè mất nhau. */
 .commit-row.selected:hover {
-  background: color-mix(in srgb, var(--row-highlight) 26%, transparent);
+  background: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--row-selected-tint) 100%, transparent) 100%,
+    var(--row-highlight) 30%
+  );
 }
 
 /*
@@ -1020,6 +1083,11 @@ button:disabled {
   white-space: nowrap;
   font-size: 12px;
   color: var(--text-dim);
+}
+
+/* .commit-time hiển thị NGÀY/GIỜ — tabular-nums cho số thẳng cột khi cuộn. */
+.commit-time {
+  font-variant-numeric: tabular-nums;
 }
 
 .commit-sha {
@@ -2398,9 +2466,19 @@ button:disabled {
  * Viền focus PHẢI giữ.
  *
  * `.diff-viewer` cố ý bỏ outline vì nó là vùng chỉ-đọc không tương tác được.
- * Nút thì ngược lại: bỏ outline ở đây là cắt hẳn đường dùng bàn phím, và nút
- * chỉ có icon vốn đã khó định vị hơn nút có chữ.
+ * Nút thì ngược lại: bỏ outline ở đây là cắt hẳn đường dùng bàn phím.
+ *
+ * Rule toàn cục dưới đây (D-05) dùng `color-mix(... var(--accent-dim) 50%,
+ * transparent)` — mềm hơn viền đặc `var(--accent)` cũ của `.icon-button` vì
+ * Linear focus ring là 2px ở 50% opacity (SKILL.md "Elevation & Depth" mức 4).
+ * Nút chỉ có icon vẫn khó định vị hơn nút có chữ nên GIỮ RIÊNG một rule đặc
+ * hơn đè lên rule toàn cục cho nhóm này — không hạ chuẩn khả năng thấy được.
  */
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-dim) 50%, transparent);
+  outline-offset: 1px;
+}
+
 .icon-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;

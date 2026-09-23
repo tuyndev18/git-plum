@@ -308,6 +308,68 @@ describe('--graph-selection-ring tồn tại trong :root với giá trị không
 })
 
 /*
+ * Cổng hồi quy "quên đảo theme mặc định" — plan 260923-lhl (reskin Linear).
+ *
+ * `:root` PHẢI khai `--bg` với giá trị TỐI (không phải cream `#f7f7f4` của
+ * bản Cursor trước). Không so trực tiếp với một hex cụ thể của Linear (giá trị
+ * đó là quyết định thiết kế có thể tinh chỉnh) — chỉ khẳng định nó KHÁC
+ * `#f7f7f4` VÀ khớp khuôn "tối" (`#0X....` — kênh đỏ thấp, đặc trưng nền gần
+ * đen). Thiếu cổng này thì một lần sửa vô ý trả `--bg` về cream sẽ không có
+ * test nào bắt được, vì các cổng khác không nói gì về ĐỘ SÁNG của giá trị.
+ */
+describe('--bg mặc định phải TỐI (Linear), không còn cream Cursor', () => {
+  it('--root có --bg khác #f7f7f4 và khớp khuôn hex tối', () => {
+    const rootStart = css.indexOf(':root {')
+    expect(rootStart, 'phải tìm thấy khối :root').toBeGreaterThan(-1)
+    const rootBlock = css.slice(rootStart, css.indexOf('\n}', rootStart))
+
+    const match = rootBlock.match(/--bg:\s*(#[0-9a-fA-F]{6})/)
+    const value = match?.[1]
+    expect(value, '--bg phải là một giá trị hex 6 ký tự trong :root').toBeDefined()
+
+    expect(
+      value,
+      `--bg trong :root là ${value} — vẫn là cream Cursor cũ. Reskin Linear (260923-lhl) ` +
+        'đòi theme TỐI làm mặc định.',
+    ).not.toBe('#f7f7f4')
+
+    expect(
+      value,
+      `--bg trong :root là ${value} — không khớp khuôn hex tối Linear (#0X.....). ` +
+        'Đây là cổng hồi quy chống việc vô tình trả --bg về một giá trị sáng.',
+    ).toMatch(/^#0[0-9a-f]{5}$/)
+  })
+})
+
+/*
+ * Cổng hồi quy "quên đổi tên nhánh media" — plan 260923-lhl.
+ *
+ * Bản Cursor (260923-kzl) giữ bảng TỐI dưới `@media (prefers-color-scheme:
+ * dark)`. Reskin Linear đảo lại: bảng tối là MẶC ĐỊNH trong `:root`, và
+ * `@media (prefers-color-scheme: light)` giữ bảng sáng Linear-app. Một lần
+ * sửa quên đổi tên nhánh media sẽ để cả hai chuỗi cùng tồn tại hoặc chỉ còn
+ * `dark` — cổng này khẳng định đúng MỘT trạng thái mong đợi.
+ */
+describe('media query phải là prefers-color-scheme: light, không còn dark', () => {
+  it('không còn chuỗi @media (prefers-color-scheme: dark)', () => {
+    expect(
+      css,
+      'app.css vẫn còn @media (prefers-color-scheme: dark) — chuỗi cũ của bản Cursor. ' +
+        'Reskin Linear đảo theme tối thành mặc định trong :root, nên nhánh dark không ' +
+        'còn cần thiết.',
+    ).not.toContain('@media (prefers-color-scheme: dark)')
+  })
+
+  it('có chuỗi @media (prefers-color-scheme: light)', () => {
+    expect(
+      css,
+      'app.css phải có @media (prefers-color-scheme: light) để giữ bảng sáng Linear-app ' +
+        'khi hệ điều hành ở light mode.',
+    ).toContain('@media (prefers-color-scheme: light)')
+  })
+})
+
+/*
  * Canvas đồ thị nằm DƯỚI các hàng commit (`.graph-canvas` có `z-index: 0`, các
  * `.commit-row` đến sau trong DOM). Nên **mọi** nền hàng phải trong suốt một
  * phần: một nền đục xoá sạch đoạn đồ thị của đúng hàng đó.

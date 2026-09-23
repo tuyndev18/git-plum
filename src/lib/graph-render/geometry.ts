@@ -87,12 +87,13 @@ export const MERGE_NODE_RADIUS = 5
  * thật, `canvasRenderer` đọc `--graph-node-fill` từ `getComputedStyle` của host
  * để lòng nút khớp nền thật ở **cả hai theme**.
  *
- * Giá trị đổi sang cream (`#f7f7f4`) cùng lúc với reskin theo design system
- * Cursor (260923-kzl) — theme sáng cream giờ là MẶC ĐỊNH (`--bg` ở `:root`),
+ * Giá trị đổi sang tối Linear (`#08090a`) cùng lúc với reskin theo design
+ * system Linear (260923-lhl) — theme TỐI Linear giờ là MẶC ĐỊNH (`--bg` ở
+ * `:root`, đảo lại quyết định D-01 của 260923-kzl nơi cream sáng là mặc định),
  * nên giá trị dự phòng phải khớp nền mặc định mới, đúng ý nghĩa doc comment
  * trên không đổi: "trùng nền của hàng phía sau nút".
  */
-export const NODE_FILL = '#f7f7f4'
+export const NODE_FILL = '#08090a'
 
 /** Tên biến CSS giữ màu tô lòng nút. Khai ở `app.css`, đọc lúc chạy. */
 export const NODE_FILL_VAR = '--graph-node-fill'
@@ -103,11 +104,14 @@ export const NODE_FILL_VAR = '--graph-node-fill'
  * Đây chỉ là **giá trị dự phòng** cho môi trường không có DOM (test), cùng vai
  * trò với `NODE_FILL` ở trên. Lúc chạy thật, `canvasRenderer` đọc
  * `--graph-selection-ring` qua `readSelectionRing()`. Giá trị đổi từ
- * `#e6edf3` (gần-trắng) sang một tông tối vừa đủ (border-strong) cùng lúc với
- * reskin Cursor: hằng số cũ VÔ HÌNH trên nền cream mới — đúng vấn đề
- * `260923-kzl-CONTEXT.md` nêu ("SELECTION_RING vô hình trên nền cream").
+ * `#46443b` (border-strong tối của bản Cursor, chọn để đọc được trên nền
+ * cream) sang một tông SÁNG hơn cùng lúc với reskin Linear (260923-lhl):
+ * `#34343a` (`--border-strong` mới của theme tối Linear) có tương phản THẤP
+ * trên `#08090a` vì cả hai đều tối — `#5a5c66` (khớp `--graph-selection-ring`
+ * mới trong app.css) thực sự đọc được trên nền tối Linear, đúng mục đích ban
+ * đầu của hằng số này ("vòng chọn nhìn thấy được").
  */
-export const SELECTION_RING = '#46443b'
+export const SELECTION_RING = '#5a5c66'
 
 /** Tên biến CSS giữ màu vòng chọn. Khai ở `app.css`, đọc lúc chạy. */
 export const SELECTION_RING_VAR = '--graph-selection-ring'
