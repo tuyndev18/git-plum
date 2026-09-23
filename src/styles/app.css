@@ -245,7 +245,7 @@ button {
   background: var(--bg-inset);
   color: var(--text);
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
+  border-radius: 8px;
   font-family: inherit;
   font-size: 12px;
   cursor: pointer;
@@ -326,7 +326,7 @@ button:disabled {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--text-faint);
 }
 
@@ -383,7 +383,7 @@ button:disabled {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--text-faint);
 }
 
@@ -969,7 +969,7 @@ button:disabled {
   flex-shrink: 1;
   min-width: 48px;
   padding: 0 5px;
-  border-radius: 3px;
+  border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
   line-height: 16px;
@@ -996,8 +996,11 @@ button:disabled {
 }
 
 .ref-badge--tag {
-  background: color-mix(in srgb, #d9a441 25%, var(--bg-inset));
-  color: #d9a441;
+  /* Không dùng --warn trực tiếp: ngữ nghĩa "tag" khác "cảnh báo", nhưng cùng
+     hue vàng ấm của Cursor là lựa chọn hợp lý nhất trong bảng token hiện có —
+     không thêm một biến --color-tag mồ côi chỉ cho một component. */
+  background: color-mix(in srgb, var(--warn) 25%, var(--bg-inset));
+  color: var(--warn);
 }
 
 .ref-badge--other,
@@ -1304,7 +1307,7 @@ button:disabled {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--text-faint);
 }
 
@@ -1348,7 +1351,7 @@ button:disabled {
 .ref-sidebar-head-flag {
   flex-shrink: 0;
   padding: 0 4px;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--accent);
   color: var(--bg);
   font-size: 9px;
@@ -1389,7 +1392,7 @@ button:disabled {
   padding: 4px 8px;
   background: var(--bg-inset);
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
+  border-radius: 8px;
   color: var(--text);
   font-family: inherit;
   font-size: 12px;
@@ -1424,7 +1427,7 @@ button:disabled {
    Tạm thời. Xoá cùng lúc với SpikeHarness khi Task 3 chốt xong đường A/B. */
 
 .spike-harness {
-  border-top: 2px dashed #8a6d3b;
+  border-top: 2px dashed var(--border-strong);
   padding: 8px 12px;
   font-size: 12px;
   overflow: auto;
@@ -1456,7 +1459,7 @@ button:disabled {
 
 .spike-results th,
 .spike-results td {
-  border: 1px solid #555;
+  border: 1px solid var(--border-strong);
   padding: 2px 8px;
   text-align: right;
 }
@@ -1485,7 +1488,7 @@ button:disabled {
   user-select: all;
   white-space: pre-wrap;
   word-break: break-all;
-  background: #222;
+  background: var(--bg-inset);
   padding: 6px;
 }
 
@@ -1494,16 +1497,16 @@ button:disabled {
 .spike-stage {
   height: 400px;
   overflow: auto;
-  border: 1px solid #444;
+  border: 1px solid var(--border-strong);
   margin-top: 8px;
 }
 
 .spike-added {
-  background: rgba(40, 140, 60, 0.28);
+  background: color-mix(in srgb, var(--success) 28%, transparent);
 }
 
 .spike-removed {
-  background: rgba(170, 50, 50, 0.28);
+  background: color-mix(in srgb, var(--danger) 28%, transparent);
 }
 
 /* ==========================================================================
@@ -1905,7 +1908,7 @@ button:disabled {
  */
 .diff-word-changed {
   background: color-mix(in srgb, var(--accent) 38%, transparent);
-  border-radius: 2px;
+  border-radius: 4px;
 }
 
 .diff-notice {
@@ -2087,7 +2090,7 @@ button:disabled {
   padding: 8px;
   /* Vùng soạn không được co về 0 khi danh sách tệp phía trên dài. */
   flex: 0 0 auto;
-  border-top: 1px solid var(--border, #333);
+  border-top: 1px solid var(--border);
 }
 
 .commit-message {
@@ -2133,8 +2136,8 @@ button:disabled {
   padding: 5px 8px;
   font-size: 11px;
   line-height: 1.4;
-  border-left: 3px solid #d9a441;
-  background: rgba(217, 164, 65, 0.12);
+  border-left: 3px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
 }
 
 /*
@@ -2153,8 +2156,8 @@ button:disabled {
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  border-left: 3px solid #e05252;
-  background: rgba(224, 82, 82, 0.1);
+  border-left: 3px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 .commit-error {
@@ -2162,8 +2165,8 @@ button:disabled {
   padding: 5px 8px;
   font-size: 11px;
   line-height: 1.4;
-  border-left: 3px solid #e05252;
-  background: rgba(224, 82, 82, 0.1);
+  border-left: 3px solid var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 .commit-actions {
@@ -2472,7 +2475,7 @@ button:disabled {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   background: var(--color-bg-subtle, #1c1c1c);
   opacity: 0.85;
 }
