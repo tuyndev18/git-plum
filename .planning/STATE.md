@@ -301,6 +301,7 @@ Toolchain đã đủ:
 | 260923-lhl | Reskin giao diện theo design system Linear (tối mặc định, lavender #5e6ad2), font Inter + cv11/ss01/ss03 | 2026-09-23 | dc9c4ac | [260923-lhl-reskin-giao-dien-theo-design-system-line](./quick/260923-lhl-reskin-giao-dien-theo-design-system-line/) |
 | fast | Màu diff preview dễ đọc trên nền tối: classHighlighter + --syn-*, word-level theo màu dòng, gutter bỏ opacity | 2026-09-23 | cffdfa5 | — |
 | fast | Màu cú pháp diff theo VS Code Dark+/Light+ (tham chiếu GitKraken), nền dòng thêm/xoá đậm hơn | 2026-09-23 | aca0609 | — |
+| fast | Nút commit kiểu GitKraken: lane 22px, avatar 18px viền màu lane + chữ cái, merge chấm nhỏ, dải màu lane nối nút với hàng | 2026-09-23 | c8b0720 | — |
 
 Last activity: 2026-09-23 - Completed quick task 260923-lhl: Reskin giao diện theo design system Linear
 
