@@ -20,6 +20,7 @@ import {
   NODE_FILL_VAR,
   NODE_HALO_WIDTH,
   SELECTION_RING,
+  SELECTION_RING_VAR,
   EDGE_WIDTH,
 } from './geometry'
 import type {
@@ -100,6 +101,23 @@ function readNodeFill(host: HTMLElement): string {
     return value === '' ? NODE_FILL : value
   } catch {
     return NODE_FILL
+  }
+}
+
+/**
+ * Màu vòng chọn, lấy từ `--graph-selection-ring` của host để khớp theme thật.
+ * Cùng cấu trúc phòng thủ với `readNodeFill` — vô hình trên nền cream nếu vẫn
+ * dùng hằng số `SELECTION_RING` cứng của môi trường tối cũ (260923-kzl).
+ */
+function readSelectionRing(host: HTMLElement): string {
+  if (typeof window === 'undefined' || typeof window.getComputedStyle !== 'function') {
+    return SELECTION_RING
+  }
+  try {
+    const value = window.getComputedStyle(host).getPropertyValue(SELECTION_RING_VAR).trim()
+    return value === '' ? SELECTION_RING : value
+  } catch {
+    return SELECTION_RING
   }
 }
 
@@ -232,6 +250,7 @@ function drawRow(
   item: GraphRenderRow,
   selectedCommitId: string | null,
   nodeFill: string,
+  selectionRing: string,
 ) {
   const { row, y } = item
   const yCenter = y + ROW_HEIGHT / 2
@@ -406,7 +425,7 @@ function drawRow(
   if (row.commitId === selectedCommitId) {
     ctx.beginPath()
     ctx.arc(nodeX, yCenter, radius + 3, 0, Math.PI * 2)
-    ctx.strokeStyle = SELECTION_RING
+    ctx.strokeStyle = selectionRing
     ctx.lineWidth = 2
     ctx.stroke()
     ctx.lineWidth = 1
@@ -477,9 +496,12 @@ export const createCanvasRenderer: (
       // event nào cho canvas biết. `getComputedStyle` trên một phần tử là phép
       // đọc rẻ, và một lượt vẽ chỉ gọi đúng một lần cho cả trăm hàng.
       const nodeFill = readNodeFill(host)
+      // Cùng lý do hiệu năng với `nodeFill` ở trên: đọc một lần cho cả lượt
+      // vẽ, không đọc lại mỗi hàng.
+      const selectionRing = readSelectionRing(host)
 
       for (const item of rows) {
-        drawRow(ctx, item, selectedCommitId, nodeFill)
+        drawRow(ctx, item, selectedCommitId, nodeFill, selectionRing)
       }
 
       // Hàng WIP vẽ **sau** mọi hàng commit: nó ghim ở đầu vùng cuộn và nằm

@@ -85,17 +85,32 @@ export const MERGE_NODE_RADIUS = 5
  *
  * Đây chỉ là **giá trị dự phòng** cho môi trường không có DOM (test). Lúc chạy
  * thật, `canvasRenderer` đọc `--graph-node-fill` từ `getComputedStyle` của host
- * để lòng nút khớp nền thật ở **cả hai theme** — hằng số cứng `#161b22` của bản
- * trước là một đốm đen giữa nền trắng khi người dùng ở theme sáng, và không
- * khớp cả `--bg` (`#16161a`) lẫn dải xen kẽ của `.commit-row` ở theme tối.
+ * để lòng nút khớp nền thật ở **cả hai theme**.
+ *
+ * Giá trị đổi sang cream (`#f7f7f4`) cùng lúc với reskin theo design system
+ * Cursor (260923-kzl) — theme sáng cream giờ là MẶC ĐỊNH (`--bg` ở `:root`),
+ * nên giá trị dự phòng phải khớp nền mặc định mới, đúng ý nghĩa doc comment
+ * trên không đổi: "trùng nền của hàng phía sau nút".
  */
-export const NODE_FILL = '#16161a'
+export const NODE_FILL = '#f7f7f4'
 
 /** Tên biến CSS giữ màu tô lòng nút. Khai ở `app.css`, đọc lúc chạy. */
 export const NODE_FILL_VAR = '--graph-node-fill'
 
-/** Màu vòng tròn đánh dấu hàng đang được chọn — trung tính, không theo màu lane. */
-export const SELECTION_RING = '#e6edf3'
+/**
+ * Màu vòng tròn đánh dấu hàng đang được chọn — trung tính, không theo màu lane.
+ *
+ * Đây chỉ là **giá trị dự phòng** cho môi trường không có DOM (test), cùng vai
+ * trò với `NODE_FILL` ở trên. Lúc chạy thật, `canvasRenderer` đọc
+ * `--graph-selection-ring` qua `readSelectionRing()`. Giá trị đổi từ
+ * `#e6edf3` (gần-trắng) sang một tông tối vừa đủ (border-strong) cùng lúc với
+ * reskin Cursor: hằng số cũ VÔ HÌNH trên nền cream mới — đúng vấn đề
+ * `260923-kzl-CONTEXT.md` nêu ("SELECTION_RING vô hình trên nền cream").
+ */
+export const SELECTION_RING = '#46443b'
+
+/** Tên biến CSS giữ màu vòng chọn. Khai ở `app.css`, đọc lúc chạy. */
+export const SELECTION_RING_VAR = '--graph-selection-ring'
 
 /**
  * Độ dày đường lane.
