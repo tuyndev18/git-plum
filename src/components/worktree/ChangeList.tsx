@@ -79,7 +79,7 @@ interface Props {
  * cùng lý do với `pendingSelection` của `FileList.tsx`; đọc khối doc comment dài ở đầu
  * tệp đó để hiểu vì sao đường này được chọn thay vì truyền tham số qua sổ lệnh.
  */
-let pendingSelection: { repoId: string; path: string } | null = null
+let pendingSelection: { repoId: string; path: string; staged: boolean } | null = null
 
 /** Thứ tự hiển thị ba nhóm, cộng tiêu đề của từng nhóm. */
 const NHOM: { group: StatusGroup; tieuDe: string }[] = [
@@ -113,8 +113,8 @@ function nhanTrangThai(e: StatusEntry): string {
 }
 
 /** Bấm một hàng: ghi lựa chọn rồi chạy lệnh (PLAT-04, khuôn `FileList.tsx`). */
-function chonTep(repoId: string, path: string): void {
-  pendingSelection = { repoId, path }
+function chonTep(repoId: string, path: string, staged: boolean): void {
+  pendingSelection = { repoId, path, staged }
   void runCommand('worktree.selectFile')
 }
 
@@ -155,7 +155,7 @@ function HangTep({
       data-testid="change-row"
       data-path={entry.path}
       data-group={entry.group}
-      onClick={() => chonTep(repoId, entry.path)}
+      onClick={() => chonTep(repoId, entry.path, laStaged)}
     >
       <span className="change-status">{nhanTrangThai(entry)}</span>
       <span className="change-path">
@@ -188,6 +188,10 @@ export function ChangeList({ repoId }: Props) {
   const selectedPath = useDiffStore((s) =>
     repoId ? (s.selectedFileByRepo[repoId] ?? null) : null,
   )
+  // Tệp `MM` có ở hai nhóm với cùng `path` — chỉ sáng hàng của đúng nhóm đã bấm.
+  const selectedStaged = useDiffStore((s) =>
+    repoId ? (s.worktreeByRepo[repoId]?.staged ?? null) : null,
+  )
 
   /*
    * Đăng ký lệnh chọn tệp qua sổ đăng ký (PLAT-04).
@@ -207,7 +211,9 @@ export function ChangeList({ repoId }: Props) {
           const chon = pendingSelection
           if (!chon) return
           pendingSelection = null
-          useDiffStore.getState().selectFile(chon.repoId, chon.path)
+          // Diff **thư mục làm việc**, không phải diff commit — xem
+          // `diffStore.worktreeByRepo`.
+          useDiffStore.getState().selectWorktreeFile(chon.repoId, chon.path, chon.staged)
         },
       },
     ])
@@ -259,7 +265,9 @@ export function ChangeList({ repoId }: Props) {
                     key={`${group}:${e.path}`}
                     entry={e}
                     repoId={repoId}
-                    daChon={selectedPath === e.path}
+                    daChon={
+                      selectedPath === e.path && selectedStaged === (e.group === 'staged')
+                    }
                   />
                 ))}
               </div>

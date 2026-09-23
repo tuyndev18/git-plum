@@ -58,6 +58,7 @@ import type { DiffRenderer } from '@/lib/diff-render/types'
 import { measureFirstPaint } from '@/lib/perf'
 import { useDiffStore } from '@/stores/diffStore'
 import { useSelectionStore } from '@/stores/selectionStore'
+import { useStatusStore } from '@/stores/statusStore'
 import { DiffNotice, DiffToolbar } from './DiffToolbar'
 import { FileHistory } from './FileHistory'
 
@@ -111,6 +112,22 @@ export function DiffViewer({ repoId }: Props) {
   const historyCommitOverride = useDiffStore((s) => s.historyCommitOverride)
   const selectedCommitId = historyCommitOverride ?? commitTrenDoThi
   const selectedFile = useDiffStore((s) => s.selectedFileByRepo[repoId] ?? null)
+  /*
+   * Nguồn diff: thư mục làm việc (tệp chọn từ `ChangeList`) hay commit.
+   *
+   * Ghi đè lịch sử tệp thắng cả hai: bấm một phiên bản trong `FileHistory` là đòi
+   * xem tệp ở commit đó. Thiếu nhánh thư mục làm việc, bấm một hàng của `ChangeList`
+   * rơi vào `return` sớm "chưa chọn commit" bên dưới — không hiện gì cả.
+   */
+  const worktreeStaged = useDiffStore((s) => s.worktreeByRepo[repoId]?.staged ?? null)
+  const laWorktree = historyCommitOverride === null && worktreeStaged !== null
+  /*
+   * Diff thư mục làm việc đổi khi người dùng stage/unstage hoặc sửa tệp. Mỗi lần
+   * `RepoStatus` mới về (lệnh ghi hoặc watcher) là một lần nạp lại — không có cache
+   * nào để giữ dữ liệu cũ (xem `ipc.getWorktreeDiff`). Ở chế độ commit giá trị này
+   * luôn `undefined`, nên diff commit không nạp lại vô cớ.
+   */
+  const worktreeStatus = useStatusStore((s) => (laWorktree ? s.byRepo[repoId]?.status : undefined))
   const viewMode = useDiffStore((s) => s.viewMode)
   const showWhitespace = useDiffStore((s) => s.showWhitespace)
   const clearFile = useDiffStore((s) => s.clearFile)
@@ -167,7 +184,7 @@ export function DiffViewer({ repoId }: Props) {
   const requestIdRef = useRef(0)
 
   useEffect(() => {
-    if (!selectedCommitId || !selectedFile) {
+    if ((!laWorktree && !selectedCommitId) || !selectedFile) {
       setDiff(null)
       setError(null)
       setIsLoading(false)
@@ -183,8 +200,11 @@ export function DiffViewer({ repoId }: Props) {
     // console qua dụng cụ đo.
     const xong = measureFirstPaint('diff-first-paint')
 
-    ipc
-      .getFileDiff(repoId, selectedCommitId, selectedFile)
+    const loiGoi = laWorktree
+      ? ipc.getWorktreeDiff(repoId, selectedFile, worktreeStaged === true)
+      : ipc.getFileDiff(repoId, selectedCommitId!, selectedFile)
+
+    loiGoi
       .then((result) => {
         if (id !== requestIdRef.current) return
         setDiff(result)
@@ -198,7 +218,7 @@ export function DiffViewer({ repoId }: Props) {
         if (id !== requestIdRef.current) return
         setIsLoading(false)
       })
-  }, [repoId, selectedCommitId, selectedFile])
+  }, [repoId, selectedCommitId, selectedFile, laWorktree, worktreeStaged, worktreeStatus])
 
   const kindText = diff?.kind.kind === 'text' ? diff.kind : null
 
@@ -287,7 +307,7 @@ export function DiffViewer({ repoId }: Props) {
   const onNextHunk = useCallback(() => nhayKhoi('next'), [nhayKhoi])
   const onPrevHunk = useCallback(() => nhayKhoi('prev'), [nhayKhoi])
 
-  if (!selectedCommitId || !selectedFile) {
+  if ((!laWorktree && !selectedCommitId) || !selectedFile) {
     return (
       <div className="diff-viewer diff-viewer-empty" data-testid="diff-empty">
         <p className="placeholder">Bấm một tệp trong danh sách thay đổi để xem diff.</p>

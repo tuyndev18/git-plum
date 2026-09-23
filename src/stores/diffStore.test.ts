@@ -148,8 +148,12 @@ describe('viewMode — KHÔNG theo repo (khuôn uiStore, bài học HIST-09)', (
       `chỉ được có ĐÚNG một khoá trạng thái viewMode (không theo repo), ` +
         `thấy: ${khoaTrangThai.join(', ')}`,
     ).toEqual(['viewMode'])
-    // Và không khoá trạng thái nào có hậu tố `ByRepo` ngoài `selectedFileByRepo`.
-    expect(khoaTrangThai.filter((k) => k.endsWith('ByRepo'))).toEqual(['selectedFileByRepo'])
+    // Và không khoá trạng thái nào có hậu tố `ByRepo` ngoài hai khoá VỊ TRÍ:
+    // tệp đang chọn, và nguồn của nó (thư mục làm việc hay commit).
+    expect(khoaTrangThai.filter((k) => k.endsWith('ByRepo')).sort()).toEqual([
+      'selectedFileByRepo',
+      'worktreeByRepo',
+    ])
   })
 })
 

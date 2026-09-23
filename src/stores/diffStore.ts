@@ -71,7 +71,22 @@ interface DiffState {
    */
   historyCommitOverride: string | null
 
+  /**
+   * Tệp đang chọn là của **thư mục làm việc**, không phải của một commit.
+   *
+   * `undefined`/`null` = diff commit (mặc định, `getFileDiff`). `{ staged }` = diff
+   * thư mục làm việc (`getWorktreeDiff`), `staged` lấy từ **nhóm** của hàng vừa bấm —
+   * tệp `MM` có ở hai nhóm với cùng `path`, nên `path` một mình không đủ.
+   *
+   * Thiếu trường này, bấm một hàng của `ChangeList` chỉ ghi `path`, và `DiffViewer`
+   * đòi thêm một commit đang chọn rồi nạp diff **của commit đó** — tức hoặc không hiện
+   * gì (chưa chọn commit), hoặc hiện sai nội dung.
+   */
+  worktreeByRepo: Record<string, { staged: boolean } | null>
+
   selectFile: (repoId: string, path: string) => void
+  /** Chọn một tệp của thư mục làm việc (từ `ChangeList`). */
+  selectWorktreeFile: (repoId: string, path: string, staged: boolean) => void
   clearFile: (repoId: string) => void
   /** Gọi khi commit đang chọn đổi: tệp cũ có thể không có trong commit mới. */
   commitChanged: (repoId: string) => void
@@ -92,6 +107,7 @@ export const useDiffStore = create<DiffState>((set) => ({
   showWhitespace: false,
   historyOpen: false,
   historyCommitOverride: null,
+  worktreeByRepo: {},
 
   /*
    * Đổi tệp → **đóng** panel lịch sử và xoá ghi đè.
@@ -105,6 +121,15 @@ export const useDiffStore = create<DiffState>((set) => ({
   selectFile: (repoId, path) =>
     set((s) => ({
       selectedFileByRepo: { ...s.selectedFileByRepo, [repoId]: path },
+      worktreeByRepo: { ...s.worktreeByRepo, [repoId]: null },
+      historyOpen: false,
+      historyCommitOverride: null,
+    })),
+
+  selectWorktreeFile: (repoId, path, staged) =>
+    set((s) => ({
+      selectedFileByRepo: { ...s.selectedFileByRepo, [repoId]: path },
+      worktreeByRepo: { ...s.worktreeByRepo, [repoId]: { staged } },
       historyOpen: false,
       historyCommitOverride: null,
     })),
@@ -112,6 +137,7 @@ export const useDiffStore = create<DiffState>((set) => ({
   clearFile: (repoId) =>
     set((s) => ({
       selectedFileByRepo: { ...s.selectedFileByRepo, [repoId]: null },
+      worktreeByRepo: { ...s.worktreeByRepo, [repoId]: null },
       historyOpen: false,
       historyCommitOverride: null,
     })),
@@ -119,6 +145,7 @@ export const useDiffStore = create<DiffState>((set) => ({
   commitChanged: (repoId) =>
     set((s) => ({
       selectedFileByRepo: { ...s.selectedFileByRepo, [repoId]: null },
+      worktreeByRepo: { ...s.worktreeByRepo, [repoId]: null },
       historyOpen: false,
       historyCommitOverride: null,
     })),
