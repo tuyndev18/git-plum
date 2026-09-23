@@ -44,7 +44,7 @@ use std::process::Command;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 use git_plum_lib::domain::Commit;
-use git_plum_lib::git::parsers::log::{parse_log, LOG_FORMAT};
+use git_plum_lib::git::parsers::log::{parse_log, LOG_ARGS, LOG_FORMAT};
 use git_plum_lib::graph::assign;
 
 /// Biến môi trường trỏ tới repo hiệu năng 100k commit.
@@ -94,7 +94,7 @@ fn perf_repo() -> Option<PathBuf> {
 fn doc_log_repo_that(repo: &PathBuf) -> Option<Vec<u8>> {
     let out = Command::new("git")
         .current_dir(repo)
-        .args(["log", "--all", "--topo-order"])
+        .args(LOG_ARGS)
         .arg(LOG_FORMAT)
         .env("LC_ALL", "C")
         .output()

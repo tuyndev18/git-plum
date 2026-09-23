@@ -7,17 +7,21 @@
 //! lịch sử thật, và đó đúng là thứ người dùng sẽ thấy khi dogfood.
 //!
 //! Chạy: `cargo run --release --bin lanedist [đường-dẫn-repo]`
-use git_plum_lib::git::parsers::log::{parse_log, LOG_FORMAT};
+use git_plum_lib::git::parsers::log::{parse_log, LOG_ARGS, LOG_FORMAT};
 use git_plum_lib::graph::{assign, MAX_VISIBLE_LANES};
 use std::process::Command;
 
 fn main() {
     let repo = std::env::args().nth(1).unwrap_or_else(|| {
-        concat!(env!("CARGO_MANIFEST_DIR"), "/../target/fixtures-perf/perf-100k").to_string()
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../target/fixtures-perf/perf-100k"
+        )
+        .to_string()
     });
     let out = Command::new("git")
         .current_dir(&repo)
-        .args(["log", "--all", "--topo-order"])
+        .args(LOG_ARGS)
         .arg(LOG_FORMAT)
         .env("LC_ALL", "C")
         .output()
@@ -54,7 +58,7 @@ fn main() {
     for r in &rows {
         hist[r.lane as usize] += 1;
     }
-    // Hang 0 va HEAD KHONG phai cung mot thu. `git log --all --topo-order` xep commit
+    // Hang 0 va HEAD KHONG phai cung mot thu. `git log --all --date-order` xep commit
     // moi nhat theo topo cua MOI ref o hang 0; neu nguoi dung dang o mot nhanh cu thi
     // HEAD nam giua danh sach va lane cua no la bat ky. Hang WIP (WORK-11) noi xuong
     // HEAD, khong noi xuong hang 0, nen lane can kiem la lane cua HEAD.
@@ -85,7 +89,11 @@ fn main() {
     println!("--- phan bo lane ---");
     for (lane, n) in hist.iter().enumerate() {
         if *n > 0 {
-            let flag = if lane as u16 >= cap { "  <-- CLAMP" } else { "" };
+            let flag = if lane as u16 >= cap {
+                "  <-- CLAMP"
+            } else {
+                ""
+            };
             println!("lane {lane:>3}: {n:>7}{flag}");
         }
     }

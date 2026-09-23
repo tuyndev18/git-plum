@@ -62,10 +62,10 @@ fn chieu_gon(rows: &[GraphRow]) -> String {
     out
 }
 
-/// Chạy `git log --all --topo-order` trên một repo mẫu rồi phân tích.
+/// Chạy `git log --all --date-order` trên một repo mẫu rồi phân tích.
 ///
 /// Dùng [`LOG_ARGS`] và [`LOG_FORMAT`] của plan 02-02, **không** viết lại chuỗi định
-/// dạng: `--topo-order` là bất biến mà [`assign`] dựa vào, và một call site tự gõ lại
+/// dạng: `--date-order` là bất biến mà [`assign`] dựa vào, và một call site tự gõ lại
 /// args sẽ lặng lẽ bỏ nó.
 fn doc_commits(repo: &std::path::Path) -> Vec<Commit> {
     let out = tokio::runtime::Builder::new_current_thread()
@@ -288,7 +288,7 @@ fn octopus_co_dung_mot_hang_bon_canh_ra() {
 /// **ghép** (graft) biên của bản sao nông: `%P` trả về rỗng.
 ///
 /// ```text
-/// $ git log --all --topo-order --format='%H|%P'
+/// $ git log --all --date-order --format='%H|%P'
 /// 6b5521ba…|                 <-- rỗng, không phải 7dae333f…
 /// ```
 ///

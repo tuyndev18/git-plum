@@ -272,7 +272,7 @@ async fn lich_su_cua(state: &AppState, repo: &Arc<RepoHandle>) -> Result<Arc<Rep
 
 /// Một trang lịch sử kèm hình học đồ thị — HIST-01, HIST-02.
 ///
-/// Lần gọi đầu tiên cho một repo chạy **một** lệnh `git log --all --topo-order` rồi
+/// Lần gọi đầu tiên cho một repo chạy **một** lệnh `git log --all --date-order` rồi
 /// tính lane cho toàn bộ lịch sử và cất vào cache. Mọi lần gọi sau cắt trang từ cache
 /// và **không sinh tiến trình git nào**.
 ///

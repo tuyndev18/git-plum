@@ -40,13 +40,23 @@ pub const LOG_FORMAT: &str =
 
 /// Tham số bắt buộc của mọi lệnh `git log` đọc lịch sử trong ứng dụng này.
 ///
-/// # `--topo-order` không phải tuỳ chọn
+/// # `--date-order` không phải tuỳ chọn
 ///
 /// Thuật toán gán lane (plan 02-03) giả định **cha luôn xuất hiện sau con**. Thứ tự
 /// mặc định của `git log` là theo thời gian commit, và thời gian trong repo thật không
 /// đáng tin: rebase, cherry-pick và đồng hồ máy lệch đều sinh ra cha *mới hơn* con.
 /// Thiếu cờ này thì lane rò và đường nối trỏ ngược — một lỗi chỉ lộ ra trên repo thật,
 /// không lộ trên lịch sử tuyến tính.
+///
+/// # Vì sao `--date-order` chứ không `--topo-order` (đổi 2026-09-23)
+///
+/// Cả hai đều bảo đảm cha sau con. Khác nhau ở chỗ `--topo-order` còn cố **không
+/// xen kẽ** các dòng lịch sử: nó in hết chuỗi cha-thứ-nhất rồi mới in nhánh được
+/// merge vào. Với mẫu "merge nhánh feature vào main nhiều lần liên tiếp" (repo thật
+/// `quanly-truong-phong-so`), 20 merge in liền nhau, mỗi merge chờ một cha-thứ-hai
+/// khác nhau → mở 20 lane bậc thang, commit nhánh dồn xuống cuối. `--date-order` xen
+/// commit nhánh ngay dưới merge của nó theo thời gian commit — đúng cách GitKraken
+/// vẽ, và lane được thu hồi ngay.
 ///
 /// Gom thành hằng để không call site nào quên được. Dùng kèm [`LOG_FORMAT`]:
 ///
@@ -55,7 +65,7 @@ pub const LOG_FORMAT: &str =
 /// # use git_plum_lib::git::GitCommand;
 /// let cmd = GitCommand::new(".").args(LOG_ARGS).arg(LOG_FORMAT);
 /// ```
-pub const LOG_ARGS: &[&str] = &["log", "--all", "--topo-order"];
+pub const LOG_ARGS: &[&str] = &["log", "--all", "--date-order"];
 
 /// Byte phân tách trường (Unit Separator, `%x1f`).
 const UNIT_SEP: u8 = 0x1f;
@@ -690,14 +700,16 @@ mod tests {
         );
     }
 
-    /// `--topo-order` là bắt buộc — thiếu nó thì cha có thể đứng trước con và thuật
-    /// toán lane rò. Ghim bằng test để không call site nào bỏ được.
+    /// `--date-order` là bắt buộc — thiếu nó thì cha có thể đứng trước con và thuật
+    /// toán lane rò. Không được là `--topo-order`: nó dồn nhánh xuống cuối và vẽ lane
+    /// bậc thang (xem doc comment của [`LOG_ARGS`]).
     #[test]
-    fn log_args_luon_co_topo_order() {
+    fn log_args_luon_co_date_order() {
         assert!(
-            LOG_ARGS.contains(&"--topo-order"),
-            "--topo-order là bắt buộc cho thuật toán lane"
+            LOG_ARGS.contains(&"--date-order"),
+            "--date-order là bắt buộc cho thuật toán lane"
         );
+        assert!(!LOG_ARGS.contains(&"--topo-order"));
         assert_eq!(LOG_ARGS[0], "log");
     }
 
