@@ -238,7 +238,7 @@ describe('MAX_VISIBLE_LANES phải khớp giữa frontend và backend', () => {
   it('cap suy ra đúng từ LANE_WIDTH và GRAPH_PADDING_LEFT hiện tại', () => {
     // Ghim lại chính phép tính trong doc comment, để đổi LANE_WIDTH mà quên
     // đổi cap thì test đỏ ngay chứ không phải phát hiện bằng mắt.
-    const COT_DO_THI = 1440 * 0.52 * 0.4
+    const COT_DO_THI = 1440 * 0.52 * 0.62
     const suyRa = Math.floor((COT_DO_THI - GRAPH_PADDING_LEFT) / LANE_WIDTH)
 
     expect(

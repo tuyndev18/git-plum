@@ -251,12 +251,21 @@ function drawRow(
   selectedCommitId: string | null,
   nodeFill: string,
   selectionRing: string,
+  width: number,
 ) {
   const { row, y } = item
   const yCenter = y + ROW_HEIGHT / 2
   const yBottom = y + ROW_HEIGHT
 
   const nodeX = laneX(row.lane)
+
+  // Dải màu lane mờ từ nút chạy sang mép phải cột đồ thị — như GitKraken: mắt
+  // nối được nút với dòng thông điệp cùng hàng, kể cả khi nút nằm ở lane xa.
+  // Vẽ đầu tiên để mọi đường và nút nằm trên nó.
+  if (width > nodeX) {
+    ctx.fillStyle = `${colorFor(row.color)}33`
+    ctx.fillRect(nodeX, yCenter - NODE_RADIUS, width - nodeX, NODE_RADIUS * 2)
+  }
 
   // `passthrough` chứa HAI loại cạnh, không phải một:
   //
@@ -345,6 +354,12 @@ function drawRow(
     ctx.stroke()
     ctx.setLineDash([])
     ctx.lineWidth = 1
+  } else if (isMerge) {
+    // Merge: chấm đặc nhỏ màu lane, không avatar — như GitKraken.
+    ctx.beginPath()
+    ctx.arc(nodeX, yCenter, radius, 0, Math.PI * 2)
+    ctx.fillStyle = laneColor
+    ctx.fill()
   } else if (item.avatar) {
     /*
      * Nút commit **là avatar tác giả** — đĩa màu theo người, chữ cái đầu ở tâm.
@@ -373,30 +388,27 @@ function drawRow(
      * panel chi tiết (`Avatar.tsx`), nơi có đúng một, đã chọn, và có React lo
      * vòng đời. Xem doc comment ở `src/lib/avatar.ts`.
      */
+    // Vòng màu lane dày 2px ở mép ngoài, đĩa màu tác giả bên trong — đúng bố
+    // cục avatar GitKraken (ảnh tham chiếu 2026-09-23).
     ctx.beginPath()
     ctx.arc(nodeX, yCenter, radius, 0, Math.PI * 2)
-    ctx.fillStyle = item.avatar.mauNen
+    ctx.fillStyle = laneColor
     ctx.fill()
 
-    // Viền màu lane: giữ tín hiệu nhánh trên chính cái nút đã bị đổi màu.
     ctx.beginPath()
-    ctx.arc(nodeX, yCenter, radius, 0, Math.PI * 2)
-    ctx.strokeStyle = laneColor
-    ctx.lineWidth = 1.5
-    ctx.stroke()
-    ctx.lineWidth = 1
+    ctx.arc(nodeX, yCenter, radius - 2, 0, Math.PI * 2)
+    ctx.fillStyle = item.avatar.mauNen
+    ctx.fill()
 
     /*
      * Chữ cái đầu — chỉ vẽ khi nút đủ to để đọc được.
      *
      * Dưới ~5px bán kính, một chữ cái thành vài pixel nhoè và trông như bụi
-     * bẩn trên đĩa màu, tệ hơn là để trống. Nút merge (`MERGE_NODE_RADIUS` 5)
-     * qua ngưỡng, nút thường (`NODE_RADIUS` 4) thì không — nên trong thực tế
-     * chỉ merge có chữ, còn lại là đĩa màu thuần. Đó vẫn là tín hiệu tác giả
-     * dùng được: màu ổn định theo email.
+     * bẩn trên đĩa màu, tệ hơn là để trống. Từ khi `NODE_RADIUS` lên 9 thì mọi
+     * nút thường đều qua ngưỡng.
      */
     if (radius >= 5) {
-      ctx.font = `600 ${Math.round(radius * 1.1)}px system-ui, sans-serif`
+      ctx.font = `700 ${Math.round(radius * 1.1)}px system-ui, sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.fillStyle = '#fff'
@@ -410,15 +422,6 @@ function drawRow(
     ctx.beginPath()
     ctx.arc(nodeX, yCenter, radius, 0, Math.PI * 2)
     ctx.fillStyle = laneColor
-    ctx.fill()
-  }
-
-  // Merge có thêm một lỗ tối ở tâm — dấu hiệu thứ hai ngoài kích thước, để
-  // phân biệt được cả khi hai nút cạnh nhau cùng màu.
-  if (isMerge && !row.terminates) {
-    ctx.beginPath()
-    ctx.arc(nodeX, yCenter, radius / 2.5, 0, Math.PI * 2)
-    ctx.fillStyle = nodeFill
     ctx.fill()
   }
 
@@ -501,7 +504,7 @@ export const createCanvasRenderer: (
       const selectionRing = readSelectionRing(host)
 
       for (const item of rows) {
-        drawRow(ctx, item, selectedCommitId, nodeFill, selectionRing)
+        drawRow(ctx, item, selectedCommitId, nodeFill, selectionRing, cssWidth)
       }
 
       // Hàng WIP vẽ **sau** mọi hàng commit: nó ghim ở đầu vùng cuộn và nằm

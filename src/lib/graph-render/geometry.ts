@@ -22,8 +22,14 @@ export const ROW_HEIGHT = 28
  *
  * Đổi số này **đổi cả cap lane**: xem `MAX_VISIBLE_LANES` bên dưới và
  * `docs/04-phase2-degraded-graph.md` mục 2.1.
+ *
+ * **Tăng 14 → 22px ngày 2026-09-23** để nút commit là avatar 18px có chữ cái
+ * như GitKraken (ảnh người dùng gửi). Ở 14px avatar chỉ còn 8px, chữ cái không
+ * vẽ được và nút đọc như một chấm màu mờ — người dùng báo "rất khó nhìn". Cap
+ * 20 giữ nguyên; đổi lại cột đồ thị rộng hơn khi repo thật sự có nhiều lane
+ * (`graphWidth` vẫn co theo số lane quan sát được).
  */
-export const LANE_WIDTH = 14
+export const LANE_WIDTH = 22
 
 /** Lề trái của cột đồ thị trước lane 0. */
 export const GRAPH_PADDING_LEFT = 12
@@ -37,20 +43,21 @@ export const GRAPH_PADDING_LEFT = 12
  * # Ràng buộc cứng: nút + quầng KHÔNG được rộng hơn một lane
  *
  * ```text
- *   nút thường  r=4 + NODE_HALO_WIDTH 2  → đường kính 12px, lane 14px → khe 2px
- *   nút merge   r=5 + NODE_HALO_WIDTH 2  → đường kính 14px, lane 14px → khít
+ *   nút thường  r=9 + NODE_HALO_WIDTH 2  → đường kính 22px, lane 22px → khít
+ *   nút merge   r=5 + NODE_HALO_WIDTH 2  → đường kính 14px, lane 22px → thoáng
  * ```
  *
  * Vượt con số này thì quầng nền của một nút **xoá mất đường lane bên cạnh** —
  * quầng tô bằng màu nền, nên nó không chỉ chồng lên mà cắt hẳn. Ở mật độ cao,
  * hai nhánh song song sát nhau sẽ có một nhánh đứt quãng tại mỗi hàng nhánh
  * kia có commit. Đây là lý do `NODE_RADIUS` giảm 5 → 4 và `MERGE_NODE_RADIUS`
- * 6 → 5 khi `LANE_WIDTH` xuống 22 → 14px: hai bộ số phải đi cùng nhau.
+ * 6 → 5 khi `LANE_WIDTH` xuống 22 → 14px: hai bộ số phải đi cùng nhau. Ngày
+ * 2026-09-23 lane quay lại 22px nên nút thường lên r=9 (avatar như GitKraken).
  *
- * Theo chiều dọc vẫn thoáng: đường kính 12px trong ô cao `ROW_HEIGHT` 28px còn
- * 16px trống trên dưới, nên đoạn lane giữa hai hàng vẫn thấy rõ.
+ * Theo chiều dọc: đường kính 18px trong ô cao `ROW_HEIGHT` 28px còn 10px trống
+ * trên dưới, đủ để đoạn lane giữa hai hàng vẫn thấy.
  */
-export const NODE_RADIUS = 4
+export const NODE_RADIUS = 9
 
 /** Độ dày viền nút commit — chỉ dùng cho nút nét đứt của hàng `terminates`. */
 export const NODE_STROKE_WIDTH = 2
@@ -70,8 +77,9 @@ export const NODE_STROKE_WIDTH = 2
 export const NODE_HALO_WIDTH = 2
 
 /**
- * Bán kính nút của merge commit — lớn hơn nút thường một chút để merge nổi bật
- * khi lần theo lịch sử, đúng cách tham chiếu phân biệt hai loại.
+ * Bán kính nút của merge commit — **chấm đặc nhỏ** màu lane, không avatar,
+ * đúng cách GitKraken phân biệt merge (ảnh tham chiếu 2026-09-23): merge không
+ * mang nội dung tác giả đáng xem, chấm nhỏ để mắt lướt qua nó.
  */
 export const MERGE_NODE_RADIUS = 5
 
@@ -157,12 +165,16 @@ export const REF_COL_WIDTH = 132
  * ```text
  *   cửa sổ mặc định            1440 px
  *   × vùng giữa                × 52%     AppLayout Panel id="main"
- *   × ngân sách cột đồ thị     × 40%     60% còn lại cho thông điệp commit
- *   = cột đồ thị              ≈ 300 px
+ *   × ngân sách cột đồ thị     × 62%     khi repo thật sự có đủ 20 lane
+ *   = cột đồ thị              ≈ 464 px
  *   − GRAPH_PADDING_LEFT       −  12 px
- *   ÷ LANE_WIDTH               ÷  14 px
- *   = 20,6                    →  20 lane
+ *   ÷ LANE_WIDTH               ÷  22 px
+ *   = 20,5                    →  20 lane
  * ```
+ *
+ * Ngân sách 40% → 62% khi lane 14 → 22px (2026-09-23, avatar như GitKraken).
+ * Chỉ repo bệnh lý mới chạm trần này; repo thường vài lane thì `graphWidth`
+ * vẫn hẹp.
  *
  * **Đổi 13 → 20 ngày 2026-09-22, có số đo.** Cap 13 làm **19,99%** hàng của
  * repo perf 100 007 commit bị gập vào cột cuối — tới tám lane vẽ chung một cột,
