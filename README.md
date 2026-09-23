@@ -36,12 +36,16 @@ này là "đã có" hoặc "đang phát triển".
 - Lịch sử của một tệp riêng lẻ (theo dõi cả đổi tên qua `git log --follow`)
 - Nhận diện tệp nhị phân, tệp quá lớn, và con trỏ Git LFS
 
+**Commit và staging** (đang phát triển, chưa qua kiểm chứng cuối phase)
+- Danh sách thay đổi trong cây làm việc, stage/unstage theo tệp
+- Stage/unstage theo từng khối thay đổi (hunk)
+- Tạo commit và amend commit gần nhất
+- Huỷ thay đổi (theo tệp hoặc theo khối) có thùng rác để khôi phục lại
+
 ## Lộ trình (chưa có)
 
 Các nhóm sau **chưa có mã**, chỉ nằm trong kế hoạch:
 
-- Vòng lặp commit (tạo commit, amend)
-- Staging theo khối thay đổi (hunk) và an toàn khi huỷ (discard)
 - Nhánh, remote, xung đột merge/rebase
 - Hỗ trợ AI soạn commit message
 - Phát hành: bộ cài đặt, tự cập nhật (updater)
@@ -60,7 +64,7 @@ Các nhóm sau **chưa có mã**, chỉ nằm trong kế hoạch:
 - Gọi `git` CLI qua `tokio::process` — **không** dùng libgit2/gitoxide
 - `serde` / `serde_json`, `thiserror` 2.0.20, `bstr` 1.13.1, `memchr` 2.8.3, `lru` 0.18.4,
   `parking_lot` 0.12.5, `tracing` 0.1.44, `md-5` 0.10.6, `notify` 8.2.0 +
-  `notify-debouncer-full` 0.6.0 (file watcher, dùng từ Phase 4)
+  `notify-debouncer-full` 0.6.0 (theo dõi thay đổi trên đĩa)
 - Test/bench: `tempfile` 3.27.0, `insta` 1.48.0 (snapshot), `criterion` 0.8.2 (benchmark)
 - Rust edition 2021, `rust-version = "1.82"`
 
