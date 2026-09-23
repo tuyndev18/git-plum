@@ -198,7 +198,14 @@ describe('cổng cờ perf của SpikeHarness', () => {
     render(<App />)
 
     // `lazy()` nên component tới ở một microtask sau.
-    expect(await screen.findByTestId('spike-harness')).toBeTruthy()
+    //
+    // 🔴 Timeout **rộng hơn mặc định 1000ms** vì test này đỏ khoảng 1/4 lần chạy khi
+    // máy đang tải nặng (đo 2026-09-23: đỏ ở lần đo thứ nhất, xanh 3/3 lần ngay sau
+    // đó). Nguyên nhân là thời gian, không phải logic: `lazy()` phải giải một import
+    // động thật, và trên máy vừa dựng release + chạy ba phiên Claude thì một giây
+    // không đủ. Một cổng đỏ vì máy bận là cổng không ai tin nữa — đúng lớp lỗi mà
+    // `CONTEXT.md` §4.1 gọi là cổng hỏng, chỉ theo hướng ngược.
+    expect(await screen.findByTestId('spike-harness', {}, { timeout: 5000 })).toBeTruthy()
   })
 
   it('cờ tắt là mặc định, không phải thứ phải tự đặt', () => {
