@@ -2574,3 +2574,66 @@ button:disabled {
 .detail-header h2 {
   margin: 0;
 }
+
+/* --- Thanh nút cho một khối (Phase 5, WORK-03 / WORK-05 / WORK-06) -------- */
+
+/*
+ * ⚠️ MỌI QUY TẮC DƯỚI ĐÂY LÀ "CÓ MÃ, CHƯA KIỂM".
+ *
+ * happy-dom không tính CSS layout và không có cuộn thật (CONTEXT.md 4.5), nên không
+ * một test nào của `HunkBar.test.tsx` quan sát được thứ gì ở khối này. Cụ thể những
+ * điều SAU ĐÂY chưa ai xác nhận, và chúng là những thứ hay hỏng nhất:
+ *
+ *  - hai nút không đè lên nhau khi nhãn dài ("Đưa khối vào vùng chờ" + "Huỷ bỏ khối");
+ *  - thanh không tràn ra khỏi bề ngang của khối diff chứa nó;
+ *  - băng "hãy làm mới" không che mất dòng diff ngay bên dưới;
+ *  - thanh không làm nhảy chỗ nội dung khi băng hiện ra.
+ *
+ * Lỗi `marginTop`→`paddingTop` của Phase 4 đi qua CẢ 666 test vì không test nào hỏi
+ * về thuộc tính đó. Việc kiểm mắt người nằm ở checkpoint 05-05.
+ */
+
+.hunk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.hunk-bar-button {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.hunk-bar-button-danger {
+  color: var(--color-danger, #d9534f);
+}
+
+/*
+ * `flex-basis: 100%` đẩy băng xuống dòng riêng thay vì chen giữa hai nút. Đây là một
+ * khẳng định bố cục thuần — CHƯA KIỂM, xem khối chú thích trên.
+ */
+.hunk-bar-can-lam-moi {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-left: 3px solid var(--color-danger, #d9534f);
+  background: var(--color-danger-bg, rgba(217, 83, 79, 0.12));
+}
+
+/*
+ * `min-width: 0` bắt buộc để `white-space: pre-wrap` không đẩy nút "Làm mới" ra ngoài
+ * khung — cùng lý do với `.change-path`. Thông điệp từ Rust có xuống dòng MANG NGHĨA
+ * (nó kèm dòng "Lệnh đã chạy: …"), nên `pre-wrap` chứ không `nowrap`.
+ */
+.hunk-bar-can-lam-moi-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre-wrap;
+}

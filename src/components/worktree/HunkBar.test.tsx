@@ -325,6 +325,50 @@ describe('🔴 WORK-05: thông báo "hãy làm mới"', () => {
   })
 
   /**
+   * Nút làm mới **thật sự gọi** `onLamMoi`.
+   *
+   * 🔴 Không có test này, một nút nhãn "Làm mới" chỉ gỡ băng đi vẫn xanh ở test trên —
+   * và nó **nói dối người dùng**: họ bấm "Làm mới", băng biến mất, và diff vẫn cũ y
+   * nguyên. Lần bấm stage kế tiếp lại thất bại và họ không hiểu vì sao.
+   *
+   * Đây đúng lớp lỗi #9 của `CONTEXT.md` 4.1 nhìn từ phía hành vi: phép kiểm "băng
+   * biến mất" là một thuộc tính quan sát được, nhưng nó **không phải** thuộc tính ta
+   * cần. Không test nào hỏi "nút có làm việc của nó không" thì nó không làm cũng xanh.
+   */
+  it('bấm nút làm mới GỌI onLamMoi, không chỉ gỡ băng', async () => {
+    const onLamMoi = vi.fn()
+    stageHunkMock.mockRejectedValueOnce(loiFileChanged())
+
+    render(<HunkBar {...props({ onLamMoi })} />)
+    screen.getByRole('button', { name: 'Đưa khối vào vùng chờ' }).click()
+    await screen.findByTestId('hunk-can-lam-moi')
+
+    screen.getByTestId('hunk-nut-lam-moi').click()
+
+    expect(onLamMoi).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.queryByTestId('hunk-can-lam-moi')).toBeNull())
+  })
+
+  /**
+   * Không truyền `onLamMoi` → nút vẫn bấm được, vẫn gỡ băng, **không** ném lỗi.
+   *
+   * Ca thật: ở commit 05-04 **chưa có chỗ gọi nào** truyền prop đó. Một `onLamMoi()`
+   * trần (không `?.`) sẽ ném `TypeError` và gỡ luôn cả cây React — tức người dùng mất
+   * đường thoát khỏi băng vì một prop không bắt buộc.
+   */
+  it('KHÔNG truyền onLamMoi → nút vẫn gỡ băng và không ném lỗi', async () => {
+    stageHunkMock.mockRejectedValueOnce(loiFileChanged())
+
+    render(<HunkBar {...props()} />)
+    screen.getByRole('button', { name: 'Đưa khối vào vùng chờ' }).click()
+    await screen.findByTestId('hunk-can-lam-moi')
+
+    screen.getByTestId('hunk-nut-lam-moi').click()
+
+    await waitFor(() => expect(screen.queryByTestId('hunk-can-lam-moi')).toBeNull())
+  })
+
+  /**
    * Băng **chỉ** hiện cho khối của **đúng tệp** đang gặp lỗi.
    *
    * `canLamMoi` là một trường ở cấp store, nên một cài đặt ngây thơ sẽ hiện băng trên
