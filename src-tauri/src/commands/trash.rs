@@ -1057,6 +1057,27 @@ mod tests {
             "🔴 `ghi_ref` không trả `Err` khi đọc lại thất bại. Ghi nhật ký rồi đi \
              tiếp nghĩa là vẫn huỷ mà không có bản lưu"
         );
+
+        // --- 🔴 Và bước đó phải TỚI ĐƯỢC, không chỉ CÓ MẶT ------------------
+        //
+        // Đo được khi chạy đột biến M18: một `if true { return Ok(()); }` đặt TRƯỚC
+        // đoạn đọc lại làm nó thành mã chết, và một cổng chỉ hỏi "chuỗi `rev-parse` có
+        // trong thân không" vẫn XANH — chuỗi vẫn ở đó, chỉ không bao giờ chạy.
+        //
+        // Đây đúng lớp lỗi #1/#5 của CONTEXT.md §4.1 ở dạng khó thấy hơn: cổng khớp
+        // **mã thật**, không khớp chú thích, nhưng vẫn không đo được thứ nó định đo.
+        let truoc_doc_lai = &than_ghi[..than_ghi
+            .find("\"rev-parse\"")
+            .expect("vừa khẳng định có `rev-parse` ở trên")];
+        for chet in ["return Ok(())", "return Ok(());"] {
+            assert!(
+                !truoc_doc_lai.contains(chet),
+                "🔴 có một `{chet}` đứng TRƯỚC bước đọc lại trong `ghi_ref`, tức bước \
+                 đó là mã chết. Biên nhận sẽ được cấp mà ref chưa bao giờ được xác \
+                 nhận — và biên nhận là thứ DUY NHẤT đường huỷ tin để ghi đè tệp \
+                 người dùng. Cổng chỉ tìm chuỗi `rev-parse` sẽ XANH với mã này"
+            );
+        }
     }
 
     /// **Đường lưu không bao giờ ghép stderr vào sha.**
