@@ -90,6 +90,24 @@ export type GitErrorCode =
    * khác 0 là đúng lỗi KB-4b mà `CONTEXT.md` mục 0 cấm lặp lại.
    */
   | 'hook_rejected'
+  /**
+   * Tệp đã đổi trên đĩa **từ lúc giao diện vẽ diff** — WORK-05, tiêu chí thành công 3.
+   *
+   * 🔴 Mã riêng, và giao diện **phải** phân nhánh theo nó chứ không theo `message`.
+   *
+   * Phía Rust so lại mã băm blob của tệp **ngay trước khi áp bản vá**
+   * (`commands::hunk::kiem_blob_hash`) và từ chối khi lệch. Đây **không** phải một
+   * lỗi của ứng dụng mà là một cuộc đua có thật: chủ dự án chạy git ở terminal song
+   * song — cả điểm của WORK-10 — nên tệp đổi giữa lúc xem diff và lúc bấm stage là
+   * đường thường, không phải ca hiếm.
+   *
+   * ROADMAP, không thương lượng: khi thất bại **không bao giờ** thử lại bằng khớp mờ
+   * hay `--whitespace=fix`. Câu đúng là *"tệp đã đổi từ lúc bạn xem khác biệt này,
+   * hãy làm mới"*, kèm một đường làm mới bấm được. `message` phía Rust mang nguyên
+   * văn câu đó, và có test ghim ở **cả hai** phía (`file_changed_noi_nguyen_van_hay_lam_moi`
+   * ở `error.rs`, `hunkStore.test.ts` ở đây).
+   */
+  | 'file_changed'
 
 /** Nhận biết lỗi đến từ lớp Rust, phân biệt với lỗi JavaScript thường. */
 export function isGitError(e: unknown): e is GitErrorPayload {
@@ -537,6 +555,58 @@ export interface AmendResult {
   wasPushed: boolean
 }
 
+// --- Thùng rác (Phase 5, WORK-06 / WORK-07) --------------------------------
+
+/**
+ * Một mục trong danh sách "Vừa huỷ gần đây". Khớp `domain::trash::MucThungRac`.
+ *
+ * 🔴 Sáu tên khoá dưới đây khớp **từng chữ** với JSON Rust sinh ra. Phía Rust dùng
+ * `#[serde(rename_all = "camelCase")]` và có test so **bằng** toàn bộ tập khoá
+ * (`muc_thung_rac_khoa_json_day_du`). Ở đây có test so **bằng** danh sách đó.
+ *
+ * Lý do phải so bằng ở cả hai phía chứ không `contains`: lệch một tên **không gây lỗi
+ * biên dịch ở bên nào** — trường chỉ thành `undefined` lúc chạy. Đó đúng là lỗi
+ * `oldSize`/`old_size` đã cắn ở Phase 3.
+ */
+export interface MucThungRac {
+  /** Tên ref đầy đủ, luôn có tiền tố `refs/git-plum-trash/`. */
+  refName: string
+  /** SHA của object được giữ: commit (stash) **hoặc** blob (tệp chưa theo dõi). */
+  objectId: string
+  /** `true` khi `objectId` là một **blob** — nội dung thô của một tệp chưa theo dõi. */
+  laBlob: boolean
+  /** 🔴 Hiện **luôn rỗng** — `for-each-ref` không giữ được. Xem `ipc.listTrash`. */
+  paths: string[]
+  /** Giây Unix. 🔴 Hiện **luôn 0** — cùng lý do với `paths`. */
+  luc: number
+  /** Nhãn hiện cho người dùng. 🔴 Hiện **luôn rỗng** — cùng lý do với `paths`. */
+  nhan: string
+}
+
+/**
+ * Động từ hiện cho người dùng khi huỷ. Khớp `domain::trash::DongTu`.
+ *
+ * 🔴 ROADMAP, không thương lượng: *"Với tệp **chưa theo dõi**, động từ phải là **Xoá**,
+ * không phải Huỷ bỏ."*
+ *
+ * "Huỷ bỏ" hàm ý *quay lại phiên bản đã lưu* — có một bản gốc ở đâu đó. Với tệp chưa
+ * theo dõi thì **không có** bản gốc nào: nội dung đó chưa từng vào git, nên thao tác
+ * này là **xoá**. Dùng sai động từ là nói sai mức độ nghiêm trọng đúng lúc người dùng
+ * đang quyết định có bấm hay không (T-05-14).
+ */
+export type DongTu = 'huyBo' | 'xoa'
+
+/**
+ * Chuỗi hiển thị cho một {@link DongTu} — **có dấu**.
+ *
+ * 🔴 `'Xoá'` có dấu sắc trên `o`. Đây là **một nguồn sự thật duy nhất** cho nhãn đó ở
+ * phía giao diện; phía Rust có `DongTu::nhan()` cùng nội dung. Có test ghim **cả hai**
+ * nhánh, và hai đột biến (M21/M22) chứng minh test phân biệt được cả hai chiều.
+ */
+export function nhanDongTu(dt: DongTu): string {
+  return dt === 'xoa' ? 'Xoá' : 'Huỷ bỏ'
+}
+
 // --- Các lệnh -------------------------------------------------------------
 
 export const ipc = {
@@ -694,6 +764,61 @@ export const ipc = {
    */
   amendCommit: (repoId: string, message: string, noVerify: boolean) =>
     invoke<AmendResult>('amend_commit', { repoId, message, noVerify }),
+
+  // --- Staging theo khối và an toàn khi huỷ (Phase 5) ---
+  //
+  // Cả sáu là **lệnh ghi** trừ `listTrash`, và mọi lệnh ghi trả `RepoStatus` **mới** —
+  // cùng ràng buộc 2.5 đã ghi ở `stageFiles` phía trên. `hunkStore` ghi trạng thái từ
+  // giá trị trả về và **không** gọi `getStatus` sau đó; có test ghim.
+  //
+  // 🔴 `blobHash` là mã băm của tệp **lúc giao diện vẽ diff**. Phía Rust so lại nó ngay
+  // trước khi áp và ném `file_changed` khi lệch (WORK-05). Giao diện **không** phải chỗ
+  // tin cậy cho phép kiểm này — T-05-15; nó chỉ chuyển tiếp thứ nó đã thấy.
+
+  /** Đưa **một khối** vào vùng chờ — WORK-03. Trả trạng thái **mới**. */
+  stageHunk: (repoId: string, path: string, hunkIndex: number, blobHash: string) =>
+    invoke<RepoStatus>('stage_hunk', { repoId, path, hunkIndex, blobHash }),
+
+  /** Lấy **một khối** khỏi vùng chờ — WORK-03. Trả trạng thái **mới**. */
+  unstageHunk: (repoId: string, path: string, hunkIndex: number, blobHash: string) =>
+    invoke<RepoStatus>('unstage_hunk', { repoId, path, hunkIndex, blobHash }),
+
+  /**
+   * Huỷ **một khối** — WORK-06. Trả trạng thái **mới**.
+   *
+   * 🔴 Lệnh này **ghi đè nội dung tệp của người dùng**. Phía Rust tự lưu trước, luôn
+   * luôn: `discard_hunk` gọi `luu_truoc_khi_huy` rồi chuyển một `BienNhan` xuống, và
+   * `BienNhan` không dựng được ngoài crate — nên không có đường huỷ nào bỏ qua được
+   * bước lưu, kể cả một đường viết mới trong tương lai (T-05-13).
+   */
+  discardHunk: (repoId: string, path: string, hunkIndex: number, blobHash: string) =>
+    invoke<RepoStatus>('discard_hunk', { repoId, path, hunkIndex, blobHash }),
+
+  /** Huỷ theo **tệp** — WORK-06. Lưu trước, luôn luôn. Trả trạng thái **mới**. */
+  discardFiles: (repoId: string, paths: string[]) =>
+    invoke<RepoStatus>('discard_files', { repoId, paths }),
+
+  /**
+   * Danh sách "Vừa huỷ gần đây" — WORK-07.
+   *
+   * 🔴 **Khoảng trống đã biết, ghi lại từ 05-03-SUMMARY:** phía Rust dựng danh sách
+   * bằng `git for-each-ref`, và `for-each-ref` **không giữ được** `paths`, `luc`,
+   * `nhan` — ba trường đó chỉ có lúc `luu_truoc_khi_huy` chạy. Nên lời gọi này hiện
+   * trả `paths: []`, `luc: 0`, `nhan: ''`. Một giao diện hiện danh sách sẽ hiện
+   * **không có tên tệp và không có thời điểm** cho tới khi có một chỗ lưu phụ (ghi chú
+   * ref hoặc một tệp chỉ mục). Đây là việc còn lại **có thật**, không phải làm đẹp.
+   */
+  listTrash: (repoId: string) => invoke<MucThungRac[]>('list_trash', { repoId }),
+
+  /**
+   * Khôi phục từ danh sách — WORK-07. Trả trạng thái **mới**.
+   *
+   * 🔴 **Nợ đã biết (T-05-11), ghi lại từ 05-03-SUMMARY:** hàm này ghi đè thẳng lên
+   * tệp đang có, **không** tự lưu trước. Khôi phục đè lên một thay đổi người dùng vừa
+   * gõ sẽ mất thay đổi đó. Chưa cài; ghi là nợ, không phải đã xong.
+   */
+  restoreTrash: (repoId: string, refName: string, paths: string[]) =>
+    invoke<RepoStatus>('restore_trash', { repoId, refName, paths }),
 }
 
 // --- Sự kiện đi từ Rust RA (Phase 4, WORK-10) ------------------------------
