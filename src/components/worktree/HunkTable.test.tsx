@@ -28,7 +28,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import { HunkTable } from '@/components/worktree/HunkTable'
 import { ipc, type FileDiff, type Hunk, type RepoStatus } from '@/lib/ipc'
@@ -334,6 +334,89 @@ describe('HunkTable — lỗi và làm mới', () => {
    * Không có test này, một `onLamMoi={() => {}}` qua được mọi test khác, và nút
    * "Làm mới" lại nói dối đúng như bản đầu của wave 4 — băng biến mất, diff vẫn cũ.
    */
+  /**
+   * 🔴 **Cổng THIẾU, tìm ra bằng phép kiểm lỗi #9 — đột biến M30.**
+   *
+   * `HunkTable` có một cổng chống đua (`lanNap`, khuôn T-03-31 của `DiffViewer`).
+   * Đột biến M30 (gỡ **cả hai** phép kiểm `id !== lanNap.current`) cho **0 đỏ trên
+   * 27 test**.
+   *
+   * Theo đúng quy tắc của `CONTEXT.md` 4.1 — *trước khi kết luận một đột biến sống
+   * sót vì mã đúng, kiểm xem có test nào **hỏi** về thứ đó không* — tôi grep toàn bộ
+   * `src/**\/*.test.*` (bằng công cụ Grep, không `grep` qua shell) cho
+   * `lanNap|requestId|chống đua`. Khớp có ở `DiffViewer.test.tsx`,
+   * `FileHistory.test.tsx`, `CommitBox.test.tsx` — **không khớp nào** cho
+   * `HunkTable`. **Rỗng nghĩa là cổng thiếu, không phải mã đúng.**
+   *
+   * Đây là wave thứ **tư** liên tiếp tìm được đúng một ca lỗi #9 bằng cùng phép kiểm
+   * (M11 wave 2, M18 wave 3, M26 wave 4).
+   *
+   * # Vì sao thuộc tính này đáng có cổng, không phải thêm cho đủ bảng
+   *
+   * Trên `DiffViewer` một phản hồi về sai thứ tự làm người dùng **đọc** nhầm tệp.
+   * Ở đây nó làm người dùng **ghi** nhầm tệp: `path` truyền xuống `stage_hunk` là
+   * prop **hiện tại** (tệp B), còn chỉ số khối họ thấy trên màn hình là của **tệp A**
+   * (phản hồi cũ vừa ghi đè). Git sẽ áp khối số 2 của tệp A lên tệp B — và với
+   * `--recount` nó **có thể thành công**. Một bản vá áp đúng cú pháp vào sai tệp là
+   * rủi ro R1 của `CONTEXT.md` ở dạng tệ nhất: không lỗi, không cảnh báo, tệp hỏng.
+   *
+   * 🔴 `act()` + `setTimeout(0)` chứ không ba `await Promise.resolve()` — React 19
+   * gom `setDiff` từ callback promise vào một lượt render sau, nên đo sớm làm test
+   * xanh **kể cả trên cài đặt đã bị đột biến**. Chép nguyên cảnh báo của
+   * `DiffViewer.test.tsx`, nơi đúng lỗi đó đã cho 0 đỏ ở lần chạy thứ hai.
+   */
+  it('🔴 M30: phản hồi của lần nạp CŨ về SAU phải bị BỎ, không ghi đè bảng đang hiện', async () => {
+    let giaiPhongCu!: (v: FileDiff) => void
+    let giaiPhongMoi!: (v: FileDiff) => void
+
+    const diffCu = diffBaKhoi()
+    ;(diffCu.kind as { hunks: Hunk[] }).hunks = [khoi('KHOI CU', 10, 10)]
+
+    const diffMoi = diffBaKhoi()
+    ;(diffMoi.kind as { hunks: Hunk[] }).hunks = [
+      khoi('KHOI MOI', 50, 50),
+      khoi('KHOI MOI 2', 80, 80),
+    ]
+
+    let lan = 0
+    worktreeDiffMock.mockImplementation(() => {
+      lan += 1
+      return lan === 1
+        ? new Promise<FileDiff>((res) => (giaiPhongCu = res))
+        : new Promise<FileDiff>((res) => (giaiPhongMoi = res))
+    })
+
+    const view = render(
+      <HunkTable repoId={REPO} path={PATH} staged={false} untracked={false} />,
+    )
+
+    // Lần nạp thứ hai bắt đầu **trước** khi lần một về — đúng ca người dùng bấm
+    // "Làm mới" hai lần, hoặc bấm làm mới trong lúc lần nạp đầu còn đang bay.
+    view.rerender(<HunkTable repoId={REPO} path={PATH} staged untracked={false} />)
+    await waitFor(() => expect(worktreeDiffMock).toHaveBeenCalledTimes(2))
+
+    // Lần MỚI về trước…
+    giaiPhongMoi(diffMoi)
+    await waitFor(() => expect(screen.getAllByTestId('hunk-table-row')).toHaveLength(2))
+
+    // …rồi lần CŨ về SAU. Nó phải bị bỏ.
+    giaiPhongCu(diffCu)
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+
+    const hang = screen.getAllByTestId('hunk-table-row')
+    expect(
+      hang,
+      'bảng phải giữ kết quả của lần nạp MỚI NHẤT. Phản hồi của lần nạp cũ ghi đè ' +
+        'lên bảng nghĩa là chỉ số khối trên màn hình thuộc một lần nạp khác với ' +
+        '`path`/`staged` đang truyền xuống `stage_hunk` — git áp khối của tệp/chế độ ' +
+        'này lên tệp/chế độ kia, và với --recount nó CÓ THỂ thành công (rủi ro R1).',
+    ).toHaveLength(2)
+    expect(hang[0]!.textContent).toContain('KHOI MOI')
+    expect(hang[0]!.textContent).not.toContain('KHOI CU')
+  })
+
   it('bấm "Làm mới" trên băng file_changed nạp lại diff THẬT (lời gọi thứ hai)', async () => {
     render(<HunkTable repoId={REPO} path={PATH} staged={false} untracked={false} />)
     await waitFor(() => expect(worktreeDiffMock).toHaveBeenCalledTimes(1))
